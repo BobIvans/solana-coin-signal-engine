@@ -44,3 +44,11 @@ def test_directories_resolve_to_absolute():
     assert Path(settings.DATA_DIR).is_absolute()
     assert Path(settings.RAW_DATA_DIR).is_absolute()
     assert Path(settings.PROCESSED_DATA_DIR).is_absolute()
+
+
+def test_unified_and_entry_settings_coexist():
+    settings = load_settings()
+    assert isinstance(settings.UNIFIED_SCORING_ENABLED, bool)
+    assert settings.UNIFIED_SCORE_WATCH_THRESHOLD > 0
+    assert isinstance(settings.ENTRY_SELECTOR_ENABLED, bool)
+    assert settings.ENTRY_TREND_SCORE_MIN >= settings.ENTRY_SCALP_SCORE_MIN

@@ -90,6 +90,8 @@ python scripts/unified_score_smoke.py \
 
 ## PR-7 entry selector
 
+Both PR-6 and PR-7 sections are intentionally kept because PR-7 consumes `scored_tokens.json` from PR-6.
+
 PR-7 adds entry routing on top of `scored_tokens.json`:
 
 - decision outputs: `SCALP | TREND | IGNORE`
