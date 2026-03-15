@@ -22,6 +22,8 @@ def test_settings_load_and_validate(monkeypatch):
     monkeypatch.setenv("UNIFIED_SCORING_ENABLED", "true")
     monkeypatch.setenv("UNIFIED_SCORING_FAILOPEN", "false")
     monkeypatch.setenv("UNIFIED_SCORING_REQUIRE_X", "false")
+    monkeypatch.setenv("UNIFIED_SCORE_ENTRY_THRESHOLD", "82")
+    monkeypatch.setenv("UNIFIED_SCORE_WATCH_THRESHOLD", "68")
     monkeypatch.setenv("ENTRY_SELECTOR_ENABLED", "true")
     monkeypatch.setenv("ENTRY_SELECTOR_FAILCLOSED", "true")
 
@@ -35,6 +37,7 @@ def test_settings_load_and_validate(monkeypatch):
     assert settings.X_CACHE_TTL_SEC > 0
     assert settings.UNIFIED_SCORING_ENABLED is True
     assert settings.UNIFIED_SCORE_HEURISTIC_CONFIDENCE_FLOOR > 0
+    assert settings.UNIFIED_SCORE_ENTRY_THRESHOLD > settings.UNIFIED_SCORE_WATCH_THRESHOLD
     assert settings.ENTRY_SELECTOR_ENABLED is True
     assert settings.ENTRY_SCALP_SCORE_MIN > 0
 
