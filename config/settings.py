@@ -118,6 +118,27 @@ class Settings:
     ENTRY_MAX_BASE_POSITION_PCT: float
     ENTRY_CONTRACT_VERSION: str
 
+    # Exit engine (PR-8)
+    EXIT_ENGINE_ENABLED: bool
+    EXIT_ENGINE_FAILCLOSED: bool
+    EXIT_SCALP_STOP_LOSS_PCT: float
+    EXIT_SCALP_RECHECK_SEC: int
+    EXIT_SCALP_MAX_HOLD_SEC: int
+    EXIT_SCALP_BUY_PRESSURE_FLOOR: float
+    EXIT_SCALP_LIQUIDITY_DROP_PCT: float
+    EXIT_SCALP_VOLUME_VELOCITY_DECAY: float
+    EXIT_SCALP_X_SCORE_DECAY: float
+    EXIT_TREND_HARD_STOP_PCT: float
+    EXIT_TREND_PARTIAL1_PCT: float
+    EXIT_TREND_PARTIAL2_PCT: float
+    EXIT_TREND_BUY_PRESSURE_FLOOR: float
+    EXIT_TREND_LIQUIDITY_DROP_PCT: float
+    EXIT_DEV_SELL_HARD: bool
+    EXIT_RUG_FLAG_HARD: bool
+    EXIT_POLL_INTERVAL_SEC: int
+    EXIT_MAX_OPEN_POSITIONS: int
+    EXIT_CONTRACT_VERSION: str
+
 
 def _read_dotenv(dotenv_path: str = ".env") -> dict[str, str]:
     path = Path(dotenv_path)
@@ -270,4 +291,23 @@ def load_settings() -> Settings:
         ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER=_as_unit_float(_get_env(merged, "ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER", "0.60"), key="ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER"),
         ENTRY_MAX_BASE_POSITION_PCT=_as_unit_float(_get_env(merged, "ENTRY_MAX_BASE_POSITION_PCT", "1.00"), key="ENTRY_MAX_BASE_POSITION_PCT"),
         ENTRY_CONTRACT_VERSION=str(_get_env(merged, "ENTRY_CONTRACT_VERSION", "entry_selector_v1")),
+        EXIT_ENGINE_ENABLED=_as_bool(_get_env(merged, "EXIT_ENGINE_ENABLED", "true"), key="EXIT_ENGINE_ENABLED"),
+        EXIT_ENGINE_FAILCLOSED=_as_bool(_get_env(merged, "EXIT_ENGINE_FAILCLOSED", "true"), key="EXIT_ENGINE_FAILCLOSED"),
+        EXIT_SCALP_STOP_LOSS_PCT=float(_get_env(merged, "EXIT_SCALP_STOP_LOSS_PCT", "-10")),
+        EXIT_SCALP_RECHECK_SEC=_as_positive_int(_get_env(merged, "EXIT_SCALP_RECHECK_SEC", "18"), key="EXIT_SCALP_RECHECK_SEC"),
+        EXIT_SCALP_MAX_HOLD_SEC=_as_positive_int(_get_env(merged, "EXIT_SCALP_MAX_HOLD_SEC", "120"), key="EXIT_SCALP_MAX_HOLD_SEC"),
+        EXIT_SCALP_BUY_PRESSURE_FLOOR=_as_unit_float(_get_env(merged, "EXIT_SCALP_BUY_PRESSURE_FLOOR", "0.60"), key="EXIT_SCALP_BUY_PRESSURE_FLOOR"),
+        EXIT_SCALP_LIQUIDITY_DROP_PCT=float(_get_env(merged, "EXIT_SCALP_LIQUIDITY_DROP_PCT", "20")),
+        EXIT_SCALP_VOLUME_VELOCITY_DECAY=_as_unit_float(_get_env(merged, "EXIT_SCALP_VOLUME_VELOCITY_DECAY", "0.70"), key="EXIT_SCALP_VOLUME_VELOCITY_DECAY"),
+        EXIT_SCALP_X_SCORE_DECAY=_as_unit_float(_get_env(merged, "EXIT_SCALP_X_SCORE_DECAY", "0.70"), key="EXIT_SCALP_X_SCORE_DECAY"),
+        EXIT_TREND_HARD_STOP_PCT=float(_get_env(merged, "EXIT_TREND_HARD_STOP_PCT", "-18")),
+        EXIT_TREND_PARTIAL1_PCT=float(_get_env(merged, "EXIT_TREND_PARTIAL1_PCT", "35")),
+        EXIT_TREND_PARTIAL2_PCT=float(_get_env(merged, "EXIT_TREND_PARTIAL2_PCT", "100")),
+        EXIT_TREND_BUY_PRESSURE_FLOOR=_as_unit_float(_get_env(merged, "EXIT_TREND_BUY_PRESSURE_FLOOR", "0.50"), key="EXIT_TREND_BUY_PRESSURE_FLOOR"),
+        EXIT_TREND_LIQUIDITY_DROP_PCT=float(_get_env(merged, "EXIT_TREND_LIQUIDITY_DROP_PCT", "25")),
+        EXIT_DEV_SELL_HARD=_as_bool(_get_env(merged, "EXIT_DEV_SELL_HARD", "true"), key="EXIT_DEV_SELL_HARD"),
+        EXIT_RUG_FLAG_HARD=_as_bool(_get_env(merged, "EXIT_RUG_FLAG_HARD", "true"), key="EXIT_RUG_FLAG_HARD"),
+        EXIT_POLL_INTERVAL_SEC=_as_positive_int(_get_env(merged, "EXIT_POLL_INTERVAL_SEC", "5"), key="EXIT_POLL_INTERVAL_SEC"),
+        EXIT_MAX_OPEN_POSITIONS=_as_positive_int(_get_env(merged, "EXIT_MAX_OPEN_POSITIONS", "10"), key="EXIT_MAX_OPEN_POSITIONS"),
+        EXIT_CONTRACT_VERSION=str(_get_env(merged, "EXIT_CONTRACT_VERSION", "exit_engine_v1")),
     )

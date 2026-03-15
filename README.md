@@ -104,3 +104,24 @@ Run smoke:
 ```bash
 python scripts/entry_selector_smoke.py --scored data/processed/scored_tokens.json
 ```
+
+## PR-8 exit engine
+
+PR-8 adds deterministic exit decisioning for open paper positions.
+
+Outputs:
+
+- `data/processed/exit_decisions.json`
+- `data/processed/exit_events.jsonl`
+
+Decisions:
+
+- `HOLD`
+- `PARTIAL_EXIT`
+- `FULL_EXIT`
+
+Run smoke:
+
+```bash
+python scripts/exit_engine_smoke.py
+```

@@ -1,0 +1,94 @@
+# PR-8 Exit Engine
+
+`exit_engine` consumes active paper positions plus current token state and emits deterministic machine-readable decisions:
+
+- `HOLD`
+- `PARTIAL_EXIT`
+- `FULL_EXIT`
+
+## Inputs
+
+- `positions.json` (must include `entry_snapshot` and position state)
+- merged market snapshot/current state
+
+## Decision precedence
+
+1. Hard safety exits (`dev_sell`, `rug_flag`, fail-closed missing data)
+2. Regime hard stops
+3. Regime deterioration full exits
+4. `TREND` partial take-profit milestones
+5. `HOLD`
+
+Hard exits always win over partial-profit logic.
+
+## Regime rules
+
+### SCALP
+
+- Hard exits:
+  - stop-loss (`EXIT_SCALP_STOP_LOSS_PCT`)
+  - liquidity breakdown (`EXIT_SCALP_LIQUIDITY_DROP_PCT`)
+  - max hold timeout (`EXIT_SCALP_MAX_HOLD_SEC`)
+  - global hard flags (`dev_sell`, `rug_flag`)
+- Recheck at `EXIT_SCALP_RECHECK_SEC`:
+  - this is a **re-evaluation threshold**, not a forced sell
+  - if profitable and momentum/social confirmation decays, trigger `FULL_EXIT`
+
+### TREND
+
+- Hard exits:
+  - trend hard stop (`EXIT_TREND_HARD_STOP_PCT`)
+  - buy-pressure floor break
+  - liquidity breakdown
+  - social/holder collapse
+  - global hard flags (`dev_sell`, `rug_flag`)
+- Partial exits:
+  - partial 1 at `EXIT_TREND_PARTIAL1_PCT` (`exit_fraction=0.33`)
+  - partial 2 at `EXIT_TREND_PARTIAL2_PCT` (`exit_fraction=0.50`)
+- partials are stateful and do not repeat (`partial_1_taken` / `partial_2_taken` or `partials_taken`)
+
+## Snapshot contract
+
+Each decision includes `exit_snapshot` with load-bearing fields:
+
+- `price_usd`
+- `buy_pressure_now`
+- `volume_velocity_now`
+- `liquidity_usd_now`
+- `liquidity_drop_pct`
+- `x_validation_score_now`
+- `x_status_now`
+- `bundle_cluster_score_now`
+- `bundle_cluster_delta`
+- `dev_sell_pressure_now`
+- `rug_flag_now`
+
+Optional attribution fields:
+
+- `holder_growth_now`
+- `smart_wallet_hits_now`
+- `market_cap_now`
+
+## Output artifacts
+
+- `data/processed/exit_decisions.json`
+- `data/processed/exit_events.jsonl`
+
+Events include:
+
+- `exit_evaluation_started`
+- `exit_hard_rule_triggered` (policy-level hard exits)
+- `exit_partial_triggered`
+- `exit_full_triggered`
+- `exit_hold_confirmed`
+- `exit_completed`
+
+## Fail-closed behavior
+
+When required current-state fields are missing and `EXIT_ENGINE_FAILCLOSED=true`, the engine emits a forced safe decision:
+
+- `exit_decision=FULL_EXIT`
+- `exit_reason=missing_current_state_failclosed`
+- `exit_status=partial`
+
+This prevents optimistic silent `HOLD` on incomplete data.
