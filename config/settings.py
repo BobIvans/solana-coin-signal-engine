@@ -36,6 +36,20 @@ class Settings:
     X_MAX_CONCURRENCY: int
     X_CACHE_TTL_SEC: int
 
+    LOCAL_OPENCLAW_ONLY: bool
+    OPENCLAW_BROWSER_PROFILE: str
+    OPENCLAW_BROWSER_TARGET: str
+    OPENCLAW_X_QUERY_MAX: int
+    OPENCLAW_X_TOKEN_MAX_CONCURRENCY: int
+    OPENCLAW_X_CACHE_TTL_SEC: int
+    OPENCLAW_X_PAGE_TIMEOUT_MS: int
+    OPENCLAW_X_NAV_TIMEOUT_MS: int
+    OPENCLAW_X_MAX_SCROLLS: int
+    OPENCLAW_X_MAX_POSTS_PER_QUERY: int
+    OPENCLAW_X_DEGRADED_SCORE: int
+    OPENCLAW_X_FAILOPEN: bool
+    X_VALIDATION_CONTRACT_VERSION: str
+
     DEX_CACHE_TTL_SEC: int
     HELIUS_CACHE_TTL_SEC: int
 
@@ -105,37 +119,30 @@ def load_settings() -> Settings:
         POSITIONS_DIR=_as_abs_path(_get_env(merged, "POSITIONS_DIR", "./data/positions")),
         SMOKE_DIR=_as_abs_path(_get_env(merged, "SMOKE_DIR", "./data/smoke")),
         OPENCLAW_ENABLED=_as_bool(_get_env(merged, "OPENCLAW_ENABLED", "true"), key="OPENCLAW_ENABLED"),
-        OPENCLAW_LOCAL_ONLY=_as_bool(
-            _get_env(merged, "OPENCLAW_LOCAL_ONLY", "true"), key="OPENCLAW_LOCAL_ONLY"
-        ),
-        OPENCLAW_PROFILE_PATH=_as_abs_path(
-            _get_env(merged, "OPENCLAW_PROFILE_PATH", "~/.openclaw/x-profile")
-        ),
+        OPENCLAW_LOCAL_ONLY=_as_bool(_get_env(merged, "OPENCLAW_LOCAL_ONLY", "true"), key="OPENCLAW_LOCAL_ONLY"),
+        OPENCLAW_PROFILE_PATH=_as_abs_path(_get_env(merged, "OPENCLAW_PROFILE_PATH", "~/.openclaw/x-profile")),
         OPENCLAW_SNAPSHOTS_DIR=_as_abs_path(_get_env(merged, "OPENCLAW_SNAPSHOTS_DIR", "./data/smoke")),
-        X_VALIDATION_ENABLED=_as_bool(
-            _get_env(merged, "X_VALIDATION_ENABLED", "true"), key="X_VALIDATION_ENABLED"
-        ),
-        X_DEGRADED_MODE_ALLOWED=_as_bool(
-            _get_env(merged, "X_DEGRADED_MODE_ALLOWED", "true"), key="X_DEGRADED_MODE_ALLOWED"
-        ),
+        X_VALIDATION_ENABLED=_as_bool(_get_env(merged, "X_VALIDATION_ENABLED", "true"), key="X_VALIDATION_ENABLED"),
+        X_DEGRADED_MODE_ALLOWED=_as_bool(_get_env(merged, "X_DEGRADED_MODE_ALLOWED", "true"), key="X_DEGRADED_MODE_ALLOWED"),
         X_SEARCH_TEST_QUERY=str(_get_env(merged, "X_SEARCH_TEST_QUERY", "solana memecoin")),
-        X_MAX_TOKENS_PER_CYCLE=_as_positive_int(
-            _get_env(merged, "X_MAX_TOKENS_PER_CYCLE", "5"), key="X_MAX_TOKENS_PER_CYCLE"
-        ),
-        X_MAX_CONCURRENCY=_as_positive_int(
-            _get_env(merged, "X_MAX_CONCURRENCY", "2"), key="X_MAX_CONCURRENCY"
-        ),
+        X_MAX_TOKENS_PER_CYCLE=_as_positive_int(_get_env(merged, "X_MAX_TOKENS_PER_CYCLE", "5"), key="X_MAX_TOKENS_PER_CYCLE"),
+        X_MAX_CONCURRENCY=_as_positive_int(_get_env(merged, "X_MAX_CONCURRENCY", "2"), key="X_MAX_CONCURRENCY"),
         X_CACHE_TTL_SEC=_as_positive_int(_get_env(merged, "X_CACHE_TTL_SEC", "600"), key="X_CACHE_TTL_SEC"),
-        DEX_CACHE_TTL_SEC=_as_positive_int(
-            _get_env(merged, "DEX_CACHE_TTL_SEC", "60"), key="DEX_CACHE_TTL_SEC"
-        ),
-        HELIUS_CACHE_TTL_SEC=_as_positive_int(
-            _get_env(merged, "HELIUS_CACHE_TTL_SEC", "120"), key="HELIUS_CACHE_TTL_SEC"
-        ),
-        GLOBAL_RATE_LIMIT_ENABLED=_as_bool(
-            _get_env(merged, "GLOBAL_RATE_LIMIT_ENABLED", "true"), key="GLOBAL_RATE_LIMIT_ENABLED"
-        ),
-        SMART_WALLETS_PATH=_as_abs_path(
-            _get_env(merged, "SMART_WALLETS_PATH", "./data/processed/smart_wallets.json")
-        ),
+        LOCAL_OPENCLAW_ONLY=_as_bool(_get_env(merged, "LOCAL_OPENCLAW_ONLY", "true"), key="LOCAL_OPENCLAW_ONLY"),
+        OPENCLAW_BROWSER_PROFILE=str(_get_env(merged, "OPENCLAW_BROWSER_PROFILE", "openclaw")),
+        OPENCLAW_BROWSER_TARGET=str(_get_env(merged, "OPENCLAW_BROWSER_TARGET", "host")),
+        OPENCLAW_X_QUERY_MAX=_as_positive_int(_get_env(merged, "OPENCLAW_X_QUERY_MAX", "4"), key="OPENCLAW_X_QUERY_MAX"),
+        OPENCLAW_X_TOKEN_MAX_CONCURRENCY=_as_positive_int(_get_env(merged, "OPENCLAW_X_TOKEN_MAX_CONCURRENCY", "2"), key="OPENCLAW_X_TOKEN_MAX_CONCURRENCY"),
+        OPENCLAW_X_CACHE_TTL_SEC=_as_positive_int(_get_env(merged, "OPENCLAW_X_CACHE_TTL_SEC", "600"), key="OPENCLAW_X_CACHE_TTL_SEC"),
+        OPENCLAW_X_PAGE_TIMEOUT_MS=_as_positive_int(_get_env(merged, "OPENCLAW_X_PAGE_TIMEOUT_MS", "12000"), key="OPENCLAW_X_PAGE_TIMEOUT_MS"),
+        OPENCLAW_X_NAV_TIMEOUT_MS=_as_positive_int(_get_env(merged, "OPENCLAW_X_NAV_TIMEOUT_MS", "15000"), key="OPENCLAW_X_NAV_TIMEOUT_MS"),
+        OPENCLAW_X_MAX_SCROLLS=_as_positive_int(_get_env(merged, "OPENCLAW_X_MAX_SCROLLS", "2"), key="OPENCLAW_X_MAX_SCROLLS"),
+        OPENCLAW_X_MAX_POSTS_PER_QUERY=_as_positive_int(_get_env(merged, "OPENCLAW_X_MAX_POSTS_PER_QUERY", "15"), key="OPENCLAW_X_MAX_POSTS_PER_QUERY"),
+        OPENCLAW_X_DEGRADED_SCORE=_as_positive_int(_get_env(merged, "OPENCLAW_X_DEGRADED_SCORE", "45"), key="OPENCLAW_X_DEGRADED_SCORE"),
+        OPENCLAW_X_FAILOPEN=_as_bool(_get_env(merged, "OPENCLAW_X_FAILOPEN", "true"), key="OPENCLAW_X_FAILOPEN"),
+        X_VALIDATION_CONTRACT_VERSION=str(_get_env(merged, "X_VALIDATION_CONTRACT_VERSION", "x_validation_v1")),
+        DEX_CACHE_TTL_SEC=_as_positive_int(_get_env(merged, "DEX_CACHE_TTL_SEC", "60"), key="DEX_CACHE_TTL_SEC"),
+        HELIUS_CACHE_TTL_SEC=_as_positive_int(_get_env(merged, "HELIUS_CACHE_TTL_SEC", "120"), key="HELIUS_CACHE_TTL_SEC"),
+        GLOBAL_RATE_LIMIT_ENABLED=_as_bool(_get_env(merged, "GLOBAL_RATE_LIMIT_ENABLED", "true"), key="GLOBAL_RATE_LIMIT_ENABLED"),
+        SMART_WALLETS_PATH=_as_abs_path(_get_env(merged, "SMART_WALLETS_PATH", "./data/processed/smart_wallets.json")),
     )
