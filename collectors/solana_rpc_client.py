@@ -61,3 +61,14 @@ class SolanaRpcClient:
         if not isinstance(result, list):
             return []
         return [item for item in result if isinstance(item, dict)]
+    def get_multiple_accounts(self, pubkeys: list[str]) -> dict[str, Any]:
+        keys = [str(key) for key in pubkeys if str(key).strip()][:100]
+        if not keys:
+            return {"value": []}
+        result = self._rpc("getMultipleAccounts", [keys, {"encoding": "jsonParsed", "commitment": self.commitment}])
+        return result if isinstance(result, dict) else {"value": []}
+
+    def get_token_account_balance(self, token_account: str) -> dict[str, Any]:
+        result = self._rpc("getTokenAccountBalance", [token_account, {"commitment": self.commitment}])
+        return result if isinstance(result, dict) else {"value": {"amount": "0", "decimals": 0, "uiAmount": 0.0}}
+

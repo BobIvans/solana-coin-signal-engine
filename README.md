@@ -42,3 +42,23 @@ Artifacts are created under `data/processed/`:
 - `top20_holder_share` is exact for top-20 accounts from RPC.
 - `first50_holder_conc_est` and `holder_entropy_est` are **heuristics** by contract.
 - launch-path stays heuristic (`*_est`, `*_score`) in this PR.
+
+
+## PR-5 rug safety engine
+
+PR-5 adds a deterministic rug safety layer over `enriched_tokens.json` and writes:
+
+- `data/processed/rug_assessed_tokens.json`
+- `data/processed/rug_events.jsonl`
+
+Run smoke:
+
+```bash
+python scripts/rug_engine_smoke.py --enriched data/processed/enriched_tokens.json
+```
+
+Policy highlights:
+
+- Burn and lock are separated (`lp_burn_confirmed` vs `lp_locked_flag`).
+- Concentration uses top1/top20 only for MVP honesty.
+- Fail-closed mode prevents partial assessments from defaulting to `PASS`.
