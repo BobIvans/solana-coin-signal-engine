@@ -1,21 +1,25 @@
 # solana-memecoin-signal-engine
 
-PR-3 extends the engine with OpenClaw-backed X-validation that runs fail-open and never breaks the pipeline on CAPTCHA/timeouts/login-expired errors.
+PR-4 extends the engine with an on-chain enrichment layer that merges shortlist + X-validated tokens and computes fast holder/dev/launch-path/smart-wallet metrics.
 
-## What PR-3 includes
+## What PR-4 includes
 
-- X query builder (`collectors/x_query_builder.py`) with capped + deduped query generation
-- OpenClaw local X client (`collectors/openclaw_x_client.py`) with cache-first reads and degraded-safe failures
-- Snapshot parser + token aggregation (`analytics/x_snapshot_parser.py`)
-- X score engine (`analytics/x_validation_score.py`) with degraded fallback policy
-- schema contract (`schemas/x_validation.schema.json`)
-- smoke runner (`scripts/x_validation_smoke.py`)
-- docs (`docs/x_validation.md`)
+- Solana RPC client wrappers (`collectors/solana_rpc_client.py`)
+- Helius client wrappers (`collectors/helius_client.py`)
+- Holder metrics (`analytics/holder_metrics.py`)
+- Dev activity metrics (`analytics/dev_activity.py`)
+- Launch path heuristics (`analytics/launch_path.py`)
+- Smart wallet hit scoring (`analytics/smart_wallet_hits.py`)
+- Schema contract (`schemas/enriched_token.schema.json`)
+- Smoke runner (`scripts/onchain_enrichment_smoke.py`)
+- docs (`docs/onchain_enrichment.md`)
 
-## Run X-validation smoke
+## Run on-chain enrichment smoke
 
 ```bash
-python scripts/x_validation_smoke.py --shortlist data/processed/shortlist.json
+python scripts/onchain_enrichment_smoke.py \
+  --shortlist data/processed/shortlist.json \
+  --x-validated data/processed/x_validated.json
 ```
 
 ## Run tests
@@ -28,12 +32,13 @@ pytest -q
 
 Artifacts are created under `data/processed/`:
 
-- `shortlist.json` (input from discovery)
+- `shortlist.json`
 - `x_validated.json`
-- `x_validation_events.jsonl`
+- `enriched_tokens.json`
+- `onchain_enrichment_events.jsonl`
 
-## Notes on OpenClaw + X
+## Metric honesty policy
 
-- Local OpenClaw only for this flow.
-- Manual X login is expected in profile `openclaw`.
-- Host browser target (`OPENCLAW_BROWSER_TARGET=host`) is the default.
+- `top20_holder_share` is exact for top-20 accounts from RPC.
+- `first50_holder_conc_est` and `holder_entropy_est` are **heuristics** by contract.
+- launch-path stays heuristic (`*_est`, `*_score`) in this PR.
