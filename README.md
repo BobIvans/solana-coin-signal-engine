@@ -104,3 +104,29 @@ Run smoke:
 ```bash
 python scripts/entry_selector_smoke.py --scored data/processed/scored_tokens.json
 ```
+
+## PR-9 paper trader
+
+PR-9 adds a deterministic paper-trading lifecycle that consumes:
+
+- `data/processed/entry_candidates.json`
+- `data/processed/exit_decisions.json`
+
+and writes:
+
+- `data/processed/signals.jsonl`
+- `data/processed/trades.jsonl`
+- `data/processed/positions.json`
+- `data/processed/portfolio_state.json`
+
+Run one cycle:
+
+```bash
+python paper_runner.py
+```
+
+Run smoke:
+
+```bash
+python scripts/paper_trader_smoke.py
+```

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TradeEvent",
+  "type": "object",
+  "required": ["ts", "event", "trade_id", "token_address", "side", "contract_version"],
+  "properties": {
+    "ts": {"type": "string"},
+    "event": {"type": "string", "enum": ["paper_buy", "paper_sell_partial", "paper_sell_full", "paper_fill_failed"]},
+    "trade_id": {"type": "string"},
+    "position_id": {"type": ["string", "null"]},
+    "token_address": {"type": "string"},
+    "symbol": {"type": ["string", "null"]},
+    "side": {"type": "string", "enum": ["BUY", "SELL"]},
+    "requested_notional_sol": {"type": ["number", "null"]},
+    "filled_notional_sol": {"type": ["number", "null"]},
+    "fill_ratio": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "reference_price_usd": {"type": ["number", "null"]},
+    "executed_price_usd": {"type": ["number", "null"]},
+    "slippage_bps": {"type": ["number", "null"]},
+    "priority_fee_sol": {"type": ["number", "null"]},
+    "tx_failed": {"type": ["boolean", "null"]},
+    "failure_reason": {"type": ["string", "null"]},
+    "contract_version": {"type": "string"}
+  },
+  "additionalProperties": true
+}
