@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Unified scored token record",
+  "type": "object",
+  "required": [
+    "token_address",
+    "onchain_core",
+    "early_signal_bonus",
+    "x_validation_bonus",
+    "rug_penalty",
+    "spam_penalty",
+    "confidence_adjustment",
+    "final_score",
+    "regime_candidate",
+    "score_inputs_status",
+    "score_flags",
+    "score_warnings",
+    "scored_at",
+    "contract_version"
+  ],
+  "properties": {
+    "token_address": {"type": "string", "minLength": 1},
+    "onchain_core": {"type": "number", "minimum": 0, "maximum": 45},
+    "early_signal_bonus": {"type": "number", "minimum": 0, "maximum": 25},
+    "x_validation_bonus": {"type": "number", "minimum": 0, "maximum": 14},
+    "rug_penalty": {"type": "number", "minimum": 0, "maximum": 40},
+    "spam_penalty": {"type": "number", "minimum": 0, "maximum": 8},
+    "confidence_adjustment": {"type": "number", "minimum": -25, "maximum": 5},
+    "final_score": {"type": "number", "minimum": 0, "maximum": 100},
+    "regime_candidate": {"type": "string", "enum": ["IGNORE", "WATCHLIST", "ENTRY_CANDIDATE"]},
+    "score_inputs_status": {"type": "object"},
+    "score_flags": {"type": "array", "items": {"type": "string"}},
+    "score_warnings": {"type": "array", "items": {"type": "string"}},
+    "scored_at": {"type": "string"},
+    "contract_version": {"type": "string", "const": "unified_score_v1"}
+  },
+  "additionalProperties": true
+}
