@@ -56,6 +56,20 @@ class Settings:
     GLOBAL_RATE_LIMIT_ENABLED: bool
     SMART_WALLETS_PATH: Path
 
+    ONCHAIN_ENRICHMENT_ENABLED: bool
+    ONCHAIN_ENRICHMENT_MAX_TOKENS: int
+    ONCHAIN_ENRICHMENT_FAILOPEN: bool
+    HELIUS_API_KEY: str
+    HELIUS_TX_ADDR_LIMIT: int
+    HELIUS_TX_SIG_BATCH: int
+    HELIUS_ENRICH_CACHE_TTL_SEC: int
+    SOLANA_RPC_URL: str
+    SOLANA_RPC_COMMITMENT: str
+    SMART_WALLET_SEED_PATH: Path
+    SMART_WALLET_HIT_WINDOW_SEC: int
+    PROGRAM_ID_MAP_PATH: Path
+    ALLOW_LAUNCH_PATH_HEURISTICS_ONLY: bool
+
 
 def _read_dotenv(dotenv_path: str = ".env") -> dict[str, str]:
     path = Path(dotenv_path)
@@ -73,8 +87,7 @@ def _read_dotenv(dotenv_path: str = ".env") -> dict[str, str]:
 
 
 def _get_env(merged: dict[str, Any], key: str, default: Any = None) -> Any:
-    value = merged.get(key, default)
-    return value
+    return merged.get(key, default)
 
 
 def _as_bool(raw_value: Any, *, key: str) -> bool:
@@ -145,4 +158,17 @@ def load_settings() -> Settings:
         HELIUS_CACHE_TTL_SEC=_as_positive_int(_get_env(merged, "HELIUS_CACHE_TTL_SEC", "120"), key="HELIUS_CACHE_TTL_SEC"),
         GLOBAL_RATE_LIMIT_ENABLED=_as_bool(_get_env(merged, "GLOBAL_RATE_LIMIT_ENABLED", "true"), key="GLOBAL_RATE_LIMIT_ENABLED"),
         SMART_WALLETS_PATH=_as_abs_path(_get_env(merged, "SMART_WALLETS_PATH", "./data/processed/smart_wallets.json")),
+        ONCHAIN_ENRICHMENT_ENABLED=_as_bool(_get_env(merged, "ONCHAIN_ENRICHMENT_ENABLED", "true"), key="ONCHAIN_ENRICHMENT_ENABLED"),
+        ONCHAIN_ENRICHMENT_MAX_TOKENS=_as_positive_int(_get_env(merged, "ONCHAIN_ENRICHMENT_MAX_TOKENS", "5"), key="ONCHAIN_ENRICHMENT_MAX_TOKENS"),
+        ONCHAIN_ENRICHMENT_FAILOPEN=_as_bool(_get_env(merged, "ONCHAIN_ENRICHMENT_FAILOPEN", "true"), key="ONCHAIN_ENRICHMENT_FAILOPEN"),
+        HELIUS_API_KEY=str(_get_env(merged, "HELIUS_API_KEY", "")),
+        HELIUS_TX_ADDR_LIMIT=_as_positive_int(_get_env(merged, "HELIUS_TX_ADDR_LIMIT", "40"), key="HELIUS_TX_ADDR_LIMIT"),
+        HELIUS_TX_SIG_BATCH=_as_positive_int(_get_env(merged, "HELIUS_TX_SIG_BATCH", "25"), key="HELIUS_TX_SIG_BATCH"),
+        HELIUS_ENRICH_CACHE_TTL_SEC=_as_positive_int(_get_env(merged, "HELIUS_ENRICH_CACHE_TTL_SEC", "300"), key="HELIUS_ENRICH_CACHE_TTL_SEC"),
+        SOLANA_RPC_URL=str(_get_env(merged, "SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")),
+        SOLANA_RPC_COMMITMENT=str(_get_env(merged, "SOLANA_RPC_COMMITMENT", "confirmed")),
+        SMART_WALLET_SEED_PATH=_as_abs_path(_get_env(merged, "SMART_WALLET_SEED_PATH", "data/seeds/smart_wallets.json")),
+        SMART_WALLET_HIT_WINDOW_SEC=_as_positive_int(_get_env(merged, "SMART_WALLET_HIT_WINDOW_SEC", "300"), key="SMART_WALLET_HIT_WINDOW_SEC"),
+        PROGRAM_ID_MAP_PATH=_as_abs_path(_get_env(merged, "PROGRAM_ID_MAP_PATH", "config/program_ids.json")),
+        ALLOW_LAUNCH_PATH_HEURISTICS_ONLY=_as_bool(_get_env(merged, "ALLOW_LAUNCH_PATH_HEURISTICS_ONLY", "true"), key="ALLOW_LAUNCH_PATH_HEURISTICS_ONLY"),
     )
