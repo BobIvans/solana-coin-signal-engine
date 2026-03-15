@@ -70,6 +70,20 @@ class Settings:
     PROGRAM_ID_MAP_PATH: Path
     ALLOW_LAUNCH_PATH_HEURISTICS_ONLY: bool
 
+    RUG_ENGINE_ENABLED: bool
+    RUG_ENGINE_FAILCLOSED: bool
+    RUG_ENGINE_PARTIAL_ALLOWED: bool
+    RUG_IGNORE_THRESHOLD: float
+    RUG_WATCH_THRESHOLD: float
+    RUG_TOP1_HOLDER_HARD_MAX: float
+    RUG_TOP20_HOLDER_HARD_MAX: float
+    RUG_DEV_SELL_PRESSURE_WARN: float
+    RUG_DEV_SELL_PRESSURE_HARD: float
+    RUG_REQUIRE_DISTINCT_BURN_AND_LOCK: bool
+    RUG_LP_BURN_OWNER_ALLOWLIST: str
+    RUG_LP_LOCK_PROGRAM_ALLOWLIST_PATH: Path
+    RUG_EVENT_CACHE_TTL_SEC: int
+
 
 def _read_dotenv(dotenv_path: str = ".env") -> dict[str, str]:
     path = Path(dotenv_path)
@@ -107,6 +121,13 @@ def _as_positive_int(raw_value: Any, *, key: str) -> int:
     value = int(raw_value)
     if value <= 0:
         raise ValueError(f"{key} must be > 0")
+    return value
+
+
+def _as_unit_float(raw_value: Any, *, key: str) -> float:
+    value = float(raw_value)
+    if value < 0 or value > 1:
+        raise ValueError(f"{key} must be between 0 and 1")
     return value
 
 
@@ -171,4 +192,17 @@ def load_settings() -> Settings:
         SMART_WALLET_HIT_WINDOW_SEC=_as_positive_int(_get_env(merged, "SMART_WALLET_HIT_WINDOW_SEC", "300"), key="SMART_WALLET_HIT_WINDOW_SEC"),
         PROGRAM_ID_MAP_PATH=_as_abs_path(_get_env(merged, "PROGRAM_ID_MAP_PATH", "config/program_ids.json")),
         ALLOW_LAUNCH_PATH_HEURISTICS_ONLY=_as_bool(_get_env(merged, "ALLOW_LAUNCH_PATH_HEURISTICS_ONLY", "true"), key="ALLOW_LAUNCH_PATH_HEURISTICS_ONLY"),
+        RUG_ENGINE_ENABLED=_as_bool(_get_env(merged, "RUG_ENGINE_ENABLED", "true"), key="RUG_ENGINE_ENABLED"),
+        RUG_ENGINE_FAILCLOSED=_as_bool(_get_env(merged, "RUG_ENGINE_FAILCLOSED", "true"), key="RUG_ENGINE_FAILCLOSED"),
+        RUG_ENGINE_PARTIAL_ALLOWED=_as_bool(_get_env(merged, "RUG_ENGINE_PARTIAL_ALLOWED", "true"), key="RUG_ENGINE_PARTIAL_ALLOWED"),
+        RUG_IGNORE_THRESHOLD=_as_unit_float(_get_env(merged, "RUG_IGNORE_THRESHOLD", "0.55"), key="RUG_IGNORE_THRESHOLD"),
+        RUG_WATCH_THRESHOLD=_as_unit_float(_get_env(merged, "RUG_WATCH_THRESHOLD", "0.35"), key="RUG_WATCH_THRESHOLD"),
+        RUG_TOP1_HOLDER_HARD_MAX=_as_unit_float(_get_env(merged, "RUG_TOP1_HOLDER_HARD_MAX", "0.20"), key="RUG_TOP1_HOLDER_HARD_MAX"),
+        RUG_TOP20_HOLDER_HARD_MAX=_as_unit_float(_get_env(merged, "RUG_TOP20_HOLDER_HARD_MAX", "0.65"), key="RUG_TOP20_HOLDER_HARD_MAX"),
+        RUG_DEV_SELL_PRESSURE_WARN=_as_unit_float(_get_env(merged, "RUG_DEV_SELL_PRESSURE_WARN", "0.10"), key="RUG_DEV_SELL_PRESSURE_WARN"),
+        RUG_DEV_SELL_PRESSURE_HARD=_as_unit_float(_get_env(merged, "RUG_DEV_SELL_PRESSURE_HARD", "0.25"), key="RUG_DEV_SELL_PRESSURE_HARD"),
+        RUG_REQUIRE_DISTINCT_BURN_AND_LOCK=_as_bool(_get_env(merged, "RUG_REQUIRE_DISTINCT_BURN_AND_LOCK", "true"), key="RUG_REQUIRE_DISTINCT_BURN_AND_LOCK"),
+        RUG_LP_BURN_OWNER_ALLOWLIST=str(_get_env(merged, "RUG_LP_BURN_OWNER_ALLOWLIST", "11111111111111111111111111111111")),
+        RUG_LP_LOCK_PROGRAM_ALLOWLIST_PATH=_as_abs_path(_get_env(merged, "RUG_LP_LOCK_PROGRAM_ALLOWLIST_PATH", "config/lock_programs.json")),
+        RUG_EVENT_CACHE_TTL_SEC=_as_positive_int(_get_env(merged, "RUG_EVENT_CACHE_TTL_SEC", "300"), key="RUG_EVENT_CACHE_TTL_SEC"),
     )
