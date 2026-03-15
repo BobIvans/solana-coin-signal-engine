@@ -21,6 +21,9 @@ def test_settings_load_and_validate(monkeypatch):
     monkeypatch.setenv("X_VALIDATION_ENABLED", "true")
     monkeypatch.setenv("X_DEGRADED_MODE_ALLOWED", "true")
     monkeypatch.setenv("GLOBAL_RATE_LIMIT_ENABLED", "true")
+    monkeypatch.setenv("UNIFIED_SCORING_ENABLED", "true")
+    monkeypatch.setenv("UNIFIED_SCORING_FAILOPEN", "false")
+    monkeypatch.setenv("UNIFIED_SCORING_REQUIRE_X", "false")
 
     settings = load_settings()
 
@@ -30,6 +33,8 @@ def test_settings_load_and_validate(monkeypatch):
     assert settings.X_MAX_TOKENS_PER_CYCLE > 0
     assert settings.X_MAX_CONCURRENCY > 0
     assert settings.X_CACHE_TTL_SEC > 0
+    assert settings.UNIFIED_SCORING_ENABLED is True
+    assert settings.UNIFIED_SCORE_HEURISTIC_CONFIDENCE_FLOOR > 0
 
 
 def test_directories_resolve_to_absolute():

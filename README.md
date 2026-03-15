@@ -63,6 +63,31 @@ Policy highlights:
 - Concentration uses top1/top20 only for MVP honesty.
 - Fail-closed mode prevents partial assessments from defaulting to `PASS`.
 
+
+## PR-6 unified scoring
+
+PR-6 adds the unified scoring layer that merges:
+
+- `shortlist.json`
+- `x_validated.json`
+- `enriched_tokens.json`
+- `rug_assessed_tokens.json`
+
+and produces deterministic outputs:
+
+- `data/processed/scored_tokens.json`
+- `data/processed/score_events.jsonl`
+
+Run smoke:
+
+```bash
+python scripts/unified_score_smoke.py \
+  --shortlist data/processed/shortlist.json \
+  --x-validated data/processed/x_validated.json \
+  --enriched data/processed/enriched_tokens.json \
+  --rug-assessed data/processed/rug_assessed_tokens.json
+```
+
 ## PR-7 entry selector
 
 PR-7 adds entry routing on top of `scored_tokens.json`:
