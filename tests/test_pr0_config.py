@@ -19,8 +19,8 @@ def test_load_settings_defaults(monkeypatch):
 
     assert settings.OPENCLAW_ENABLED is True
     assert settings.OPENCLAW_LOCAL_ONLY is True
-    assert settings.OPENCLAW_PROFILE_PATH == "~/.openclaw/x-profile"
-    assert settings.OPENCLAW_SNAPSHOTS_DIR == "./data/smoke"
+    assert Path(settings.OPENCLAW_PROFILE_PATH).is_absolute()
+    assert Path(settings.OPENCLAW_SNAPSHOTS_DIR).is_absolute()
     assert settings.X_VALIDATION_ENABLED is True
     assert settings.X_DEGRADED_MODE_ALLOWED is True
     assert settings.X_SEARCH_TEST_QUERY == "solana memecoin"

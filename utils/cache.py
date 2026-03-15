@@ -46,7 +46,7 @@ _SETTINGS = load_settings()
 _CACHES: dict[str, SimpleTTLCache] = {
     "dex": SimpleTTLCache(ttl=_SETTINGS.DEX_CACHE_TTL_SEC),
     "helius": SimpleTTLCache(ttl=_SETTINGS.HELIUS_CACHE_TTL_SEC),
-    "x": SimpleTTLCache(ttl=_SETTINGS.X_CACHE_TTL_SEC),
+    "x": SimpleTTLCache(ttl=_SETTINGS.OPENCLAW_X_CACHE_TTL_SEC),
 }
 
 
