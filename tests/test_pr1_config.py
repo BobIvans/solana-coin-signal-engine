@@ -36,6 +36,8 @@ def test_settings_load_and_validate(monkeypatch):
     assert settings.X_MAX_CONCURRENCY > 0
     assert settings.X_CACHE_TTL_SEC > 0
     assert settings.UNIFIED_SCORING_ENABLED is True
+    assert settings.UNIFIED_SCORING_FAILOPEN is False
+    assert settings.UNIFIED_SCORING_REQUIRE_X is False
     assert settings.UNIFIED_SCORE_HEURISTIC_CONFIDENCE_FLOOR > 0
     assert settings.UNIFIED_SCORE_ENTRY_THRESHOLD > settings.UNIFIED_SCORE_WATCH_THRESHOLD
     assert settings.ENTRY_SELECTOR_ENABLED is True
@@ -52,6 +54,8 @@ def test_directories_resolve_to_absolute():
 def test_unified_and_entry_settings_coexist():
     settings = load_settings()
     assert isinstance(settings.UNIFIED_SCORING_ENABLED, bool)
+    assert isinstance(settings.UNIFIED_SCORING_FAILOPEN, bool)
+    assert isinstance(settings.UNIFIED_SCORING_REQUIRE_X, bool)
     assert settings.UNIFIED_SCORE_WATCH_THRESHOLD > 0
     assert isinstance(settings.ENTRY_SELECTOR_ENABLED, bool)
     assert settings.ENTRY_TREND_SCORE_MIN >= settings.ENTRY_SCALP_SCORE_MIN
