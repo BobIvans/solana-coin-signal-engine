@@ -63,6 +63,7 @@ Policy highlights:
 - Concentration uses top1/top20 only for MVP honesty.
 - Fail-closed mode prevents partial assessments from defaulting to `PASS`.
 
+
 ## PR-6 unified scoring
 
 PR-6 adds the unified scoring layer that merges:
@@ -85,4 +86,21 @@ python scripts/unified_score_smoke.py \
   --x-validated data/processed/x_validated.json \
   --enriched data/processed/enriched_tokens.json \
   --rug-assessed data/processed/rug_assessed_tokens.json
+```
+
+## PR-7 entry selector
+
+Both PR-6 and PR-7 sections are intentionally kept because PR-7 consumes `scored_tokens.json` from PR-6.
+
+PR-7 adds entry routing on top of `scored_tokens.json`:
+
+- decision outputs: `SCALP | TREND | IGNORE`
+- independent `entry_confidence` and `recommended_position_pct`
+- deterministic `entry_snapshot` for PR-8/PR-9
+- append-only events log (`data/processed/entry_events.jsonl`)
+
+Run smoke:
+
+```bash
+python scripts/entry_selector_smoke.py --scored data/processed/scored_tokens.json
 ```

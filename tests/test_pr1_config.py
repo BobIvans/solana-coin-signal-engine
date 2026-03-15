@@ -3,8 +3,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from pathlib import Path
-
 from config.settings import load_settings
 
 
@@ -22,8 +20,12 @@ def test_settings_load_and_validate(monkeypatch):
     monkeypatch.setenv("X_DEGRADED_MODE_ALLOWED", "true")
     monkeypatch.setenv("GLOBAL_RATE_LIMIT_ENABLED", "true")
     monkeypatch.setenv("UNIFIED_SCORING_ENABLED", "true")
+    monkeypatch.setenv("UNIFIED_SCORING_FAILOPEN", "false")
+    monkeypatch.setenv("UNIFIED_SCORING_REQUIRE_X", "false")
     monkeypatch.setenv("UNIFIED_SCORE_ENTRY_THRESHOLD", "82")
     monkeypatch.setenv("UNIFIED_SCORE_WATCH_THRESHOLD", "68")
+    monkeypatch.setenv("ENTRY_SELECTOR_ENABLED", "true")
+    monkeypatch.setenv("ENTRY_SELECTOR_FAILCLOSED", "true")
 
     settings = load_settings()
 
@@ -34,7 +36,12 @@ def test_settings_load_and_validate(monkeypatch):
     assert settings.X_MAX_CONCURRENCY > 0
     assert settings.X_CACHE_TTL_SEC > 0
     assert settings.UNIFIED_SCORING_ENABLED is True
+    assert settings.UNIFIED_SCORING_FAILOPEN is False
+    assert settings.UNIFIED_SCORING_REQUIRE_X is False
+    assert settings.UNIFIED_SCORE_HEURISTIC_CONFIDENCE_FLOOR > 0
     assert settings.UNIFIED_SCORE_ENTRY_THRESHOLD > settings.UNIFIED_SCORE_WATCH_THRESHOLD
+    assert settings.ENTRY_SELECTOR_ENABLED is True
+    assert settings.ENTRY_SCALP_SCORE_MIN > 0
 
 
 def test_directories_resolve_to_absolute():
@@ -42,3 +49,13 @@ def test_directories_resolve_to_absolute():
     assert Path(settings.DATA_DIR).is_absolute()
     assert Path(settings.RAW_DATA_DIR).is_absolute()
     assert Path(settings.PROCESSED_DATA_DIR).is_absolute()
+
+
+def test_unified_and_entry_settings_coexist():
+    settings = load_settings()
+    assert isinstance(settings.UNIFIED_SCORING_ENABLED, bool)
+    assert isinstance(settings.UNIFIED_SCORING_FAILOPEN, bool)
+    assert isinstance(settings.UNIFIED_SCORING_REQUIRE_X, bool)
+    assert settings.UNIFIED_SCORE_WATCH_THRESHOLD > 0
+    assert isinstance(settings.ENTRY_SELECTOR_ENABLED, bool)
+    assert settings.ENTRY_TREND_SCORE_MIN >= settings.ENTRY_SCALP_SCORE_MIN
