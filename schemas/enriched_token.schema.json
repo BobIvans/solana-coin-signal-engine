@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OnchainEnrichmentOutput",
+  "type": "object",
+  "required": ["contract_version", "generated_at", "tokens"],
+  "properties": {
+    "contract_version": { "type": "string" },
+    "generated_at": { "type": "string" },
+    "tokens": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "token_address",
+          "top1_holder_share",
+          "top20_holder_share",
+          "first50_holder_conc_est",
+          "holder_entropy_est",
+          "unique_buyers_5m",
+          "holder_growth_5m",
+          "dev_sell_pressure_5m",
+          "pumpfun_to_raydium_sec",
+          "smart_wallet_hits",
+          "enrichment_status",
+          "enrichment_warnings",
+          "enriched_at",
+          "contract_version"
+        ],
+        "properties": {
+          "token_address": { "type": "string", "minLength": 1 },
+          "symbol": { "type": "string" },
+          "name": { "type": "string" },
+          "asset_metadata_present": { "type": "boolean" },
+          "decimals": { "type": "integer" },
+          "token_supply_raw": { "type": "string" },
+          "token_supply_ui": { "type": "number" },
+          "top1_holder_share": { "type": "number" },
+          "top20_holder_share": { "type": "number" },
+          "first50_holder_conc_est": { "type": "number" },
+          "holder_entropy_est": { "type": "number" },
+          "unique_buyers_5m": { "type": "integer" },
+          "holder_growth_5m": { "type": "integer" },
+          "dev_wallet_est": { "type": "string" },
+          "dev_wallet_confidence_score": { "type": "number" },
+          "dev_sell_pressure_5m": { "type": ["number", "null"] },
+          "launch_path_label": { "type": "string" },
+          "pumpfun_to_raydium_sec": { "type": ["integer", "null"] },
+          "launch_path_confidence_score": { "type": "number" },
+          "smart_wallet_hits": { "type": "integer" },
+          "smart_wallet_hit_wallets": { "type": "array", "items": { "type": "string" } },
+          "enrichment_status": { "type": "string", "enum": ["ok", "partial", "error"] },
+          "enrichment_warnings": { "type": "array", "items": { "type": "string" } },
+          "enriched_at": { "type": "string" },
+          "contract_version": { "type": "string" }
+        }
+      }
+    }
+  }
+}
