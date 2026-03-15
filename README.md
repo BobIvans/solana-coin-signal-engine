@@ -62,3 +62,18 @@ Policy highlights:
 - Burn and lock are separated (`lp_burn_confirmed` vs `lp_locked_flag`).
 - Concentration uses top1/top20 only for MVP honesty.
 - Fail-closed mode prevents partial assessments from defaulting to `PASS`.
+
+## PR-7 entry selector
+
+PR-7 adds entry routing on top of `scored_tokens.json`:
+
+- decision outputs: `SCALP | TREND | IGNORE`
+- independent `entry_confidence` and `recommended_position_pct`
+- deterministic `entry_snapshot` for PR-8/PR-9
+- append-only events log (`data/processed/entry_events.jsonl`)
+
+Run smoke:
+
+```bash
+python scripts/entry_selector_smoke.py --scored data/processed/scored_tokens.json
+```

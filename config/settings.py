@@ -84,6 +84,27 @@ class Settings:
     RUG_LP_LOCK_PROGRAM_ALLOWLIST_PATH: Path
     RUG_EVENT_CACHE_TTL_SEC: int
 
+    ENTRY_SELECTOR_ENABLED: bool
+    ENTRY_SELECTOR_FAILCLOSED: bool
+    ENTRY_SCALP_SCORE_MIN: float
+    ENTRY_TREND_SCORE_MIN: float
+    ENTRY_SCALP_MAX_AGE_SEC: int
+    ENTRY_SCALP_MAX_HOLD_SEC: int
+    ENTRY_TREND_MIN_X_SCORE: float
+    ENTRY_SCALP_MIN_X_SCORE: float
+    ENTRY_RUG_MAX_SCALP: float
+    ENTRY_RUG_MAX_TREND: float
+    ENTRY_BUY_PRESSURE_MIN_SCALP: float
+    ENTRY_BUY_PRESSURE_MIN_TREND: float
+    ENTRY_FIRST30S_BUY_RATIO_MIN: float
+    ENTRY_BUNDLE_CLUSTER_MIN: float
+    ENTRY_SMART_WALLET_HITS_MIN_TREND: int
+    ENTRY_HOLDER_GROWTH_MIN_TREND: int
+    ENTRY_DEGRADED_X_SIZE_MULTIPLIER: float
+    ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER: float
+    ENTRY_MAX_BASE_POSITION_PCT: float
+    ENTRY_CONTRACT_VERSION: str
+
 
 def _read_dotenv(dotenv_path: str = ".env") -> dict[str, str]:
     path = Path(dotenv_path)
@@ -205,4 +226,24 @@ def load_settings() -> Settings:
         RUG_LP_BURN_OWNER_ALLOWLIST=str(_get_env(merged, "RUG_LP_BURN_OWNER_ALLOWLIST", "11111111111111111111111111111111")),
         RUG_LP_LOCK_PROGRAM_ALLOWLIST_PATH=_as_abs_path(_get_env(merged, "RUG_LP_LOCK_PROGRAM_ALLOWLIST_PATH", "config/lock_programs.json")),
         RUG_EVENT_CACHE_TTL_SEC=_as_positive_int(_get_env(merged, "RUG_EVENT_CACHE_TTL_SEC", "300"), key="RUG_EVENT_CACHE_TTL_SEC"),
+        ENTRY_SELECTOR_ENABLED=_as_bool(_get_env(merged, "ENTRY_SELECTOR_ENABLED", "true"), key="ENTRY_SELECTOR_ENABLED"),
+        ENTRY_SELECTOR_FAILCLOSED=_as_bool(_get_env(merged, "ENTRY_SELECTOR_FAILCLOSED", "true"), key="ENTRY_SELECTOR_FAILCLOSED"),
+        ENTRY_SCALP_SCORE_MIN=float(_get_env(merged, "ENTRY_SCALP_SCORE_MIN", "82")),
+        ENTRY_TREND_SCORE_MIN=float(_get_env(merged, "ENTRY_TREND_SCORE_MIN", "86")),
+        ENTRY_SCALP_MAX_AGE_SEC=_as_positive_int(_get_env(merged, "ENTRY_SCALP_MAX_AGE_SEC", "480"), key="ENTRY_SCALP_MAX_AGE_SEC"),
+        ENTRY_SCALP_MAX_HOLD_SEC=_as_positive_int(_get_env(merged, "ENTRY_SCALP_MAX_HOLD_SEC", "120"), key="ENTRY_SCALP_MAX_HOLD_SEC"),
+        ENTRY_TREND_MIN_X_SCORE=float(_get_env(merged, "ENTRY_TREND_MIN_X_SCORE", "65")),
+        ENTRY_SCALP_MIN_X_SCORE=float(_get_env(merged, "ENTRY_SCALP_MIN_X_SCORE", "50")),
+        ENTRY_RUG_MAX_SCALP=_as_unit_float(_get_env(merged, "ENTRY_RUG_MAX_SCALP", "0.30"), key="ENTRY_RUG_MAX_SCALP"),
+        ENTRY_RUG_MAX_TREND=_as_unit_float(_get_env(merged, "ENTRY_RUG_MAX_TREND", "0.20"), key="ENTRY_RUG_MAX_TREND"),
+        ENTRY_BUY_PRESSURE_MIN_SCALP=_as_unit_float(_get_env(merged, "ENTRY_BUY_PRESSURE_MIN_SCALP", "0.75"), key="ENTRY_BUY_PRESSURE_MIN_SCALP"),
+        ENTRY_BUY_PRESSURE_MIN_TREND=_as_unit_float(_get_env(merged, "ENTRY_BUY_PRESSURE_MIN_TREND", "0.65"), key="ENTRY_BUY_PRESSURE_MIN_TREND"),
+        ENTRY_FIRST30S_BUY_RATIO_MIN=_as_unit_float(_get_env(merged, "ENTRY_FIRST30S_BUY_RATIO_MIN", "0.65"), key="ENTRY_FIRST30S_BUY_RATIO_MIN"),
+        ENTRY_BUNDLE_CLUSTER_MIN=_as_unit_float(_get_env(merged, "ENTRY_BUNDLE_CLUSTER_MIN", "0.55"), key="ENTRY_BUNDLE_CLUSTER_MIN"),
+        ENTRY_SMART_WALLET_HITS_MIN_TREND=_as_positive_int(_get_env(merged, "ENTRY_SMART_WALLET_HITS_MIN_TREND", "2"), key="ENTRY_SMART_WALLET_HITS_MIN_TREND"),
+        ENTRY_HOLDER_GROWTH_MIN_TREND=_as_positive_int(_get_env(merged, "ENTRY_HOLDER_GROWTH_MIN_TREND", "20"), key="ENTRY_HOLDER_GROWTH_MIN_TREND"),
+        ENTRY_DEGRADED_X_SIZE_MULTIPLIER=_as_unit_float(_get_env(merged, "ENTRY_DEGRADED_X_SIZE_MULTIPLIER", "0.50"), key="ENTRY_DEGRADED_X_SIZE_MULTIPLIER"),
+        ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER=_as_unit_float(_get_env(merged, "ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER", "0.60"), key="ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER"),
+        ENTRY_MAX_BASE_POSITION_PCT=_as_unit_float(_get_env(merged, "ENTRY_MAX_BASE_POSITION_PCT", "1.00"), key="ENTRY_MAX_BASE_POSITION_PCT"),
+        ENTRY_CONTRACT_VERSION=str(_get_env(merged, "ENTRY_CONTRACT_VERSION", "entry_selector_v1")),
     )
