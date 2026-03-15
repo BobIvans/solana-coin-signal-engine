@@ -185,6 +185,21 @@ def _as_unit_float(raw_value: Any, *, key: str) -> float:
     return value
 
 
+
+
+def _as_positive_float(raw_value: Any, *, key: str) -> float:
+    value = float(raw_value)
+    if value <= 0:
+        raise ValueError(f"{key} must be > 0")
+    return value
+
+
+def _as_non_negative_float(raw_value: Any, *, key: str) -> float:
+    value = float(raw_value)
+    if value < 0:
+        raise ValueError(f"{key} must be >= 0")
+    return value
+
 def _as_abs_path(raw_value: Any) -> Path:
     return Path(str(raw_value)).expanduser().resolve()
 
@@ -292,14 +307,14 @@ def load_settings() -> Settings:
         ENTRY_CONTRACT_VERSION=str(_get_env(merged, "ENTRY_CONTRACT_VERSION", "entry_selector_v1")),
         PAPER_TRADER_ENABLED=_as_bool(_get_env(merged, "PAPER_TRADER_ENABLED", "true"), key="PAPER_TRADER_ENABLED"),
         PAPER_TRADER_FAILCLOSED=_as_bool(_get_env(merged, "PAPER_TRADER_FAILCLOSED", "true"), key="PAPER_TRADER_FAILCLOSED"),
-        PAPER_STARTING_CAPITAL_SOL=float(_get_env(merged, "PAPER_STARTING_CAPITAL_SOL", "0.1")),
+        PAPER_STARTING_CAPITAL_SOL=_as_positive_float(_get_env(merged, "PAPER_STARTING_CAPITAL_SOL", "0.1"), key="PAPER_STARTING_CAPITAL_SOL"),
         PAPER_MAX_CONCURRENT_POSITIONS=_as_positive_int(_get_env(merged, "PAPER_MAX_CONCURRENT_POSITIONS", "3"), key="PAPER_MAX_CONCURRENT_POSITIONS"),
         PAPER_ALLOW_PARTIAL_EXITS=_as_bool(_get_env(merged, "PAPER_ALLOW_PARTIAL_EXITS", "true"), key="PAPER_ALLOW_PARTIAL_EXITS"),
-        PAPER_DEFAULT_SLIPPAGE_BPS=float(_get_env(merged, "PAPER_DEFAULT_SLIPPAGE_BPS", "150")),
-        PAPER_MAX_SLIPPAGE_BPS=float(_get_env(merged, "PAPER_MAX_SLIPPAGE_BPS", "1200")),
-        PAPER_SLIPPAGE_LIQUIDITY_SENSITIVITY=float(_get_env(merged, "PAPER_SLIPPAGE_LIQUIDITY_SENSITIVITY", "1.0")),
-        PAPER_PRIORITY_FEE_BASE_SOL=float(_get_env(merged, "PAPER_PRIORITY_FEE_BASE_SOL", "0.00002")),
-        PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER=float(_get_env(merged, "PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER", "1.75")),
+        PAPER_DEFAULT_SLIPPAGE_BPS=_as_non_negative_float(_get_env(merged, "PAPER_DEFAULT_SLIPPAGE_BPS", "150"), key="PAPER_DEFAULT_SLIPPAGE_BPS"),
+        PAPER_MAX_SLIPPAGE_BPS=_as_positive_float(_get_env(merged, "PAPER_MAX_SLIPPAGE_BPS", "1200"), key="PAPER_MAX_SLIPPAGE_BPS"),
+        PAPER_SLIPPAGE_LIQUIDITY_SENSITIVITY=_as_non_negative_float(_get_env(merged, "PAPER_SLIPPAGE_LIQUIDITY_SENSITIVITY", "1.0"), key="PAPER_SLIPPAGE_LIQUIDITY_SENSITIVITY"),
+        PAPER_PRIORITY_FEE_BASE_SOL=_as_non_negative_float(_get_env(merged, "PAPER_PRIORITY_FEE_BASE_SOL", "0.00002"), key="PAPER_PRIORITY_FEE_BASE_SOL"),
+        PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER=_as_positive_float(_get_env(merged, "PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER", "1.75"), key="PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER"),
         PAPER_FAILED_TX_BASE_PROB=_as_unit_float(_get_env(merged, "PAPER_FAILED_TX_BASE_PROB", "0.03"), key="PAPER_FAILED_TX_BASE_PROB"),
         PAPER_FAILED_TX_LOW_LIQUIDITY_ADDON=_as_unit_float(_get_env(merged, "PAPER_FAILED_TX_LOW_LIQUIDITY_ADDON", "0.05"), key="PAPER_FAILED_TX_LOW_LIQUIDITY_ADDON"),
         PAPER_FAILED_TX_HIGH_VOLATILITY_ADDON=_as_unit_float(_get_env(merged, "PAPER_FAILED_TX_HIGH_VOLATILITY_ADDON", "0.04"), key="PAPER_FAILED_TX_HIGH_VOLATILITY_ADDON"),

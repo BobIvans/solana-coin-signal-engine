@@ -107,26 +107,11 @@ python scripts/entry_selector_smoke.py --scored data/processed/scored_tokens.jso
 
 ## PR-9 paper trader
 
-PR-9 adds a deterministic paper-trading lifecycle that consumes:
+PR-9 adds deterministic paper-trading orchestration (`paper_runner.py`) that reads `entry_candidates.json` and `exit_decisions.json`, then writes `signals.jsonl`, `trades.jsonl`, `positions.json`, and `portfolio_state.json` under `data/processed/`.
 
-- `data/processed/entry_candidates.json`
-- `data/processed/exit_decisions.json`
-
-and writes:
-
-- `data/processed/signals.jsonl`
-- `data/processed/trades.jsonl`
-- `data/processed/positions.json`
-- `data/processed/portfolio_state.json`
-
-Run one cycle:
+For lifecycle details (entry/exit/MTM, friction model, logging contracts, and PnL rules), see `docs/paper_trader.md`.
 
 ```bash
 python paper_runner.py
-```
-
-Run smoke:
-
-```bash
 python scripts/paper_trader_smoke.py
 ```

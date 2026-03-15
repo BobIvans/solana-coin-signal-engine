@@ -59,3 +59,23 @@ def test_unified_and_entry_settings_coexist():
     assert settings.UNIFIED_SCORE_WATCH_THRESHOLD > 0
     assert isinstance(settings.ENTRY_SELECTOR_ENABLED, bool)
     assert settings.ENTRY_TREND_SCORE_MIN >= settings.ENTRY_SCALP_SCORE_MIN
+
+
+def test_paper_settings_validate(monkeypatch):
+    monkeypatch.setenv("PAPER_STARTING_CAPITAL_SOL", "0.1")
+    monkeypatch.setenv("PAPER_MAX_SLIPPAGE_BPS", "1200")
+    monkeypatch.setenv("PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER", "1.75")
+    settings = load_settings()
+    assert settings.PAPER_STARTING_CAPITAL_SOL > 0
+    assert settings.PAPER_MAX_SLIPPAGE_BPS > 0
+    assert settings.PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER > 0
+
+
+def test_invalid_paper_settings_raise(monkeypatch):
+    monkeypatch.setenv("PAPER_STARTING_CAPITAL_SOL", "0")
+    try:
+        load_settings()
+    except ValueError as exc:
+        assert "PAPER_STARTING_CAPITAL_SOL" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for PAPER_STARTING_CAPITAL_SOL")
