@@ -43,7 +43,6 @@ Artifacts are created under `data/processed/`:
 - `first50_holder_conc_est` and `holder_entropy_est` are **heuristics** by contract.
 - launch-path stays heuristic (`*_est`, `*_score`) in this PR.
 
-
 ## PR-5 rug safety engine
 
 PR-5 adds a deterministic rug safety layer over `enriched_tokens.json` and writes:
@@ -62,7 +61,6 @@ Policy highlights:
 - Burn and lock are separated (`lp_burn_confirmed` vs `lp_locked_flag`).
 - Concentration uses top1/top20 only for MVP honesty.
 - Fail-closed mode prevents partial assessments from defaulting to `PASS`.
-
 
 ## PR-6 unified scoring
 
@@ -110,12 +108,10 @@ python scripts/entry_selector_smoke.py --scored data/processed/scored_tokens.jso
 PR-8 adds deterministic exit decisioning for open paper positions.
 
 Outputs:
-
 - `data/processed/exit_decisions.json`
 - `data/processed/exit_events.jsonl`
 
 Decisions:
-
 - `HOLD`
 - `PARTIAL_EXIT`
 - `FULL_EXIT`
@@ -124,4 +120,15 @@ Run smoke:
 
 ```bash
 python scripts/exit_engine_smoke.py
+```
+
+## PR-9 paper trader
+
+PR-9 adds deterministic paper-trading orchestration (`paper_runner.py`) that reads `entry_candidates.json` and `exit_decisions.json`, then writes `signals.jsonl`, `trades.jsonl`, `positions.json`, and `portfolio_state.json` under `data/processed/`.
+
+For lifecycle details (entry/exit/MTM, friction model, logging contracts, and PnL rules), see `docs/paper_trader.md`.
+
+```bash
+python paper_runner.py
+python scripts/paper_trader_smoke.py
 ```

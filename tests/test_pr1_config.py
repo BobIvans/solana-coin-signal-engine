@@ -59,3 +59,53 @@ def test_unified_and_entry_settings_coexist():
     assert settings.UNIFIED_SCORE_WATCH_THRESHOLD > 0
     assert isinstance(settings.ENTRY_SELECTOR_ENABLED, bool)
     assert settings.ENTRY_TREND_SCORE_MIN >= settings.ENTRY_SCALP_SCORE_MIN
+
+
+def test_paper_settings_validate(monkeypatch):
+    monkeypatch.setenv("PAPER_STARTING_CAPITAL_SOL", "0.1")
+    monkeypatch.setenv("PAPER_MAX_SLIPPAGE_BPS", "1200")
+    monkeypatch.setenv("PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER", "1.75")
+    settings = load_settings()
+    assert settings.PAPER_STARTING_CAPITAL_SOL > 0
+    assert settings.PAPER_MAX_SLIPPAGE_BPS > 0
+    assert settings.PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER > 0
+
+
+def test_invalid_paper_settings_raise(monkeypatch):
+    monkeypatch.setenv("PAPER_STARTING_CAPITAL_SOL", "0")
+    try:
+        load_settings()
+    except ValueError as exc:
+        assert "PAPER_STARTING_CAPITAL_SOL" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for PAPER_STARTING_CAPITAL_SOL")
+
+
+def test_exit_settings_load(monkeypatch):
+    monkeypatch.setenv("EXIT_ENGINE_ENABLED", "true")
+    monkeypatch.setenv("EXIT_ENGINE_FAILCLOSED", "true")
+    monkeypatch.setenv("EXIT_SCALP_BUY_PRESSURE_FLOOR", "0.60")
+    monkeypatch.setenv("EXIT_TREND_BUY_PRESSURE_FLOOR", "0.50")
+    settings = load_settings()
+    assert settings.EXIT_ENGINE_ENABLED is True
+    assert settings.EXIT_ENGINE_FAILCLOSED is True
+    assert 0 <= settings.EXIT_SCALP_BUY_PRESSURE_FLOOR <= 1
+    assert 0 <= settings.EXIT_TREND_BUY_PRESSURE_FLOOR <= 1
+
+
+def test_invalid_exit_poll_interval_raises(monkeypatch):
+    monkeypatch.setenv("EXIT_POLL_INTERVAL_SEC", "0")
+    try:
+        load_settings()
+    except ValueError as exc:
+        assert "EXIT_POLL_INTERVAL_SEC" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for EXIT_POLL_INTERVAL_SEC")
+
+
+def test_exit_and_paper_settings_coexist(monkeypatch):
+    monkeypatch.setenv("EXIT_ENGINE_ENABLED", "true")
+    monkeypatch.setenv("PAPER_TRADER_ENABLED", "true")
+    settings = load_settings()
+    assert settings.EXIT_ENGINE_ENABLED is True
+    assert settings.PAPER_TRADER_ENABLED is True
