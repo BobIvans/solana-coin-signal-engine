@@ -10,7 +10,6 @@ from typing import Any
 _TRUE_VALUES = {"1", "true", "t", "yes", "y", "on"}
 _FALSE_VALUES = {"0", "false", "f", "no", "n", "off"}
 
-
 @dataclass(frozen=True)
 class Settings:
     APP_ENV: str
@@ -118,7 +117,7 @@ class Settings:
     ENTRY_MAX_BASE_POSITION_PCT: float
     ENTRY_CONTRACT_VERSION: str
 
-    # BEGIN Exit engine (PR-8)
+    # Exit engine (PR-8)
     EXIT_ENGINE_ENABLED: bool
     EXIT_ENGINE_FAILCLOSED: bool
     EXIT_SCALP_STOP_LOSS_PCT: float
@@ -138,9 +137,8 @@ class Settings:
     EXIT_POLL_INTERVAL_SEC: int
     EXIT_MAX_OPEN_POSITIONS: int
     EXIT_CONTRACT_VERSION: str
-    # END Exit engine (PR-8)
 
-    # BEGIN Paper trader (PR-9)
+    # Paper trader (PR-9)
     PAPER_TRADER_ENABLED: bool
     PAPER_TRADER_FAILCLOSED: bool
     PAPER_STARTING_CAPITAL_SOL: float
@@ -159,8 +157,6 @@ class Settings:
     PAPER_MARK_TO_MARKET_INTERVAL_SEC: int
     PAPER_APPEND_ONLY_LOGS: bool
     PAPER_CONTRACT_VERSION: str
-    # END Paper trader (PR-9)
-
 
 def _read_dotenv(dotenv_path: str = ".env") -> dict[str, str]:
     path = Path(dotenv_path)
@@ -176,10 +172,8 @@ def _read_dotenv(dotenv_path: str = ".env") -> dict[str, str]:
         values[key.strip()] = value.strip()
     return values
 
-
 def _get_env(merged: dict[str, Any], key: str, default: Any = None) -> Any:
     return merged.get(key, default)
-
 
 def _as_bool(raw_value: Any, *, key: str) -> bool:
     if isinstance(raw_value, bool):
@@ -193,13 +187,11 @@ def _as_bool(raw_value: Any, *, key: str) -> bool:
         return False
     raise ValueError(f"Invalid boolean for {key}: {raw_value}")
 
-
 def _as_positive_int(raw_value: Any, *, key: str) -> int:
     value = int(raw_value)
     if value <= 0:
         raise ValueError(f"{key} must be > 0")
     return value
-
 
 def _as_unit_float(raw_value: Any, *, key: str) -> float:
     value = float(raw_value)
@@ -207,15 +199,11 @@ def _as_unit_float(raw_value: Any, *, key: str) -> float:
         raise ValueError(f"{key} must be between 0 and 1")
     return value
 
-
-
-
 def _as_positive_float(raw_value: Any, *, key: str) -> float:
     value = float(raw_value)
     if value <= 0:
         raise ValueError(f"{key} must be > 0")
     return value
-
 
 def _as_non_negative_float(raw_value: Any, *, key: str) -> float:
     value = float(raw_value)
@@ -225,7 +213,6 @@ def _as_non_negative_float(raw_value: Any, *, key: str) -> float:
 
 def _as_abs_path(raw_value: Any) -> Path:
     return Path(str(raw_value)).expanduser().resolve()
-
 
 def load_settings() -> Settings:
     merged: dict[str, Any] = {**_read_dotenv(), **os.environ}
@@ -328,7 +315,7 @@ def load_settings() -> Settings:
         ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER=_as_unit_float(_get_env(merged, "ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER", "0.60"), key="ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER"),
         ENTRY_MAX_BASE_POSITION_PCT=_as_unit_float(_get_env(merged, "ENTRY_MAX_BASE_POSITION_PCT", "1.00"), key="ENTRY_MAX_BASE_POSITION_PCT"),
         ENTRY_CONTRACT_VERSION=str(_get_env(merged, "ENTRY_CONTRACT_VERSION", "entry_selector_v1")),
-        # BEGIN Exit engine (PR-8)
+        # Exit engine (PR-8)
         EXIT_ENGINE_ENABLED=_as_bool(_get_env(merged, "EXIT_ENGINE_ENABLED", "true"), key="EXIT_ENGINE_ENABLED"),
         EXIT_ENGINE_FAILCLOSED=_as_bool(_get_env(merged, "EXIT_ENGINE_FAILCLOSED", "true"), key="EXIT_ENGINE_FAILCLOSED"),
         EXIT_SCALP_STOP_LOSS_PCT=float(_get_env(merged, "EXIT_SCALP_STOP_LOSS_PCT", "-10")),
@@ -348,9 +335,8 @@ def load_settings() -> Settings:
         EXIT_POLL_INTERVAL_SEC=_as_positive_int(_get_env(merged, "EXIT_POLL_INTERVAL_SEC", "5"), key="EXIT_POLL_INTERVAL_SEC"),
         EXIT_MAX_OPEN_POSITIONS=_as_positive_int(_get_env(merged, "EXIT_MAX_OPEN_POSITIONS", "10"), key="EXIT_MAX_OPEN_POSITIONS"),
         EXIT_CONTRACT_VERSION=str(_get_env(merged, "EXIT_CONTRACT_VERSION", "exit_engine_v1")),
-        # END Exit engine (PR-8)
-
-        # BEGIN Paper trader (PR-9)
+    
+        # Paper trader (PR-9)
         PAPER_TRADER_ENABLED=_as_bool(_get_env(merged, "PAPER_TRADER_ENABLED", "true"), key="PAPER_TRADER_ENABLED"),
         PAPER_TRADER_FAILCLOSED=_as_bool(_get_env(merged, "PAPER_TRADER_FAILCLOSED", "true"), key="PAPER_TRADER_FAILCLOSED"),
         PAPER_STARTING_CAPITAL_SOL=_as_positive_float(_get_env(merged, "PAPER_STARTING_CAPITAL_SOL", "0.1"), key="PAPER_STARTING_CAPITAL_SOL"),
@@ -369,5 +355,4 @@ def load_settings() -> Settings:
         PAPER_MARK_TO_MARKET_INTERVAL_SEC=_as_positive_int(_get_env(merged, "PAPER_MARK_TO_MARKET_INTERVAL_SEC", "5"), key="PAPER_MARK_TO_MARKET_INTERVAL_SEC"),
         PAPER_APPEND_ONLY_LOGS=_as_bool(_get_env(merged, "PAPER_APPEND_ONLY_LOGS", "true"), key="PAPER_APPEND_ONLY_LOGS"),
         PAPER_CONTRACT_VERSION=str(_get_env(merged, "PAPER_CONTRACT_VERSION", "paper_trader_v1")),
-        # END Paper trader (PR-9)
-    )
+        )

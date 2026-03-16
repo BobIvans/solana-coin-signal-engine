@@ -43,7 +43,6 @@ Artifacts are created under `data/processed/`:
 - `first50_holder_conc_est` and `holder_entropy_est` are **heuristics** by contract.
 - launch-path stays heuristic (`*_est`, `*_score`) in this PR.
 
-
 ## PR-5 rug safety engine
 
 PR-5 adds a deterministic rug safety layer over `enriched_tokens.json` and writes:
@@ -62,7 +61,6 @@ Policy highlights:
 - Burn and lock are separated (`lp_burn_confirmed` vs `lp_locked_flag`).
 - Concentration uses top1/top20 only for MVP honesty.
 - Fail-closed mode prevents partial assessments from defaulting to `PASS`.
-
 
 ## PR-6 unified scoring
 
@@ -104,13 +102,6 @@ Run smoke:
 ```bash
 python scripts/entry_selector_smoke.py --scored data/processed/scored_tokens.json
 ```
-
-
-## PR-8 / PR-9 merge note
-
-This branch keeps both lifecycle layers documented:
-- PR-8 produces `exit_decisions.json` and `exit_events.jsonl`.
-- PR-9 consumes `exit_decisions.json` + `entry_candidates.json` and simulates execution.
 
 ## PR-8 exit engine
 
