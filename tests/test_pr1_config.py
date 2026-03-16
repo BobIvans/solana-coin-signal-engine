@@ -101,3 +101,11 @@ def test_invalid_exit_poll_interval_raises(monkeypatch):
         assert "EXIT_POLL_INTERVAL_SEC" in str(exc)
     else:
         raise AssertionError("Expected ValueError for EXIT_POLL_INTERVAL_SEC")
+
+
+def test_exit_and_paper_settings_coexist(monkeypatch):
+    monkeypatch.setenv("EXIT_ENGINE_ENABLED", "true")
+    monkeypatch.setenv("PAPER_TRADER_ENABLED", "true")
+    settings = load_settings()
+    assert settings.EXIT_ENGINE_ENABLED is True
+    assert settings.PAPER_TRADER_ENABLED is True

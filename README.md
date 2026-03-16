@@ -106,6 +106,12 @@ python scripts/entry_selector_smoke.py --scored data/processed/scored_tokens.jso
 ```
 
 
+## PR-8 / PR-9 merge note
+
+This branch keeps both lifecycle layers documented:
+- PR-8 produces `exit_decisions.json` and `exit_events.jsonl`.
+- PR-9 consumes `exit_decisions.json` + `entry_candidates.json` and simulates execution.
+
 ## PR-8 exit engine
 
 PR-8 adds deterministic exit decisioning for open paper positions.
