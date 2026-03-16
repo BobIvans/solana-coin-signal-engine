@@ -10,6 +10,7 @@ from typing import Any
 _TRUE_VALUES = {"1", "true", "t", "yes", "y", "on"}
 _FALSE_VALUES = {"0", "false", "f", "no", "n", "off"}
 
+
 @dataclass(frozen=True)
 class Settings:
     APP_ENV: str
@@ -117,46 +118,32 @@ class Settings:
     ENTRY_MAX_BASE_POSITION_PCT: float
     ENTRY_CONTRACT_VERSION: str
 
-    # Exit engine (PR-8)
+    # Exit engine + paper trader (PR-8/PR-9)
     EXIT_ENGINE_ENABLED: bool
     EXIT_ENGINE_FAILCLOSED: bool
-    EXIT_SCALP_STOP_LOSS_PCT: float
-    EXIT_SCALP_RECHECK_SEC: int
-    EXIT_SCALP_MAX_HOLD_SEC: int
     EXIT_SCALP_BUY_PRESSURE_FLOOR: float
-    EXIT_SCALP_LIQUIDITY_DROP_PCT: float
-    EXIT_SCALP_VOLUME_VELOCITY_DECAY: float
-    EXIT_SCALP_X_SCORE_DECAY: float
-    EXIT_TREND_HARD_STOP_PCT: float
-    EXIT_TREND_PARTIAL1_PCT: float
-    EXIT_TREND_PARTIAL2_PCT: float
     EXIT_TREND_BUY_PRESSURE_FLOOR: float
-    EXIT_TREND_LIQUIDITY_DROP_PCT: float
-    EXIT_DEV_SELL_HARD: bool
-    EXIT_RUG_FLAG_HARD: bool
     EXIT_POLL_INTERVAL_SEC: int
-    EXIT_MAX_OPEN_POSITIONS: int
-    EXIT_CONTRACT_VERSION: str
 
-    # Paper trader (PR-9)
     PAPER_TRADER_ENABLED: bool
-    PAPER_TRADER_FAILCLOSED: bool
     PAPER_STARTING_CAPITAL_SOL: float
-    PAPER_MAX_CONCURRENT_POSITIONS: int
-    PAPER_ALLOW_PARTIAL_EXITS: bool
-    PAPER_DEFAULT_SLIPPAGE_BPS: float
-    PAPER_MAX_SLIPPAGE_BPS: float
-    PAPER_SLIPPAGE_LIQUIDITY_SENSITIVITY: float
-    PAPER_PRIORITY_FEE_BASE_SOL: float
+    PAPER_MAX_SLIPPAGE_BPS: int
     PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER: float
-    PAPER_FAILED_TX_BASE_PROB: float
-    PAPER_FAILED_TX_LOW_LIQUIDITY_ADDON: float
-    PAPER_FAILED_TX_HIGH_VOLATILITY_ADDON: float
-    PAPER_PARTIAL_FILL_ALLOWED: bool
-    PAPER_PARTIAL_FILL_MIN_RATIO: float
-    PAPER_MARK_TO_MARKET_INTERVAL_SEC: int
-    PAPER_APPEND_ONLY_LOGS: bool
-    PAPER_CONTRACT_VERSION: str
+
+    # Post-run analyzer (PR-10)
+    POST_RUN_ANALYZER_ENABLED: bool
+    POST_RUN_ANALYZER_FAILCLOSED: bool
+    POST_RUN_MIN_TRADES_FOR_CORRELATION: int
+    POST_RUN_MIN_TRADES_FOR_REGIME_COMPARISON: int
+    POST_RUN_MIN_SAMPLE_FOR_RECOMMENDATION: int
+    POST_RUN_INCLUDE_DEGRADED_X_ANALYSIS: bool
+    POST_RUN_INCLUDE_FRICTION_ANALYSIS: bool
+    POST_RUN_INCLUDE_PARTIAL_FILL_ANALYSIS: bool
+    POST_RUN_CORRELATION_METHOD: str
+    POST_RUN_OUTLIER_CLIP_PCT: float
+    POST_RUN_RECOMMENDATION_CONFIDENCE_MIN: float
+    POST_RUN_CONTRACT_VERSION: str
+
 
 def _read_dotenv(dotenv_path: str = ".env") -> dict[str, str]:
     path = Path(dotenv_path)
@@ -172,8 +159,10 @@ def _read_dotenv(dotenv_path: str = ".env") -> dict[str, str]:
         values[key.strip()] = value.strip()
     return values
 
+
 def _get_env(merged: dict[str, Any], key: str, default: Any = None) -> Any:
     return merged.get(key, default)
+
 
 def _as_bool(raw_value: Any, *, key: str) -> bool:
     if isinstance(raw_value, bool):
@@ -187,11 +176,13 @@ def _as_bool(raw_value: Any, *, key: str) -> bool:
         return False
     raise ValueError(f"Invalid boolean for {key}: {raw_value}")
 
+
 def _as_positive_int(raw_value: Any, *, key: str) -> int:
     value = int(raw_value)
     if value <= 0:
         raise ValueError(f"{key} must be > 0")
     return value
+
 
 def _as_unit_float(raw_value: Any, *, key: str) -> float:
     value = float(raw_value)
@@ -199,20 +190,17 @@ def _as_unit_float(raw_value: Any, *, key: str) -> float:
         raise ValueError(f"{key} must be between 0 and 1")
     return value
 
+
 def _as_positive_float(raw_value: Any, *, key: str) -> float:
     value = float(raw_value)
     if value <= 0:
         raise ValueError(f"{key} must be > 0")
     return value
 
-def _as_non_negative_float(raw_value: Any, *, key: str) -> float:
-    value = float(raw_value)
-    if value < 0:
-        raise ValueError(f"{key} must be >= 0")
-    return value
 
 def _as_abs_path(raw_value: Any) -> Path:
     return Path(str(raw_value)).expanduser().resolve()
+
 
 def load_settings() -> Settings:
     merged: dict[str, Any] = {**_read_dotenv(), **os.environ}
@@ -315,44 +303,25 @@ def load_settings() -> Settings:
         ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER=_as_unit_float(_get_env(merged, "ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER", "0.60"), key="ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER"),
         ENTRY_MAX_BASE_POSITION_PCT=_as_unit_float(_get_env(merged, "ENTRY_MAX_BASE_POSITION_PCT", "1.00"), key="ENTRY_MAX_BASE_POSITION_PCT"),
         ENTRY_CONTRACT_VERSION=str(_get_env(merged, "ENTRY_CONTRACT_VERSION", "entry_selector_v1")),
-        # Exit engine (PR-8)
         EXIT_ENGINE_ENABLED=_as_bool(_get_env(merged, "EXIT_ENGINE_ENABLED", "true"), key="EXIT_ENGINE_ENABLED"),
         EXIT_ENGINE_FAILCLOSED=_as_bool(_get_env(merged, "EXIT_ENGINE_FAILCLOSED", "true"), key="EXIT_ENGINE_FAILCLOSED"),
-        EXIT_SCALP_STOP_LOSS_PCT=float(_get_env(merged, "EXIT_SCALP_STOP_LOSS_PCT", "-10")),
-        EXIT_SCALP_RECHECK_SEC=_as_positive_int(_get_env(merged, "EXIT_SCALP_RECHECK_SEC", "18"), key="EXIT_SCALP_RECHECK_SEC"),
-        EXIT_SCALP_MAX_HOLD_SEC=_as_positive_int(_get_env(merged, "EXIT_SCALP_MAX_HOLD_SEC", "120"), key="EXIT_SCALP_MAX_HOLD_SEC"),
         EXIT_SCALP_BUY_PRESSURE_FLOOR=_as_unit_float(_get_env(merged, "EXIT_SCALP_BUY_PRESSURE_FLOOR", "0.60"), key="EXIT_SCALP_BUY_PRESSURE_FLOOR"),
-        EXIT_SCALP_LIQUIDITY_DROP_PCT=float(_get_env(merged, "EXIT_SCALP_LIQUIDITY_DROP_PCT", "20")),
-        EXIT_SCALP_VOLUME_VELOCITY_DECAY=_as_unit_float(_get_env(merged, "EXIT_SCALP_VOLUME_VELOCITY_DECAY", "0.70"), key="EXIT_SCALP_VOLUME_VELOCITY_DECAY"),
-        EXIT_SCALP_X_SCORE_DECAY=_as_unit_float(_get_env(merged, "EXIT_SCALP_X_SCORE_DECAY", "0.70"), key="EXIT_SCALP_X_SCORE_DECAY"),
-        EXIT_TREND_HARD_STOP_PCT=float(_get_env(merged, "EXIT_TREND_HARD_STOP_PCT", "-18")),
-        EXIT_TREND_PARTIAL1_PCT=float(_get_env(merged, "EXIT_TREND_PARTIAL1_PCT", "35")),
-        EXIT_TREND_PARTIAL2_PCT=float(_get_env(merged, "EXIT_TREND_PARTIAL2_PCT", "100")),
         EXIT_TREND_BUY_PRESSURE_FLOOR=_as_unit_float(_get_env(merged, "EXIT_TREND_BUY_PRESSURE_FLOOR", "0.50"), key="EXIT_TREND_BUY_PRESSURE_FLOOR"),
-        EXIT_TREND_LIQUIDITY_DROP_PCT=float(_get_env(merged, "EXIT_TREND_LIQUIDITY_DROP_PCT", "25")),
-        EXIT_DEV_SELL_HARD=_as_bool(_get_env(merged, "EXIT_DEV_SELL_HARD", "true"), key="EXIT_DEV_SELL_HARD"),
-        EXIT_RUG_FLAG_HARD=_as_bool(_get_env(merged, "EXIT_RUG_FLAG_HARD", "true"), key="EXIT_RUG_FLAG_HARD"),
-        EXIT_POLL_INTERVAL_SEC=_as_positive_int(_get_env(merged, "EXIT_POLL_INTERVAL_SEC", "5"), key="EXIT_POLL_INTERVAL_SEC"),
-        EXIT_MAX_OPEN_POSITIONS=_as_positive_int(_get_env(merged, "EXIT_MAX_OPEN_POSITIONS", "10"), key="EXIT_MAX_OPEN_POSITIONS"),
-        EXIT_CONTRACT_VERSION=str(_get_env(merged, "EXIT_CONTRACT_VERSION", "exit_engine_v1")),
-    
-        # Paper trader (PR-9)
+        EXIT_POLL_INTERVAL_SEC=_as_positive_int(_get_env(merged, "EXIT_POLL_INTERVAL_SEC", "3"), key="EXIT_POLL_INTERVAL_SEC"),
         PAPER_TRADER_ENABLED=_as_bool(_get_env(merged, "PAPER_TRADER_ENABLED", "true"), key="PAPER_TRADER_ENABLED"),
-        PAPER_TRADER_FAILCLOSED=_as_bool(_get_env(merged, "PAPER_TRADER_FAILCLOSED", "true"), key="PAPER_TRADER_FAILCLOSED"),
         PAPER_STARTING_CAPITAL_SOL=_as_positive_float(_get_env(merged, "PAPER_STARTING_CAPITAL_SOL", "0.1"), key="PAPER_STARTING_CAPITAL_SOL"),
-        PAPER_MAX_CONCURRENT_POSITIONS=_as_positive_int(_get_env(merged, "PAPER_MAX_CONCURRENT_POSITIONS", "3"), key="PAPER_MAX_CONCURRENT_POSITIONS"),
-        PAPER_ALLOW_PARTIAL_EXITS=_as_bool(_get_env(merged, "PAPER_ALLOW_PARTIAL_EXITS", "true"), key="PAPER_ALLOW_PARTIAL_EXITS"),
-        PAPER_DEFAULT_SLIPPAGE_BPS=_as_non_negative_float(_get_env(merged, "PAPER_DEFAULT_SLIPPAGE_BPS", "150"), key="PAPER_DEFAULT_SLIPPAGE_BPS"),
-        PAPER_MAX_SLIPPAGE_BPS=_as_positive_float(_get_env(merged, "PAPER_MAX_SLIPPAGE_BPS", "1200"), key="PAPER_MAX_SLIPPAGE_BPS"),
-        PAPER_SLIPPAGE_LIQUIDITY_SENSITIVITY=_as_non_negative_float(_get_env(merged, "PAPER_SLIPPAGE_LIQUIDITY_SENSITIVITY", "1.0"), key="PAPER_SLIPPAGE_LIQUIDITY_SENSITIVITY"),
-        PAPER_PRIORITY_FEE_BASE_SOL=_as_non_negative_float(_get_env(merged, "PAPER_PRIORITY_FEE_BASE_SOL", "0.00002"), key="PAPER_PRIORITY_FEE_BASE_SOL"),
+        PAPER_MAX_SLIPPAGE_BPS=_as_positive_int(_get_env(merged, "PAPER_MAX_SLIPPAGE_BPS", "1200"), key="PAPER_MAX_SLIPPAGE_BPS"),
         PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER=_as_positive_float(_get_env(merged, "PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER", "1.75"), key="PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER"),
-        PAPER_FAILED_TX_BASE_PROB=_as_unit_float(_get_env(merged, "PAPER_FAILED_TX_BASE_PROB", "0.03"), key="PAPER_FAILED_TX_BASE_PROB"),
-        PAPER_FAILED_TX_LOW_LIQUIDITY_ADDON=_as_unit_float(_get_env(merged, "PAPER_FAILED_TX_LOW_LIQUIDITY_ADDON", "0.05"), key="PAPER_FAILED_TX_LOW_LIQUIDITY_ADDON"),
-        PAPER_FAILED_TX_HIGH_VOLATILITY_ADDON=_as_unit_float(_get_env(merged, "PAPER_FAILED_TX_HIGH_VOLATILITY_ADDON", "0.04"), key="PAPER_FAILED_TX_HIGH_VOLATILITY_ADDON"),
-        PAPER_PARTIAL_FILL_ALLOWED=_as_bool(_get_env(merged, "PAPER_PARTIAL_FILL_ALLOWED", "true"), key="PAPER_PARTIAL_FILL_ALLOWED"),
-        PAPER_PARTIAL_FILL_MIN_RATIO=_as_unit_float(_get_env(merged, "PAPER_PARTIAL_FILL_MIN_RATIO", "0.50"), key="PAPER_PARTIAL_FILL_MIN_RATIO"),
-        PAPER_MARK_TO_MARKET_INTERVAL_SEC=_as_positive_int(_get_env(merged, "PAPER_MARK_TO_MARKET_INTERVAL_SEC", "5"), key="PAPER_MARK_TO_MARKET_INTERVAL_SEC"),
-        PAPER_APPEND_ONLY_LOGS=_as_bool(_get_env(merged, "PAPER_APPEND_ONLY_LOGS", "true"), key="PAPER_APPEND_ONLY_LOGS"),
-        PAPER_CONTRACT_VERSION=str(_get_env(merged, "PAPER_CONTRACT_VERSION", "paper_trader_v1")),
-        )
+        POST_RUN_ANALYZER_ENABLED=_as_bool(_get_env(merged, "POST_RUN_ANALYZER_ENABLED", "true"), key="POST_RUN_ANALYZER_ENABLED"),
+        POST_RUN_ANALYZER_FAILCLOSED=_as_bool(_get_env(merged, "POST_RUN_ANALYZER_FAILCLOSED", "true"), key="POST_RUN_ANALYZER_FAILCLOSED"),
+        POST_RUN_MIN_TRADES_FOR_CORRELATION=_as_positive_int(_get_env(merged, "POST_RUN_MIN_TRADES_FOR_CORRELATION", "20"), key="POST_RUN_MIN_TRADES_FOR_CORRELATION"),
+        POST_RUN_MIN_TRADES_FOR_REGIME_COMPARISON=_as_positive_int(_get_env(merged, "POST_RUN_MIN_TRADES_FOR_REGIME_COMPARISON", "10"), key="POST_RUN_MIN_TRADES_FOR_REGIME_COMPARISON"),
+        POST_RUN_MIN_SAMPLE_FOR_RECOMMENDATION=_as_positive_int(_get_env(merged, "POST_RUN_MIN_SAMPLE_FOR_RECOMMENDATION", "15"), key="POST_RUN_MIN_SAMPLE_FOR_RECOMMENDATION"),
+        POST_RUN_INCLUDE_DEGRADED_X_ANALYSIS=_as_bool(_get_env(merged, "POST_RUN_INCLUDE_DEGRADED_X_ANALYSIS", "true"), key="POST_RUN_INCLUDE_DEGRADED_X_ANALYSIS"),
+        POST_RUN_INCLUDE_FRICTION_ANALYSIS=_as_bool(_get_env(merged, "POST_RUN_INCLUDE_FRICTION_ANALYSIS", "true"), key="POST_RUN_INCLUDE_FRICTION_ANALYSIS"),
+        POST_RUN_INCLUDE_PARTIAL_FILL_ANALYSIS=_as_bool(_get_env(merged, "POST_RUN_INCLUDE_PARTIAL_FILL_ANALYSIS", "true"), key="POST_RUN_INCLUDE_PARTIAL_FILL_ANALYSIS"),
+        POST_RUN_CORRELATION_METHOD=str(_get_env(merged, "POST_RUN_CORRELATION_METHOD", "pearson_spearman")),
+        POST_RUN_OUTLIER_CLIP_PCT=_as_unit_float(_get_env(merged, "POST_RUN_OUTLIER_CLIP_PCT", "0.01"), key="POST_RUN_OUTLIER_CLIP_PCT"),
+        POST_RUN_RECOMMENDATION_CONFIDENCE_MIN=_as_unit_float(_get_env(merged, "POST_RUN_RECOMMENDATION_CONFIDENCE_MIN", "0.55"), key="POST_RUN_RECOMMENDATION_CONFIDENCE_MIN"),
+        POST_RUN_CONTRACT_VERSION=str(_get_env(merged, "POST_RUN_CONTRACT_VERSION", "post_run_analyzer_v1")),
+    )
