@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ExitDecision",
+  "type": "object",
+  "required": [
+    "position_id",
+    "token_address",
+    "exit_decision",
+    "exit_fraction",
+    "exit_reason",
+    "hold_sec",
+    "pnl_pct",
+    "exit_snapshot",
+    "exit_status",
+    "decided_at",
+    "contract_version"
+  ],
+  "properties": {
+    "position_id": {"type": "string"},
+    "token_address": {"type": "string"},
+    "symbol": {"type": ["string", "null"]},
+    "exit_decision": {"type": "string", "enum": ["HOLD", "PARTIAL_EXIT", "FULL_EXIT"]},
+    "exit_fraction": {"type": "number", "minimum": 0, "maximum": 1},
+    "exit_reason": {"type": "string"},
+    "hold_sec": {"type": "integer", "minimum": 0},
+    "pnl_pct": {"type": "number"},
+    "exit_flags": {"type": "array", "items": {"type": "string"}},
+    "exit_warnings": {"type": "array", "items": {"type": "string"}},
+    "exit_snapshot": {
+      "type": "object",
+      "required": [
+        "price_usd",
+        "buy_pressure_now",
+        "volume_velocity_now",
+        "liquidity_usd_now",
+        "liquidity_drop_pct",
+        "x_validation_score_now",
+        "x_status_now",
+        "bundle_cluster_score_now",
+        "bundle_cluster_delta",
+        "dev_sell_pressure_now",
+        "rug_flag_now"
+      ]
+    },
+    "exit_status": {"type": "string", "enum": ["ok", "partial"]},
+    "decided_at": {"type": "string"},
+    "contract_version": {"type": "string"}
+  }
+}

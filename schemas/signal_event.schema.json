@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SignalEvent",
+  "type": "object",
+  "required": ["ts", "event", "token_address", "contract_version"],
+  "properties": {
+    "ts": {"type": "string"},
+    "event": {"type": "string", "enum": ["entry_signal", "exit_signal", "hold_signal", "signal_rejected"]},
+    "token_address": {"type": "string"},
+    "position_id": {"type": ["string", "null"]},
+    "symbol": {"type": ["string", "null"]},
+    "decision": {"type": ["string", "null"]},
+    "confidence": {"type": ["number", "null"]},
+    "recommended_position_pct": {"type": ["number", "null"]},
+    "reason": {"type": ["string", "null"]},
+    "contract_version": {"type": "string"}
+  },
+  "additionalProperties": true
+}

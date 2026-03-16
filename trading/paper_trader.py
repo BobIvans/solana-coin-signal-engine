@@ -1,0 +1,191 @@
+"""Paper trader lifecycle orchestration functions."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from trading.fill_model import simulate_entry_fill, simulate_exit_fill
+from trading.position_book import (
+    apply_partial_exit,
+    ensure_state,
+    get_open_position_by_id,
+    get_open_position_by_token,
+    mark_to_market,
+    next_trade_id,
+    open_position,
+)
+from trading.trade_logger_v2 import log_signal, log_trade
+from utils.clock import utc_now_iso
+
+
+def _market_index(market_states: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    for m in market_states:
+        token = str(m.get("token_address") or "")
+        if token:
+            out[token] = m
+    return out
+
+
+def process_exit_signals(exit_signals: list[dict[str, Any]], market_states: list[dict[str, Any]], state: dict[str, Any], settings: Any) -> dict[str, Any]:
+    ensure_state(state, settings)
+    markets = _market_index(market_states)
+    paths = state["paths"]
+
+    for signal in exit_signals:
+        log_signal(
+            {
+                "ts": utc_now_iso(),
+                "event": "exit_signal",
+                "token_address": signal.get("token_address"),
+                "position_id": signal.get("position_id"),
+                "decision": signal.get("exit_decision"),
+                "reason": signal.get("exit_reason"),
+                "contract_version": settings.PAPER_CONTRACT_VERSION,
+            },
+            paths,
+        )
+
+        if signal.get("exit_decision") == "HOLD":
+            continue
+
+        position = get_open_position_by_id(state, str(signal.get("position_id") or ""))
+        if not position:
+            continue
+        market = markets.get(position["token_address"], {})
+        fill = simulate_exit_fill(position, signal, market, settings)
+        trade_id = next_trade_id(state)
+
+        if fill["tx_failed"]:
+            log_trade(
+                {
+                    "ts": utc_now_iso(),
+                    "event": "paper_fill_failed",
+                    "trade_id": trade_id,
+                    "position_id": position.get("position_id"),
+                    "token_address": position.get("token_address"),
+                    "side": "SELL",
+                    "tx_failed": True,
+                    "failure_reason": fill.get("failure_reason"),
+                    "contract_version": settings.PAPER_CONTRACT_VERSION,
+                },
+                paths,
+            )
+            continue
+
+        apply_partial_exit(position, fill, state)
+        is_open = bool(position.get("is_open"))
+        event = "paper_sell_partial" if is_open else "paper_sell_full"
+        log_trade(
+            {
+                "ts": utc_now_iso(),
+                "event": event,
+                "trade_id": trade_id,
+                "position_id": position.get("position_id"),
+                "token_address": position.get("token_address"),
+                "symbol": position.get("symbol"),
+                "side": "SELL",
+                **fill,
+                "reason": signal.get("exit_reason"),
+                "contract_version": settings.PAPER_CONTRACT_VERSION,
+            },
+            paths,
+        )
+
+    return state
+
+
+def process_entry_signals(entry_signals: list[dict[str, Any]], market_states: list[dict[str, Any]], state: dict[str, Any], settings: Any) -> dict[str, Any]:
+    ensure_state(state, settings)
+    markets = _market_index(market_states)
+    paths = state["paths"]
+
+    for signal in entry_signals:
+        log_signal(
+            {
+                "ts": utc_now_iso(),
+                "event": "entry_signal",
+                "token_address": signal.get("token_address"),
+                "symbol": signal.get("symbol"),
+                "decision": signal.get("entry_decision"),
+                "confidence": signal.get("entry_confidence"),
+                "recommended_position_pct": signal.get("recommended_position_pct"),
+                "reason": signal.get("entry_reason"),
+                "contract_version": settings.PAPER_CONTRACT_VERSION,
+            },
+            paths,
+        )
+
+        decision = signal.get("entry_decision")
+        if decision == "IGNORE":
+            continue
+
+        duplicate = get_open_position_by_token(state, str(signal.get("token_address") or ""))
+        portfolio = state["portfolio"]
+        max_positions_reached = int(portfolio.get("open_positions") or 0) >= int(settings.PAPER_MAX_CONCURRENT_POSITIONS)
+        if duplicate or max_positions_reached or float(portfolio.get("free_capital_sol") or 0.0) <= 0:
+            log_signal(
+                {
+                    "ts": utc_now_iso(),
+                    "event": "signal_rejected",
+                    "token_address": signal.get("token_address"),
+                    "decision": decision,
+                    "reason": "duplicate_or_capital_limit",
+                    "contract_version": settings.PAPER_CONTRACT_VERSION,
+                },
+                paths,
+            )
+            continue
+
+        market = markets.get(signal.get("token_address"), {})
+        fill = simulate_entry_fill(signal, market, portfolio, settings)
+        trade_id = next_trade_id(state)
+        if fill["tx_failed"]:
+            log_trade(
+                {
+                    "ts": utc_now_iso(),
+                    "event": "paper_fill_failed",
+                    "trade_id": trade_id,
+                    "position_id": None,
+                    "token_address": signal.get("token_address"),
+                    "symbol": signal.get("symbol"),
+                    "side": "BUY",
+                    "tx_failed": True,
+                    "failure_reason": fill.get("failure_reason"),
+                    "contract_version": settings.PAPER_CONTRACT_VERSION,
+                },
+                paths,
+            )
+            continue
+
+        pos = open_position(fill, signal, state)
+        log_trade(
+            {
+                "ts": utc_now_iso(),
+                "event": "paper_buy",
+                "trade_id": trade_id,
+                "position_id": pos["position_id"],
+                "token_address": pos["token_address"],
+                "symbol": pos.get("symbol"),
+                "side": "BUY",
+                **fill,
+                "regime": signal.get("entry_decision"),
+                "reason": "entry_signal_filled",
+                "contract_version": settings.PAPER_CONTRACT_VERSION,
+            },
+            paths,
+        )
+
+    return state
+
+
+def run_mark_to_market(state: dict[str, Any], market_states: list[dict[str, Any]], settings: Any) -> dict[str, Any]:
+    ensure_state(state, settings)
+    markets = _market_index(market_states)
+
+    for pos in state.get("positions", []):
+        if not pos.get("is_open"):
+            continue
+        mark_to_market(pos, markets.get(pos["token_address"], {}), state)
+
+    return state
