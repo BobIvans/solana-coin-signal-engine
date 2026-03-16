@@ -118,6 +118,18 @@ class Settings:
     ENTRY_MAX_BASE_POSITION_PCT: float
     ENTRY_CONTRACT_VERSION: str
 
+    # Exit engine + paper trader (PR-8/PR-9)
+    EXIT_ENGINE_ENABLED: bool
+    EXIT_ENGINE_FAILCLOSED: bool
+    EXIT_SCALP_BUY_PRESSURE_FLOOR: float
+    EXIT_TREND_BUY_PRESSURE_FLOOR: float
+    EXIT_POLL_INTERVAL_SEC: int
+
+    PAPER_TRADER_ENABLED: bool
+    PAPER_STARTING_CAPITAL_SOL: float
+    PAPER_MAX_SLIPPAGE_BPS: int
+    PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER: float
+
     # Post-run analyzer (PR-10)
     POST_RUN_ANALYZER_ENABLED: bool
     POST_RUN_ANALYZER_FAILCLOSED: bool
@@ -176,6 +188,13 @@ def _as_unit_float(raw_value: Any, *, key: str) -> float:
     value = float(raw_value)
     if value < 0 or value > 1:
         raise ValueError(f"{key} must be between 0 and 1")
+    return value
+
+
+def _as_positive_float(raw_value: Any, *, key: str) -> float:
+    value = float(raw_value)
+    if value <= 0:
+        raise ValueError(f"{key} must be > 0")
     return value
 
 
@@ -284,6 +303,15 @@ def load_settings() -> Settings:
         ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER=_as_unit_float(_get_env(merged, "ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER", "0.60"), key="ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER"),
         ENTRY_MAX_BASE_POSITION_PCT=_as_unit_float(_get_env(merged, "ENTRY_MAX_BASE_POSITION_PCT", "1.00"), key="ENTRY_MAX_BASE_POSITION_PCT"),
         ENTRY_CONTRACT_VERSION=str(_get_env(merged, "ENTRY_CONTRACT_VERSION", "entry_selector_v1")),
+        EXIT_ENGINE_ENABLED=_as_bool(_get_env(merged, "EXIT_ENGINE_ENABLED", "true"), key="EXIT_ENGINE_ENABLED"),
+        EXIT_ENGINE_FAILCLOSED=_as_bool(_get_env(merged, "EXIT_ENGINE_FAILCLOSED", "true"), key="EXIT_ENGINE_FAILCLOSED"),
+        EXIT_SCALP_BUY_PRESSURE_FLOOR=_as_unit_float(_get_env(merged, "EXIT_SCALP_BUY_PRESSURE_FLOOR", "0.60"), key="EXIT_SCALP_BUY_PRESSURE_FLOOR"),
+        EXIT_TREND_BUY_PRESSURE_FLOOR=_as_unit_float(_get_env(merged, "EXIT_TREND_BUY_PRESSURE_FLOOR", "0.50"), key="EXIT_TREND_BUY_PRESSURE_FLOOR"),
+        EXIT_POLL_INTERVAL_SEC=_as_positive_int(_get_env(merged, "EXIT_POLL_INTERVAL_SEC", "3"), key="EXIT_POLL_INTERVAL_SEC"),
+        PAPER_TRADER_ENABLED=_as_bool(_get_env(merged, "PAPER_TRADER_ENABLED", "true"), key="PAPER_TRADER_ENABLED"),
+        PAPER_STARTING_CAPITAL_SOL=_as_positive_float(_get_env(merged, "PAPER_STARTING_CAPITAL_SOL", "0.1"), key="PAPER_STARTING_CAPITAL_SOL"),
+        PAPER_MAX_SLIPPAGE_BPS=_as_positive_int(_get_env(merged, "PAPER_MAX_SLIPPAGE_BPS", "1200"), key="PAPER_MAX_SLIPPAGE_BPS"),
+        PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER=_as_positive_float(_get_env(merged, "PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER", "1.75"), key="PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER"),
         POST_RUN_ANALYZER_ENABLED=_as_bool(_get_env(merged, "POST_RUN_ANALYZER_ENABLED", "true"), key="POST_RUN_ANALYZER_ENABLED"),
         POST_RUN_ANALYZER_FAILCLOSED=_as_bool(_get_env(merged, "POST_RUN_ANALYZER_FAILCLOSED", "true"), key="POST_RUN_ANALYZER_FAILCLOSED"),
         POST_RUN_MIN_TRADES_FOR_CORRELATION=_as_positive_int(_get_env(merged, "POST_RUN_MIN_TRADES_FOR_CORRELATION", "20"), key="POST_RUN_MIN_TRADES_FOR_CORRELATION"),
