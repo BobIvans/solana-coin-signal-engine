@@ -104,3 +104,19 @@ Run smoke:
 ```bash
 python scripts/entry_selector_smoke.py --scored data/processed/scored_tokens.json
 ```
+
+## PR-10 post-run analyzer
+
+PR-10 adds a post-run analytics layer over paper-trading artifacts:
+
+- reconstructs closed position lifecycle from `trades.jsonl` + `positions.json`
+- computes portfolio/regime/exit/friction metrics
+- computes descriptive metric correlations vs PnL
+- emits conservative machine-readable recommendations
+- writes markdown report with caveats and sample warnings
+
+Run smoke:
+
+```bash
+python scripts/post_run_analyzer_smoke.py --base-dir data/smoke/post_run
+```
