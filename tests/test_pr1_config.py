@@ -79,3 +79,25 @@ def test_invalid_paper_settings_raise(monkeypatch):
         assert "PAPER_STARTING_CAPITAL_SOL" in str(exc)
     else:
         raise AssertionError("Expected ValueError for PAPER_STARTING_CAPITAL_SOL")
+
+
+def test_exit_settings_load(monkeypatch):
+    monkeypatch.setenv("EXIT_ENGINE_ENABLED", "true")
+    monkeypatch.setenv("EXIT_ENGINE_FAILCLOSED", "true")
+    monkeypatch.setenv("EXIT_SCALP_BUY_PRESSURE_FLOOR", "0.60")
+    monkeypatch.setenv("EXIT_TREND_BUY_PRESSURE_FLOOR", "0.50")
+    settings = load_settings()
+    assert settings.EXIT_ENGINE_ENABLED is True
+    assert settings.EXIT_ENGINE_FAILCLOSED is True
+    assert 0 <= settings.EXIT_SCALP_BUY_PRESSURE_FLOOR <= 1
+    assert 0 <= settings.EXIT_TREND_BUY_PRESSURE_FLOOR <= 1
+
+
+def test_invalid_exit_poll_interval_raises(monkeypatch):
+    monkeypatch.setenv("EXIT_POLL_INTERVAL_SEC", "0")
+    try:
+        load_settings()
+    except ValueError as exc:
+        assert "EXIT_POLL_INTERVAL_SEC" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for EXIT_POLL_INTERVAL_SEC")
