@@ -1,0 +1,45 @@
+chain: solana
+days: 7
+seed: 42
+
+discovery:
+  source: dexscreener
+  chain_id: solana
+  age_sec_max: 600
+  liquidity_usd_min: 20000
+  txns_m5_min: 20
+  require_fdv_or_market_cap: true
+  exclude_paid_orders: true
+  shortlist_max: 5
+
+x_mode:
+  status: degraded
+  baseline_score: 45
+  baseline_delta: 0
+
+backfill:
+  provider: helius_rpc
+  max_signatures_per_address: 200
+  request_timeout_sec: 20
+  max_rps: 5
+  cache_enabled: true
+
+simulation:
+  max_open_positions: 1
+  max_trades_per_day: 20
+  position_size_mode: fixed
+  fixed_position_size_usd: 100
+  slippage_pct_model: 0.02
+  priority_fee_sol_model: 0.0
+  failed_tx_probability_model: 0.0
+
+output:
+  base_dir: runs
+  write_jsonl: true
+  write_summary_md: true
+  write_summary_json: true
+
+wallets:
+  enabled: true
+  file: data/smart_wallets.json
+  weighting_mode: simple
