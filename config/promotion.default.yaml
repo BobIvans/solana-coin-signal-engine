@@ -1,65 +1,61 @@
-{
-  "runtime": {
-    "mode": "shadow",
-    "chain": "solana",
-    "loop_interval_sec": 30,
-    "seed": 42
-  },
-  "modes": {
-    "shadow": {
-      "open_positions": false,
-      "simulate_entries": true,
-      "simulate_exits": true
-    },
-    "constrained_paper": {
-      "open_positions": true,
-      "max_open_positions": 1,
-      "max_trades_per_day": 10,
-      "position_size_scale": 0.5,
-      "allow_regimes": ["SCALP"],
-      "degraded_x_policy": "watchlist_only"
-    },
-    "expanded_paper": {
-      "open_positions": true,
-      "max_open_positions": 2,
-      "max_trades_per_day": 20,
-      "position_size_scale": 1.0,
-      "allow_regimes": ["SCALP", "TREND"],
-      "degraded_x_policy": "reduced_size"
-    },
-    "paused": {
-      "open_positions": false,
-      "simulate_entries": false,
-      "simulate_exits": false
-    }
-  },
-  "safety": {
-    "kill_switch_file": "runs/runtime/kill_switch.flag",
-    "max_daily_loss_pct": 8.0,
-    "max_consecutive_losses": 4,
-    "max_position_hold_sec": 7200,
-    "require_config_hash": true
-  },
-  "x_protection": {
-    "captcha_cooldown_trigger_count": 2,
-    "captcha_cooldown_minutes": 30,
-    "soft_ban_cooldown_minutes": 30,
-    "timeout_cooldown_trigger_count": 5,
-    "timeout_cooldown_minutes": 15
-  },
-  "degraded_x": {
-    "baseline_score": 45,
-    "allow_shadow": true,
-    "allow_constrained_paper": true,
-    "allow_expanded_paper": true,
-    "constrained_policy": "watchlist_only",
-    "expanded_policy": "reduced_size"
-  },
-  "state": {
-    "runs_dir": "runs",
-    "state_dir": "runs/runtime_state",
-    "write_session_state": true,
-    "write_event_log": true,
-    "write_daily_summary": true
-  }
-}
+runtime:
+  mode: shadow
+  chain: solana
+  loop_interval_sec: 30
+  seed: 42
+
+modes:
+  shadow:
+    open_positions: false
+    simulate_entries: true
+    simulate_exits: true
+
+  constrained_paper:
+    open_positions: true
+    max_open_positions: 1
+    max_trades_per_day: 10
+    position_size_scale: 0.50
+    allow_regimes: [SCALP]
+    degraded_x_policy: watchlist_only
+
+  expanded_paper:
+    open_positions: true
+    max_open_positions: 2
+    max_trades_per_day: 20
+    position_size_scale: 1.00
+    allow_regimes: [SCALP, TREND]
+    degraded_x_policy: reduced_size
+
+  paused:
+    open_positions: false
+    simulate_entries: false
+    simulate_exits: false
+
+safety:
+  kill_switch_file: runs/runtime/kill_switch.flag
+  max_daily_loss_pct: 8.0
+  max_consecutive_losses: 4
+  max_position_hold_sec: 7200
+  require_config_hash: true
+
+x_protection:
+  captcha_cooldown_trigger_count: 2
+  captcha_cooldown_minutes: 30
+  soft_ban_cooldown_minutes: 30
+  timeout_cooldown_trigger_count: 5
+  timeout_cooldown_minutes: 15
+
+degraded_x:
+  baseline_score: 45
+  allow_shadow: true
+  allow_constrained_paper: true
+  allow_expanded_paper: true
+  constrained_policy: watchlist_only
+  expanded_policy: reduced_size
+
+state:
+  runs_dir: runs
+  state_dir: runs/runtime_state
+  write_session_state: true
+  write_event_log: true
+  write_daily_summary: true

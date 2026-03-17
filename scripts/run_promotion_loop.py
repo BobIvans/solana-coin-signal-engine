@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+
 import sys
 import time
 from datetime import datetime, timezone
@@ -26,9 +27,57 @@ from src.promotion.state_machine import apply_transition
 from src.promotion.types import utc_now_iso
 
 
+
+
+def _parse_scalar(raw: str):
+    value = raw.strip()
+    if value == "":
+        return {}
+    if value.startswith("[") and value.endswith("]"):
+        inner = value[1:-1].strip()
+        if not inner:
+            return []
+        return [item.strip().strip('\"') for item in inner.split(',')]
+    lowered = value.lower()
+    if lowered == "true":
+        return True
+    if lowered == "false":
+        return False
+    try:
+        if "." in value:
+            return float(value)
+        return int(value)
+    except ValueError:
+        return value.strip('\"')
+
+
+def _load_simple_yaml(path: str) -> dict:
+    root: dict = {}
+    stack: list[tuple[int, dict]] = [(-1, root)]
+    with open(path, "r", encoding="utf-8") as handle:
+        for line in handle:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            indent = len(line) - len(line.lstrip(" "))
+            key, sep, rest = stripped.partition(":")
+            if not sep:
+                continue
+            while stack and indent <= stack[-1][0]:
+                stack.pop()
+            parent = stack[-1][1]
+            parsed = _parse_scalar(rest)
+            parent[key.strip()] = parsed
+            if isinstance(parsed, dict):
+                stack.append((indent, parsed))
+    return root
 def _load_config(path: str) -> dict:
     with open(path, "r", encoding="utf-8") as handle:
-        return json.load(handle)
+        raw = handle.read()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return _load_simple_yaml(path)
 
 
 def _simulate_signals(loop_index: int) -> list[dict]:
