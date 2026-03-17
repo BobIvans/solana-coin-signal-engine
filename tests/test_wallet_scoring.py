@@ -1,3 +1,13 @@
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+root_str = str(ROOT)
+if root_str not in sys.path:
+    sys.path.append(root_str)
+
 from src.wallets.scoring import apply_wallet_adjustment_to_final_score, compute_wallet_score_adjustment
 
 
