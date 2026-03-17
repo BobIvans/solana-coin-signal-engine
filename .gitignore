@@ -1,3 +1,5 @@
 __pycache__/
 *.pyc
 .env
+runs/
+data/processed/entry_candidates.json
