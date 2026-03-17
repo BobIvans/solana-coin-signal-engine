@@ -52,6 +52,16 @@ def _safety_strength(token_ctx: dict[str, Any]) -> float:
     return _clamp((rug_score * 0.35) + (dev_sell * 0.25) + (lp_burn * 0.15) + (mint_revoked * 0.15) + (freeze_revoked * 0.10))
 
 
+
+
+def _wallet_strength(token_ctx: dict[str, Any]) -> float:
+    features = token_ctx.get("wallet_features") or {}
+    hits = _clamp(_to_float(features.get("smart_wallet_hits")) / 5.0)
+    tier1 = _clamp(_to_float(features.get("smart_wallet_tier1_hits")) / 2.0)
+    netflow = _clamp((_to_float(features.get("smart_wallet_netflow_bias")) + 1.0) / 2.0)
+    return _clamp((hits * 0.4) + (tier1 * 0.4) + (netflow * 0.2))
+
+
 def _data_quality_strength(token_ctx: dict[str, Any]) -> float:
     preferred = [
         "age_sec",
@@ -89,13 +99,15 @@ def compute_entry_confidence(token_ctx: dict[str, Any], decision_ctx: dict[str, 
     x_strength = _x_strength(token_ctx)
     safety_strength = _safety_strength(token_ctx)
     data_quality_strength = _data_quality_strength(token_ctx)
+    wallet_strength = _wallet_strength(token_ctx)
 
     confidence = (
-        0.34 * score_strength
+        0.31 * score_strength
         + 0.22 * momentum_strength
-        + 0.18 * x_strength
+        + 0.16 * x_strength
         + 0.16 * safety_strength
         + 0.10 * data_quality_strength
+        + 0.05 * wallet_strength
     )
     return round(_clamp(confidence), 4)
 

@@ -13,6 +13,7 @@ from analytics.score_components import (
     compute_x_validation_bonus,
 )
 from analytics.score_router import route_score
+from src.wallets.scoring import apply_wallet_adjustment_to_final_score, compute_wallet_score_adjustment
 from utils.clock import utc_now_iso
 
 
@@ -45,7 +46,7 @@ def score_token(token_ctx: dict, settings: Any) -> dict:
         + float(x_bonus.get("confidence_adjustment") or 0.0)
     )
 
-    final_score = _clamp(
+    base_score = _clamp(
         float(onchain["onchain_core"])
         + float(early["early_signal_bonus"])
         + float(x_bonus["x_validation_bonus"])
@@ -53,6 +54,15 @@ def score_token(token_ctx: dict, settings: Any) -> dict:
         - float(spam["spam_penalty"])
         + confidence_adjustment
     )
+
+    wallet_adjustment = compute_wallet_score_adjustment(token_ctx.get("wallet_features") or {}, {"scoring": {
+        "tier1_bonus_score": getattr(settings, "WALLET_TIER1_BONUS_SCORE", 3.0),
+        "tier2_bonus_score": getattr(settings, "WALLET_TIER2_BONUS_SCORE", 1.0),
+        "early_entry_bonus_score": getattr(settings, "WALLET_EARLY_ENTRY_BONUS_SCORE", 2.0),
+        "negative_netflow_penalty": getattr(settings, "WALLET_NEGATIVE_NETFLOW_PENALTY", 3.0),
+        "max_wallet_bonus_score": getattr(settings, "WALLET_MAX_BONUS_SCORE", 6.0),
+    }})
+    final_score = _clamp(apply_wallet_adjustment_to_final_score(base_score, wallet_adjustment, {}))
 
     score_ctx = {"final_score": round(final_score, 4), "heuristic_ratio": float(early.get("heuristic_ratio") or 0.0)}
     routed = route_score(token_ctx, score_ctx, settings)
@@ -78,6 +88,7 @@ def score_token(token_ctx: dict, settings: Any) -> dict:
         "rug_penalty": round(float(rug["rug_penalty"]), 4),
         "spam_penalty": round(float(spam["spam_penalty"]), 4),
         "confidence_adjustment": round(confidence_adjustment, 4),
+        "wallet_adjustment": wallet_adjustment,
         "final_score": round(float(score_ctx["final_score"]), 4),
         "regime_candidate": routed["regime_candidate"],
         "score_inputs_status": _status_block(token_ctx),
