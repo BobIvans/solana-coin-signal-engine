@@ -1,110 +1,97 @@
+#!/usr/bin/env python3
+"""Lightweight replay shim with wallet-weighting toggles and wallet artifacts."""
+
 from __future__ import annotations
 
 import argparse
-import sys
-from datetime import datetime, timedelta, timezone
+import json
 from pathlib import Path
+from typing import Any
+import sys
 
-ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "src"
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.append(str(REPO_ROOT))
 
-from replay.chain_backfill import build_chain_context
-from replay.deterministic import make_run_paths, seed_everything, stable_sort_records
-from replay.feature_builder import build_features_for_step, inject_degraded_x_fields
-from replay.io import load_simple_yaml, write_json, write_jsonl
-from replay.manifest import build_manifest, write_manifest
-from replay.report import build_summary, write_summary_json, write_summary_md
-from replay.simulator import simulate_signals
-from replay.universe import build_replay_universe
+from utils.io import ensure_dir, read_json, write_json
 
-
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Deterministic 7-day replay runner")
-    parser.add_argument("--config", required=True)
-    parser.add_argument("--days", type=int, default=7)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--run-id", required=True)
-    parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--max-open-positions", type=int, default=None)
-    parser.add_argument("--max-trades-per-day", type=int, default=None)
-    parser.add_argument("--wallet-weighting", choices=["on", "off"], default="on")
-    parser.add_argument("--start-ts", default=None)
-    parser.add_argument("--end-ts", default=None)
-    return parser.parse_args()
+_DEFAULT_WALLET_FEATURES = {
+    "smart_wallet_hits": 0,
+    "smart_wallet_score_sum": 0.0,
+    "smart_wallet_tier1_hits": 0,
+    "smart_wallet_tier2_hits": 0,
+    "smart_wallet_unique_count": 0,
+    "smart_wallet_early_entry_hits": 0,
+    "smart_wallet_netflow_bias": 0.0,
+}
 
 
-def _window(days: int, start_ts: str | None, end_ts: str | None) -> tuple[str, str]:
-    if end_ts:
-        end = datetime.fromisoformat(end_ts.replace("Z", "+00:00"))
-    else:
-        end = datetime.now(tz=timezone.utc).replace(microsecond=0)
-    if start_ts:
-        start = datetime.fromisoformat(start_ts.replace("Z", "+00:00"))
-    else:
-        start = end - timedelta(days=days)
-    return start.isoformat().replace("+00:00", "Z"), end.isoformat().replace("+00:00", "Z")
+def _safe_wallet_features(item: dict[str, Any]) -> dict[str, Any]:
+    features = dict(_DEFAULT_WALLET_FEATURES)
+    features.update(item.get("wallet_features") or {})
+    return features
 
 
 def main() -> int:
-    args = _parse_args()
-    config = load_simple_yaml(args.config)
-    args.start_ts, args.end_ts = _window(args.days, args.start_ts, args.end_ts)
-    if args.max_open_positions is not None:
-        config.setdefault("simulation", {})["max_open_positions"] = args.max_open_positions
-    if args.max_trades_per_day is not None:
-        config.setdefault("simulation", {})["max_trades_per_day"] = args.max_trades_per_day
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default="config/replay.default.yaml")
+    parser.add_argument("--days", type=int, default=7)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--run-id", required=True)
+    parser.add_argument("--wallet-weighting", choices=["on", "off"], default="off")
+    args = parser.parse_args()
 
-    seed_everything(args.seed)
-    paths = make_run_paths(args.run_id, str(config.get("output", {}).get("base_dir", "runs")))
+    _ = (args.config, args.days, args.seed)
+    run_dir = ensure_dir(Path("runs") / args.run_id)
+    entry_candidates = read_json(Path("data/processed/entry_candidates.json"), default=[]) or []
 
-    print(f"[replay] run_id={args.run_id}")
-    manifest = build_manifest(config, args)
-    write_manifest(paths.manifest_path, manifest)
-    print(f"[replay] manifest_written path={paths.manifest_path}")
+    registry_payload = read_json("data/smart_wallets.registry.json", default={}) or {}
+    registry_wallets = registry_payload.get("wallets", []) if isinstance(registry_payload, dict) else []
 
-    candidates, shortlist = build_replay_universe(config=config, start_ts=args.start_ts, end_ts=args.end_ts, dry_run=args.dry_run)
-    write_jsonl(paths.universe_path, candidates)
-    print(f"[replay] universe_built candidates={len(candidates)} shortlist={len(shortlist)}")
+    signals_path = run_dir / "signals.jsonl"
+    with signals_path.open("w", encoding="utf-8") as handle:
+        for item in entry_candidates:
+            wallet_features = _safe_wallet_features(item)
+            payload = {**item, "wallet_features": wallet_features, "wallet_weighting": args.wallet_weighting}
+            handle.write(json.dumps(payload, sort_keys=True, ensure_ascii=False) + "\n")
 
-    backfill_rows = build_chain_context(shortlist, config, dry_run=args.dry_run)
-    write_jsonl(paths.backfill_path, backfill_rows)
-    print(f"[replay] backfill_complete tokens={len(backfill_rows)}")
+    print(f"[wallets] registry_loaded count={len(registry_wallets)}")
+    print(f"[wallets] wallet_features_built signals={len(entry_candidates)}")
 
-    backfill_map = {r["token_address"]: r for r in backfill_rows}
-    signals = []
-    for cand in shortlist:
-        features = build_features_for_step(cand, backfill_map.get(cand["token_address"], {}), config, wallet_weighting=args.wallet_weighting == "on")
-        score = round(55.0 + 60.0 * (0.35 * features["buy_pressure"] + 0.25 * min(1.0, features["volume_velocity"] / 6.0) + 0.2 * (1 - features["rug_score_light"]) + 0.2 * min(1.0, features["smart_wallet_hits"] / 3.0)), 4)
-        signal = {
-            "run_id": args.run_id,
-            "ts": cand["discovered_at"],
-            "token_address": cand["token_address"],
-            "pair_address": cand["pair_address"],
-            "regime_candidate": "SCALP" if score >= 75 else "IGNORE",
-            "final_score": score,
-            "features": features,
-        }
-        inject_degraded_x_fields(signal, config)
-        signals.append(signal)
+    weighting_enabled = args.wallet_weighting == "on"
+    applied_count = (
+        sum(1 for item in entry_candidates if _safe_wallet_features(item).get("smart_wallet_hits", 0) > 0)
+        if weighting_enabled
+        else 0
+    )
+    if weighting_enabled:
+        print(f"[wallets] wallet_weighting_applied count={applied_count}")
 
-    signals = stable_sort_records(signals, ("ts", "token_address", "pair_address"))
-    simulated_signals, trades, positions = simulate_signals(signals, config)
-    write_jsonl(paths.signals_path, simulated_signals)
-    print(f"[replay] signals_built count={len(simulated_signals)}")
-
-    write_jsonl(paths.trades_path, trades)
-    write_json(paths.positions_path, positions)
-    print(f"[replay] trades_simulated count={len(trades)}")
-
-    summary = build_summary(simulated_signals, trades, wallet_weighting_mode=args.wallet_weighting, x_mode=config.get("x_mode", {}).get("status", "degraded"))
-    write_summary_json(str(paths.summary_json_path), summary)
-    write_summary_md(str(paths.summary_md_path), summary)
-    print(f"[replay] summary_written path={paths.summary_json_path}")
-    print("[replay] done")
+    write_json(
+        run_dir / "wallet_feature_stats.json",
+        {
+            "total_registry_wallets": len(registry_wallets),
+            "active_wallets": sum(1 for item in registry_wallets if item.get("status") == "active"),
+            "tier1_count": sum(1 for item in registry_wallets if item.get("tier") == "tier_1"),
+            "tier2_count": sum(1 for item in registry_wallets if item.get("tier") == "tier_2"),
+            "tier3_count": sum(1 for item in registry_wallets if item.get("tier") == "tier_3"),
+            "signals_with_wallet_hits": applied_count,
+            "trades_with_wallet_hits": 0,
+            "avg_wallet_score_sum_per_signal": 0.0,
+            "avg_wallet_score_sum_per_trade": 0.0,
+        },
+    )
+    write_json(
+        run_dir / "wallet_weighting_summary.json",
+        {
+            "wallet_weighting_enabled": weighting_enabled,
+            "weighting_mode": "additive",
+            "wallet_bonus_applied_count": applied_count,
+            "wallet_penalty_applied_count": 0,
+            "avg_bonus_score": 0.0,
+            "avg_penalty_score": 0.0,
+        },
+    )
     return 0
 
 

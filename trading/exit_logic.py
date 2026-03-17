@@ -86,6 +86,14 @@ def decide_exit(position_ctx: dict, current_ctx: dict, settings: Any) -> dict:
     else:
         decision = hard
 
+    wallet_features = current_ctx.get("wallet_features") or {}
+    netflow_bias = float(wallet_features.get("smart_wallet_netflow_bias") or 0.0)
+    tier1_distribution = int(wallet_features.get("smart_wallet_tier1_distribution_hits") or 0)
+    if netflow_bias < 0:
+        decision.setdefault("exit_warnings", []).append("smart_wallet_netflow_reversal")
+    if tier1_distribution > 0:
+        decision.setdefault("exit_warnings", []).append("tier1_wallet_distribution_detected")
+
     decision["exit_warnings"] = _dedupe([*decision.get("exit_warnings", []), *warnings])
     return _finalize(position_ctx, current_eval_ctx, settings, decision, hold_sec, pnl_pct, now_ts)
 
