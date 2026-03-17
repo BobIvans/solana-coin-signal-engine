@@ -5,16 +5,15 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 from typing import Any
+import sys
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.append(str(REPO_ROOT))
 
-from src.wallets.io import write_wallet_feature_stats, write_wallet_weighting_summary
-from utils.io import ensure_dir, read_json
+from utils.io import ensure_dir, read_json, write_json
 
 _DEFAULT_WALLET_FEATURES = {
     "smart_wallet_hits": 0,
@@ -68,26 +67,30 @@ def main() -> int:
     if weighting_enabled:
         print(f"[wallets] wallet_weighting_applied count={applied_count}")
 
-    write_wallet_feature_stats(
+    write_json(
         run_dir / "wallet_feature_stats.json",
-        total_registry_wallets=len(registry_wallets),
-        active_wallets=sum(1 for item in registry_wallets if item.get("status") == "active"),
-        tier1_count=sum(1 for item in registry_wallets if item.get("tier") == "tier_1"),
-        tier2_count=sum(1 for item in registry_wallets if item.get("tier") == "tier_2"),
-        tier3_count=sum(1 for item in registry_wallets if item.get("tier") == "tier_3"),
-        signals_with_wallet_hits=applied_count,
-        trades_with_wallet_hits=0,
-        avg_wallet_score_sum_per_signal=0.0,
-        avg_wallet_score_sum_per_trade=0.0,
+        {
+            "total_registry_wallets": len(registry_wallets),
+            "active_wallets": sum(1 for item in registry_wallets if item.get("status") == "active"),
+            "tier1_count": sum(1 for item in registry_wallets if item.get("tier") == "tier_1"),
+            "tier2_count": sum(1 for item in registry_wallets if item.get("tier") == "tier_2"),
+            "tier3_count": sum(1 for item in registry_wallets if item.get("tier") == "tier_3"),
+            "signals_with_wallet_hits": applied_count,
+            "trades_with_wallet_hits": 0,
+            "avg_wallet_score_sum_per_signal": 0.0,
+            "avg_wallet_score_sum_per_trade": 0.0,
+        },
     )
-    write_wallet_weighting_summary(
+    write_json(
         run_dir / "wallet_weighting_summary.json",
-        wallet_weighting_enabled=weighting_enabled,
-        weighting_mode="additive",
-        wallet_bonus_applied_count=applied_count,
-        wallet_penalty_applied_count=0,
-        avg_bonus_score=0.0,
-        avg_penalty_score=0.0,
+        {
+            "wallet_weighting_enabled": weighting_enabled,
+            "weighting_mode": "additive",
+            "wallet_bonus_applied_count": applied_count,
+            "wallet_penalty_applied_count": 0,
+            "avg_bonus_score": 0.0,
+            "avg_penalty_score": 0.0,
+        },
     )
     return 0
 
