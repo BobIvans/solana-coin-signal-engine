@@ -15,6 +15,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.append(str(REPO_ROOT))
 
 from utils.io import ensure_dir, read_json, write_json
+from utils.bundle_contract_fields import copy_bundle_contract_fields
 
 _DEFAULT_WALLET_FEATURES = {
     "smart_wallet_hits": 0,
@@ -32,6 +33,11 @@ def _safe_wallet_features(item: dict[str, Any]) -> dict[str, Any]:
     features = dict(_DEFAULT_WALLET_FEATURES)
     features.update(item.get("wallet_features") or {})
     return features
+
+
+def _safe_bundle_fields(item: dict[str, Any]) -> dict[str, Any]:
+    entry_snapshot = item.get("entry_snapshot") if isinstance(item.get("entry_snapshot"), dict) else {}
+    return copy_bundle_contract_fields(item, fallback=entry_snapshot)
 
 
 def _load_entry_candidates() -> list[dict[str, Any]]:
@@ -113,6 +119,7 @@ def main() -> int:
             "features": item.get("features") or {},
             "wallet_features": wallet_features,
             "wallet_weighting": args.wallet_weighting,
+            **_safe_bundle_fields(item),
         }
         trade = {
             "run_id": args.run_id,
@@ -123,6 +130,7 @@ def main() -> int:
             "qty": 1.0,
             "price": 1.0,
             "wallet_features": wallet_features,
+            **_safe_bundle_fields(item),
         }
         universe.append({"run_id": args.run_id, "token_address": token_address, "pair_address": pair_address})
         backfill.append({"run_id": args.run_id, "token_address": token_address, "status": "synthetic"})

@@ -14,6 +14,7 @@ from analytics.score_components import (
 )
 from analytics.score_router import route_score
 from src.wallets.scoring import apply_wallet_adjustment_to_final_score, compute_wallet_score_adjustment
+from utils.bundle_contract_fields import copy_bundle_contract_fields
 from utils.clock import utc_now_iso
 
 
@@ -82,6 +83,7 @@ def score_token(token_ctx: dict, settings: Any) -> dict:
         "symbol": str(token_ctx.get("symbol") or ""),
         "name": str(token_ctx.get("name") or ""),
         "fast_prescore": float(token_ctx.get("fast_prescore") or 0.0),
+        **copy_bundle_contract_fields(token_ctx),
         "onchain_core": round(float(onchain["onchain_core"]), 4),
         "early_signal_bonus": round(float(early["early_signal_bonus"]), 4),
         "x_validation_bonus": round(float(x_bonus["x_validation_bonus"]), 4),

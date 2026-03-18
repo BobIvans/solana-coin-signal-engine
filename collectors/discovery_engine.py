@@ -9,6 +9,7 @@ from typing import Any
 from analytics.fast_prescore import compute_fast_prescore, fast_priority_bucket
 from collectors.dexscreener_client import fetch_latest_solana_pairs, normalize_pair
 from config.settings import load_settings
+from utils.bundle_contract_fields import copy_bundle_contract_fields
 from utils.clock import utc_now_iso, utc_now_ts
 from utils.io import append_jsonl, ensure_dir, write_json
 
@@ -68,6 +69,7 @@ def build_shortlist(candidates: list[dict[str, Any]], top_k: int) -> list[dict[s
                 "buy_pressure": row.get("buy_pressure", 0.0),
                 "volume_mcap_ratio": row.get("volume_mcap_ratio", 0.0),
                 "source": row.get("source", "dexscreener"),
+                **copy_bundle_contract_fields(row),
             }
         )
     return shortlist
