@@ -53,6 +53,9 @@ class Settings:
     DEX_CACHE_TTL_SEC: int
     HELIUS_CACHE_TTL_SEC: int
 
+    BUNDLE_ENRICHMENT_ENABLED: bool
+    BUNDLE_ENRICHMENT_WINDOW_SEC: int
+
     GLOBAL_RATE_LIMIT_ENABLED: bool
     SMART_WALLETS_PATH: Path
 
@@ -244,6 +247,8 @@ def load_settings() -> Settings:
         X_VALIDATION_CONTRACT_VERSION=str(_get_env(merged, "X_VALIDATION_CONTRACT_VERSION", "x_validation_v1")),
         DEX_CACHE_TTL_SEC=_as_positive_int(_get_env(merged, "DEX_CACHE_TTL_SEC", "60"), key="DEX_CACHE_TTL_SEC"),
         HELIUS_CACHE_TTL_SEC=_as_positive_int(_get_env(merged, "HELIUS_CACHE_TTL_SEC", "120"), key="HELIUS_CACHE_TTL_SEC"),
+        BUNDLE_ENRICHMENT_ENABLED=_as_bool(_get_env(merged, "BUNDLE_ENRICHMENT_ENABLED", "true"), key="BUNDLE_ENRICHMENT_ENABLED"),
+        BUNDLE_ENRICHMENT_WINDOW_SEC=_as_positive_int(_get_env(merged, "BUNDLE_ENRICHMENT_WINDOW_SEC", "60"), key="BUNDLE_ENRICHMENT_WINDOW_SEC"),
         GLOBAL_RATE_LIMIT_ENABLED=_as_bool(_get_env(merged, "GLOBAL_RATE_LIMIT_ENABLED", "true"), key="GLOBAL_RATE_LIMIT_ENABLED"),
         SMART_WALLETS_PATH=_as_abs_path(_get_env(merged, "SMART_WALLETS_PATH", "./data/processed/smart_wallets.json")),
         ONCHAIN_ENRICHMENT_ENABLED=_as_bool(_get_env(merged, "ONCHAIN_ENRICHMENT_ENABLED", "true"), key="ONCHAIN_ENRICHMENT_ENABLED"),
