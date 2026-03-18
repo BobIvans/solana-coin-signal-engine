@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from trading.position_monitor import compute_position_deltas
+from utils.bundle_contract_fields import BUNDLE_CONTRACT_FIELDS
 
 
 def _to_float(value: Any, default: float = 0.0) -> float:
@@ -31,6 +32,12 @@ def build_exit_snapshot(position_ctx: dict, current_ctx: dict) -> dict:
         "dev_sell_pressure_now": _to_float(current_ctx.get("dev_sell_pressure_now", current_ctx.get("dev_sell_pressure_5m"))),
         "rug_flag_now": bool(current_ctx.get("rug_flag_now", False)),
     }
+
+    for field in BUNDLE_CONTRACT_FIELDS:
+        if field in current_ctx:
+            snapshot[field] = current_ctx.get(field)
+        elif field in entry_snapshot:
+            snapshot[field] = entry_snapshot.get(field)
 
     for optional_field in ("holder_growth_now", "smart_wallet_hits_now", "market_cap_now"):
         if optional_field in current_ctx and current_ctx.get(optional_field) is not None:

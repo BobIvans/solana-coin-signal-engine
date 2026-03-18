@@ -7,6 +7,7 @@ from typing import Any
 from trading.entry_sizing import compute_entry_confidence, compute_recommended_position_pct
 from trading.entry_snapshot import build_entry_snapshot
 from trading.regime_rules import is_scalp_candidate, is_trend_candidate, should_ignore
+from utils.bundle_contract_fields import copy_bundle_contract_fields
 from utils.clock import utc_now_iso
 
 _ALLOWED_DECISIONS = {"SCALP", "TREND", "IGNORE"}
@@ -54,6 +55,7 @@ def decide_entry(token_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
         "token_address": token_ctx.get("token_address"),
         "symbol": token_ctx.get("symbol"),
         "name": token_ctx.get("name"),
+        **copy_bundle_contract_fields(token_ctx),
         "entry_decision": decision,
         "entry_reason": reason,
         "entry_flags": _dedupe(flags),
