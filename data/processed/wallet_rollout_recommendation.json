@@ -1,0 +1,13 @@
+{
+  "blocking_risks": [],
+  "generated_at": "2026-03-18T10:05:00Z",
+  "next_mode": "shadow",
+  "outlier_concentration_flag": false,
+  "primary_reasons": [
+    "sample size is below medium confidence threshold"
+  ],
+  "recommendation": "keep_shadow",
+  "recommendation_confidence": "low",
+  "safe_default_mode": "shadow",
+  "sample_size_confidence": "low"
+}
