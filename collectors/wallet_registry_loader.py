@@ -1,4 +1,4 @@
-"""Load and normalize deterministic wallet registry inputs from PR-SW-1 artifacts."""
+"""Load and normalize deterministic wallet registry inputs from PR-SW-1/SW-3 artifacts."""
 
 from __future__ import annotations
 
@@ -9,6 +9,14 @@ from collectors.wallet_seed_import import is_plausible_solana_wallet
 from utils.io import read_json
 
 NORMALIZED_CONTRACT_VERSION = "wallet_seed_import.v1"
+WALLET_REGISTRY_STATUS_VALIDATED = "validated"
+WALLET_REGISTRY_STATUS_MISSING = "degraded_missing_registry"
+WALLET_REGISTRY_STATUS_EMPTY = "degraded_empty_registry"
+
+
+VALIDATED_TIER_KEYS = ("new_tier", "tier")
+VALIDATED_STATUS_KEYS = ("new_status", "status")
+EARLY_ENTRY_TAGS = {"early_entry_positive", "early_entry", "early_entry_winner"}
 
 
 def _normalize_string_list(values: Any) -> list[str]:
@@ -16,8 +24,10 @@ def _normalize_string_list(values: Any) -> list[str]:
     return sorted(out)
 
 
+
 def _normalize_notes(value: Any) -> str:
     return str(value or "").strip()
+
 
 
 def _derive_source_names(candidate: dict[str, Any]) -> list[str]:
@@ -28,12 +38,14 @@ def _derive_source_names(candidate: dict[str, Any]) -> list[str]:
     return _normalize_string_list(names)
 
 
+
 def _derive_tags(candidate: dict[str, Any]) -> list[str]:
     tags = candidate.get("tags")
     if isinstance(tags, list):
         return _normalize_string_list(tags)
     tag = str(candidate.get("tag") or "").strip().lower()
     return [tag] if tag else []
+
 
 
 def _merge_duplicate(into_record: dict[str, Any], duplicate: dict[str, Any]) -> dict[str, Any]:
@@ -54,6 +66,7 @@ def _merge_duplicate(into_record: dict[str, Any], duplicate: dict[str, Any]) -> 
     merged["quality_flags"] = dict(merged.get("quality_flags", {}))
     merged["quality_flags"]["duplicate_source_merged"] = True
     return merged
+
 
 
 def load_normalized_wallet_candidates(path: str | Path) -> dict[str, Any]:
@@ -109,4 +122,139 @@ def load_normalized_wallet_candidates(path: str | Path) -> dict[str, Any]:
     }
 
 
-__all__ = ["NORMALIZED_CONTRACT_VERSION", "load_normalized_wallet_candidates"]
+
+def _path_exists(path: str | Path | None) -> bool:
+    return bool(path) and Path(path).expanduser().resolve().exists()
+
+
+
+def _first_present(record: dict[str, Any], keys: tuple[str, ...], default: str) -> str:
+    for key in keys:
+        value = record.get(key)
+        if value not in (None, ""):
+            return str(value)
+    return default
+
+
+
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return False
+
+
+
+def _has_early_entry_positive(record: dict[str, Any]) -> bool:
+    tags = {str(tag or "").strip().lower() for tag in (record.get("tags") or []) if str(tag or "").strip()}
+    replay_evidence = record.get("replay_evidence") if isinstance(record.get("replay_evidence"), dict) else {}
+    if tags & EARLY_ENTRY_TAGS:
+        return True
+    return any(
+        _truthy(record.get(key)) or _truthy(replay_evidence.get(key))
+        for key in ("early_entry_positive", "early_entry_winner", "early_entry_flag")
+    )
+
+
+
+def _normalize_validated_wallet_record(record: dict[str, Any], *, is_hot: bool) -> dict[str, Any] | None:
+    wallet = str(record.get("wallet") or record.get("wallet_address") or "").strip()
+    if not wallet:
+        return None
+    tier = _first_present(record, VALIDATED_TIER_KEYS, "tier_3")
+    status = _first_present(record, VALIDATED_STATUS_KEYS, "watch")
+    replay_evidence = record.get("replay_evidence") if isinstance(record.get("replay_evidence"), dict) else {}
+    return {
+        "wallet": wallet,
+        "tier": tier,
+        "status": status,
+        "registry_score": float(record.get("registry_score") or 0.0),
+        "tags": _normalize_string_list(record.get("tags") or []),
+        "notes": _normalize_notes(record.get("notes")),
+        "is_hot": bool(is_hot),
+        "early_entry_positive": _has_early_entry_positive(record),
+        "replay_evidence": replay_evidence,
+    }
+
+
+
+def _wallet_mapping(payload: dict[str, Any] | None, *, hot_wallets: set[str] | None = None) -> dict[str, dict[str, Any]]:
+    out: dict[str, dict[str, Any]] = {}
+    hot_wallets = hot_wallets or set()
+    wallets = payload.get("wallets") if isinstance(payload, dict) else []
+    if not isinstance(wallets, list):
+        return out
+    for raw in wallets:
+        if not isinstance(raw, dict):
+            continue
+        normalized = _normalize_validated_wallet_record(raw, is_hot=str(raw.get("wallet") or "") in hot_wallets)
+        if not normalized:
+            continue
+        out[normalized["wallet"]] = normalized
+    return out
+
+
+
+def load_wallet_registry_lookup(
+    validated_registry_path: str | Path | None,
+    hot_registry_path: str | Path | None,
+) -> dict[str, Any]:
+    resolved_validated = Path(validated_registry_path).expanduser().resolve() if validated_registry_path else None
+    resolved_hot = Path(hot_registry_path).expanduser().resolve() if hot_registry_path else None
+
+    if resolved_validated is None or not _path_exists(resolved_validated):
+        return {
+            "status": WALLET_REGISTRY_STATUS_MISSING,
+            "validated_size": 0,
+            "hot_set_size": 0,
+            "validated_wallets": {},
+            "hot_wallets": set(),
+            "validated_registry_path": str(resolved_validated) if resolved_validated else "",
+            "hot_registry_path": str(resolved_hot) if resolved_hot else "",
+        }
+
+    validated_payload = read_json(resolved_validated, default={}) or {}
+    hot_payload = read_json(resolved_hot, default={}) if resolved_hot and _path_exists(resolved_hot) else {}
+    hot_rows = hot_payload.get("wallets") if isinstance(hot_payload, dict) else []
+    hot_wallets = {
+        str(item.get("wallet") or item.get("wallet_address") or "").strip()
+        for item in (hot_rows or [])
+        if isinstance(item, dict) and str(item.get("wallet") or item.get("wallet_address") or "").strip()
+    }
+    normalized = _wallet_mapping(validated_payload, hot_wallets=hot_wallets)
+    if not normalized:
+        return {
+            "status": WALLET_REGISTRY_STATUS_EMPTY,
+            "validated_size": 0,
+            "hot_set_size": 0,
+            "validated_wallets": {},
+            "hot_wallets": set(),
+            "validated_registry_path": str(resolved_validated),
+            "hot_registry_path": str(resolved_hot) if resolved_hot else "",
+            "contract_version": validated_payload.get("contract_version") or "",
+        }
+
+    return {
+        "status": WALLET_REGISTRY_STATUS_VALIDATED,
+        "validated_size": len(normalized),
+        "hot_set_size": len(hot_wallets),
+        "validated_wallets": normalized,
+        "hot_wallets": hot_wallets,
+        "validated_registry_path": str(resolved_validated),
+        "hot_registry_path": str(resolved_hot) if resolved_hot else "",
+        "contract_version": validated_payload.get("contract_version") or "",
+        "hot_contract_version": hot_payload.get("contract_version") if isinstance(hot_payload, dict) else "",
+    }
+
+
+__all__ = [
+    "NORMALIZED_CONTRACT_VERSION",
+    "WALLET_REGISTRY_STATUS_EMPTY",
+    "WALLET_REGISTRY_STATUS_MISSING",
+    "WALLET_REGISTRY_STATUS_VALIDATED",
+    "load_normalized_wallet_candidates",
+    "load_wallet_registry_lookup",
+]
