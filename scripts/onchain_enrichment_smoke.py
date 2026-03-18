@@ -13,13 +13,22 @@ from analytics.dev_activity import compute_dev_sell_pressure_5m, infer_dev_walle
 from analytics.holder_metrics import compute_holder_metrics
 from analytics.launch_path import estimate_launch_path
 from analytics.smart_wallet_hits import compute_smart_wallet_hits
+from analytics.wallet_registry_bias import compute_wallet_registry_bias
 from collectors.helius_client import HeliusClient
 from collectors.solana_rpc_client import SolanaRpcClient
+from collectors.wallet_registry_loader import (
+    WALLET_REGISTRY_STATUS_EMPTY,
+    WALLET_REGISTRY_STATUS_MISSING,
+    load_wallet_registry_lookup,
+)
 from config.settings import load_settings
 from utils.clock import utc_now_iso
 from utils.io import append_jsonl, read_json, write_json
 
 CONTRACT_VERSION = "onchain_enrichment_v1"
+DEFAULT_VALIDATED_REGISTRY_PATH = Path("data/registry/smart_wallets.validated.json")
+DEFAULT_HOT_REGISTRY_PATH = Path("data/registry/hot_wallets.validated.json")
+
 
 
 def _validate_record(record: dict) -> None:
@@ -34,6 +43,22 @@ def _validate_record(record: dict) -> None:
         "dev_sell_pressure_5m",
         "pumpfun_to_raydium_sec",
         "smart_wallet_hits",
+        "wallet_registry_status",
+        "wallet_registry_hot_set_size",
+        "wallet_registry_validated_size",
+        "smart_wallet_score_sum",
+        "smart_wallet_tier1_hits",
+        "smart_wallet_tier2_hits",
+        "smart_wallet_tier3_hits",
+        "smart_wallet_early_entry_hits",
+        "smart_wallet_active_hits",
+        "smart_wallet_watch_hits",
+        "smart_wallet_hit_wallets",
+        "smart_wallet_hit_tiers",
+        "smart_wallet_hit_statuses",
+        "smart_wallet_netflow_bias",
+        "smart_wallet_conviction_bonus",
+        "smart_wallet_registry_confidence",
         "enrichment_status",
         "enrichment_warnings",
         "contract_version",
@@ -41,6 +66,7 @@ def _validate_record(record: dict) -> None:
     missing = sorted(required - set(record.keys()))
     if missing:
         raise ValueError(f"enriched schema violation: missing keys {missing}")
+
 
 
 def _load_tokens(shortlist_path: Path, x_validated_path: Path) -> list[dict]:
@@ -62,15 +88,50 @@ def _load_tokens(shortlist_path: Path, x_validated_path: Path) -> list[dict]:
     return merged
 
 
+
 def _extract_decimals_from_asset(asset: dict) -> int:
     token_info = asset.get("token_info", {}) if isinstance(asset.get("token_info"), dict) else {}
     return int(token_info.get("decimals") or asset.get("decimals") or 0)
 
 
-def run(shortlist_path: Path, x_validated_path: Path, token_override: str | None = None) -> dict:
+
+def _default_registry_paths(
+    validated_registry_path: Path | None,
+    hot_registry_path: Path | None,
+) -> tuple[Path, Path]:
+    return (
+        validated_registry_path or DEFAULT_VALIDATED_REGISTRY_PATH,
+        hot_registry_path or DEFAULT_HOT_REGISTRY_PATH,
+    )
+
+
+
+def run(
+    shortlist_path: Path,
+    x_validated_path: Path,
+    token_override: str | None = None,
+    validated_registry_path: Path | None = None,
+    hot_registry_path: Path | None = None,
+) -> dict:
     settings = load_settings()
     events_path = settings.PROCESSED_DATA_DIR / "onchain_enrichment_events.jsonl"
     append_jsonl(events_path, {"ts": utc_now_iso(), "event": "enrichment_started"})
+
+    validated_registry_path, hot_registry_path = _default_registry_paths(validated_registry_path, hot_registry_path)
+    wallet_lookup = load_wallet_registry_lookup(validated_registry_path, hot_registry_path)
+    registry_status = str(wallet_lookup.get("status") or WALLET_REGISTRY_STATUS_MISSING)
+    registry_event = {
+        "ts": utc_now_iso(),
+        "wallet_registry_status": registry_status,
+        "hot_set_size": int(wallet_lookup.get("hot_set_size") or 0),
+        "validated_size": int(wallet_lookup.get("validated_size") or 0),
+    }
+    if registry_status == WALLET_REGISTRY_STATUS_MISSING:
+        append_jsonl(events_path, {**registry_event, "event": "wallet_registry_missing_degraded"})
+    elif registry_status == WALLET_REGISTRY_STATUS_EMPTY:
+        append_jsonl(events_path, {**registry_event, "event": "wallet_registry_empty_degraded"})
+    else:
+        append_jsonl(events_path, {**registry_event, "event": "wallet_registry_loaded"})
 
     tokens = _load_tokens(shortlist_path, x_validated_path)
     if token_override:
@@ -93,7 +154,16 @@ def run(shortlist_path: Path, x_validated_path: Path, token_override: str | None
         supply = rpc.get_token_supply(token_address)
         holder = compute_holder_metrics(token_address, supply, largest)
         warnings.extend(holder.pop("holder_metrics_warnings"))
-        append_jsonl(events_path, {"ts": utc_now_iso(), "event": "holder_metrics_computed", "token_address": token_address, "top20_holder_share": holder["top20_holder_share"], "warning": "first50_holder_conc_est is heuristic"})
+        append_jsonl(
+            events_path,
+            {
+                "ts": utc_now_iso(),
+                "event": "holder_metrics_computed",
+                "token_address": token_address,
+                "top20_holder_share": holder["top20_holder_share"],
+                "warning": "first50_holder_conc_est is heuristic",
+            },
+        )
 
         asset: dict = {}
         txs: list[dict] = []
@@ -104,7 +174,6 @@ def run(shortlist_path: Path, x_validated_path: Path, token_override: str | None
             else:
                 status = "partial"
                 warnings.append("asset metadata missing")
-
             source_addr = pair_address or token_address
             txs = helius.get_transactions_by_address(source_addr, settings.HELIUS_TX_ADDR_LIMIT)
             if not txs:
@@ -126,9 +195,11 @@ def run(shortlist_path: Path, x_validated_path: Path, token_override: str | None
         dev_wallet = infer_dev_wallet(token_ctx, txs)
         dev_metrics = compute_dev_sell_pressure_5m(dev_wallet.get("dev_wallet_est", ""), token_ctx, txs)
         append_jsonl(events_path, {"ts": utc_now_iso(), "event": "dev_activity_computed", "token_address": token_address})
-
         launch = estimate_launch_path(token_ctx, txs)
-        append_jsonl(events_path, {"ts": utc_now_iso(), "event": "launch_path_estimated", "token_address": token_address, "launch_path_label": launch["launch_path_label"]})
+        append_jsonl(
+            events_path,
+            {"ts": utc_now_iso(), "event": "launch_path_estimated", "token_address": token_address, "launch_path_label": launch["launch_path_label"]},
+        )
 
         smart_ctx = {
             **token_ctx,
@@ -138,12 +209,35 @@ def run(shortlist_path: Path, x_validated_path: Path, token_override: str | None
             "helius_get_transactions_by_address": helius.get_transactions_by_address if helius else None,
         }
         smart = compute_smart_wallet_hits(token_address, seed_wallets, smart_ctx)
-        append_jsonl(events_path, {"ts": utc_now_iso(), "event": "smart_wallet_hits_computed", "token_address": token_address, "smart_wallet_hits": smart["smart_wallet_hits"]})
+        append_jsonl(
+            events_path,
+            {
+                "ts": utc_now_iso(),
+                "event": "smart_wallet_hits_computed",
+                "token_address": token_address,
+                "smart_wallet_hits": smart["smart_wallet_hits"],
+            },
+        )
+        wallet_bias = compute_wallet_registry_bias(smart.get("smart_wallet_hit_wallets") or [], wallet_lookup)
+        append_jsonl(
+            events_path,
+            {
+                "ts": utc_now_iso(),
+                "event": "token_wallet_hits_computed",
+                "token_address": token_address,
+                "wallet_registry_status": wallet_bias["wallet_registry_status"],
+                "hot_set_size": wallet_bias["wallet_registry_hot_set_size"],
+                "validated_size": wallet_bias["wallet_registry_validated_size"],
+                "smart_wallet_score_sum": wallet_bias["smart_wallet_score_sum"],
+            },
+        )
 
+        if wallet_bias["wallet_registry_status"] != "validated":
+            warnings.append(f"wallet registry {wallet_bias['wallet_registry_status']}")
         if launch["launch_path_label"] == "unknown":
             warnings.append("launch path unknown")
-            if settings.ALLOW_LAUNCH_PATH_HEURISTICS_ONLY:
-                status = "partial" if status == "ok" else status
+        if settings.ALLOW_LAUNCH_PATH_HEURISTICS_ONLY:
+            status = "partial" if status == "ok" else status
 
         enriched = {
             "token_address": token_address,
@@ -156,6 +250,7 @@ def run(shortlist_path: Path, x_validated_path: Path, token_override: str | None
             **dev_metrics,
             **launch,
             **smart,
+            **wallet_bias,
             "enrichment_status": status,
             "enrichment_warnings": sorted(set(warnings)),
             "enriched_at": utc_now_iso(),
@@ -163,8 +258,14 @@ def run(shortlist_path: Path, x_validated_path: Path, token_override: str | None
         }
         _validate_record(enriched)
         if status == "partial":
-            append_jsonl(events_path, {"ts": utc_now_iso(), "event": "enrichment_partial", "token_address": token_address, "warnings": enriched["enrichment_warnings"]})
-        append_jsonl(events_path, {"ts": utc_now_iso(), "event": "enrichment_completed", "token_address": token_address, "enrichment_status": status})
+            append_jsonl(
+                events_path,
+                {"ts": utc_now_iso(), "event": "enrichment_partial", "token_address": token_address, "warnings": enriched["enrichment_warnings"]},
+            )
+        append_jsonl(
+            events_path,
+            {"ts": utc_now_iso(), "event": "enrichment_completed", "token_address": token_address, "enrichment_status": status},
+        )
         out_tokens.append(enriched)
 
     payload = {"contract_version": CONTRACT_VERSION, "generated_at": utc_now_iso(), "tokens": out_tokens}
@@ -173,14 +274,22 @@ def run(shortlist_path: Path, x_validated_path: Path, token_override: str | None
     return payload
 
 
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--shortlist", default="data/processed/shortlist.json")
     parser.add_argument("--x-validated", default="data/processed/x_validated.json")
+    parser.add_argument("--validated-registry", default=str(DEFAULT_VALIDATED_REGISTRY_PATH))
+    parser.add_argument("--hot-registry", default=str(DEFAULT_HOT_REGISTRY_PATH))
     parser.add_argument("--token", default=None)
     args = parser.parse_args()
-
-    payload = run(Path(args.shortlist), Path(args.x_validated), token_override=args.token)
+    payload = run(
+        Path(args.shortlist),
+        Path(args.x_validated),
+        token_override=args.token,
+        validated_registry_path=Path(args.validated_registry),
+        hot_registry_path=Path(args.hot_registry),
+    )
     print(json.dumps(payload.get("tokens", [{}])[0] if payload.get("tokens") else {}, sort_keys=True, ensure_ascii=False))
     return 0
 
