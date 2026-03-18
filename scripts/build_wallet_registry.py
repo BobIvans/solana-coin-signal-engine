@@ -319,6 +319,16 @@ def main() -> int:
         hot_out_path=args.hot_out_path,
         event_log_path=args.event_log_path,
     )
+    summary = registry_payload["registry_summary"]
+    print(
+        "[wallet-registry] "
+        f"total_candidates={summary['total_candidates']} kept={summary['kept_wallets']} "
+        f"rejected={summary['rejected_wallets']} active={summary['active_count']} watch={summary['watch_count']}"
+    )
+    print(f"[wallet-registry] registry_written path={Path(args.out_path).as_posix()}")
+    print(f"[wallet-registry] watchlist_written path={Path(args.watch_out_path).as_posix()}")
+    print(f"[wallet-registry] hot_written path={Path(args.hot_out_path).as_posix()}")
+    print(f"[wallet-registry] filter_events_appended path={Path(args.event_log_path).as_posix()} count={len(events)}")
     return 0
 
 
