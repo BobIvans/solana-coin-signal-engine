@@ -1,8 +1,259 @@
-"""Deterministic bundle enrichment helpers for discovery candidates."""
+"""Lightweight first-window bundle enrichment for discovery candidates."""
 
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import Any
+
+from collectors.helius_client import HeliusClient
+from utils.bundle_contract_fields import BUNDLE_CONTRACT_FIELDS
+from utils.logger import log_warning
+from utils.rate_limit import acquire
+
+MVP_BUNDLE_FIELDS = [
+    "bundle_count_first_60s",
+    "bundle_size_value",
+    "unique_wallets_per_bundle_avg",
+    "bundle_timing_from_liquidity_add_min",
+    "bundle_success_rate",
+]
+
+
+def _null_bundle_metrics() -> dict[str, Any]:
+    return {field: None for field in MVP_BUNDLE_FIELDS}
+
+
+def safe_null_bundle_metrics(
+    *,
+    status: str,
+    warning: str | None = None,
+) -> dict[str, Any]:
+    payload = {
+        **_null_bundle_metrics(),
+        "bundle_enrichment_status": status,
+        "bundle_enrichment_warning": warning,
+    }
+    for field in BUNDLE_CONTRACT_FIELDS:
+        payload.setdefault(field, None)
+    return payload
+
+
+def _coerce_int(value: Any) -> int | None:
+    try:
+        if value in (None, ""):
+            return None
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_float(value: Any) -> float | None:
+    try:
+        if value in (None, ""):
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_anchor_ts(pair: dict[str, Any]) -> int | None:
+    for key in ("liquidity_added_at_ts", "pair_created_at_ts"):
+        value = _coerce_int(pair.get(key))
+        if value and value > 0:
+            return value
+    return None
+
+
+def _extract_timestamp(tx: dict[str, Any]) -> int | None:
+    for key in ("timestamp", "blockTime"):
+        value = _coerce_int(tx.get(key))
+        if value and value > 0:
+            return value
+    return None
+
+
+def _extract_group_key(tx: dict[str, Any], timestamp: int) -> str:
+    slot = _coerce_int(tx.get("slot"))
+    if slot is not None and slot >= 0:
+        return f"slot:{slot}"
+    return f"ts:{timestamp}"
+
+
+def _extract_wallets(tx: dict[str, Any]) -> list[str]:
+    wallets: set[str] = set()
+    for key in ("feePayer", "signer", "owner", "user"):
+        value = str(tx.get(key) or "").strip()
+        if value:
+            wallets.add(value)
+
+    for transfer in tx.get("nativeTransfers", []) if isinstance(tx.get("nativeTransfers"), list) else []:
+        if not isinstance(transfer, dict):
+            continue
+        for key in ("fromUserAccount", "toUserAccount"):
+            value = str(transfer.get(key) or "").strip()
+            if value:
+                wallets.add(value)
+
+    for transfer in tx.get("tokenTransfers", []) if isinstance(tx.get("tokenTransfers"), list) else []:
+        if not isinstance(transfer, dict):
+            continue
+        for key in ("fromUserAccount", "toUserAccount", "userAccount"):
+            value = str(transfer.get(key) or "").strip()
+            if value:
+                wallets.add(value)
+
+    return sorted(wallets)
+
+
+def _extract_value(tx: dict[str, Any]) -> float | None:
+    for key in ("bundle_value", "bundleValue", "swap_usd_value", "usd_value", "value_usd", "value"):
+        value = _coerce_float(tx.get(key))
+        if value is not None:
+            return value
+
+    native_transfers = tx.get("nativeTransfers")
+    if not isinstance(native_transfers, list) or not native_transfers:
+        return None
+
+    lamports = 0
+    for transfer in native_transfers:
+        if not isinstance(transfer, dict):
+            continue
+        amount = _coerce_int(transfer.get("amount"))
+        if amount:
+            lamports += abs(amount)
+    if lamports <= 0:
+        return None
+    return lamports / 1_000_000_000
+
+
+def _extract_success(tx: dict[str, Any]) -> bool | None:
+    for key in ("success", "isSuccess"):
+        value = tx.get(key)
+        if isinstance(value, bool):
+            return value
+    if tx.get("transactionError") in (None, "", False):
+        return True
+    return False
+
+
+def _load_bundle_transactions(pair: dict[str, Any], settings: Any) -> tuple[list[dict[str, Any]], str | None]:
+    inline = pair.get("bundle_transactions")
+    if isinstance(inline, list):
+        return [item for item in inline if isinstance(item, dict)], None
+
+    if not getattr(settings, "BUNDLE_ENRICHMENT_ENABLED", True):
+        return [], "bundle enrichment disabled"
+
+    if not getattr(settings, "HELIUS_API_KEY", ""):
+        return [], "helius api key missing"
+
+    source_addr = str(pair.get("pair_address") or pair.get("token_address") or "").strip()
+    if not source_addr:
+        return [], "missing pair/token address for bundle lookup"
+
+    acquire("helius")
+    helius = HeliusClient(settings.HELIUS_API_KEY)
+    txs = helius.get_transactions_by_address(source_addr, getattr(settings, "HELIUS_TX_ADDR_LIMIT", 40))
+    if not txs and pair.get("pair_address"):
+        txs = helius.get_transactions_by_address(str(pair.get("token_address") or ""), getattr(settings, "HELIUS_TX_ADDR_LIMIT", 40))
+    return txs, None if txs else "no bundle transactions available"
+
+
+def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: Any) -> dict[str, Any]:
+    """Infer first-window bundle metrics from available transaction data.
+
+    This MVP uses a conservative heuristic: transactions in the first configured
+    window are grouped by slot when present, otherwise by exact second. Only
+    groups with at least 2 transactions are treated as inferred bundles.
+    """
+
+    if not getattr(settings, "BUNDLE_ENRICHMENT_ENABLED", True):
+        return safe_null_bundle_metrics(status="disabled", warning="bundle enrichment disabled")
+
+    anchor_ts = _extract_anchor_ts(pair)
+    if anchor_ts is None:
+        return safe_null_bundle_metrics(status="unavailable", warning="missing liquidity/pair creation anchor")
+
+    if now_ts < anchor_ts:
+        return safe_null_bundle_metrics(status="unavailable", warning="anchor timestamp is in the future")
+
+    try:
+        txs, source_warning = _load_bundle_transactions(pair, settings)
+        if source_warning and not txs:
+            return safe_null_bundle_metrics(status="unavailable", warning=source_warning)
+
+        window_sec = max(int(getattr(settings, "BUNDLE_ENRICHMENT_WINDOW_SEC", 60) or 60), 1)
+        window_end = anchor_ts + window_sec
+
+        first_window = []
+        for tx in txs:
+            timestamp = _extract_timestamp(tx)
+            if timestamp is None or timestamp < anchor_ts or timestamp > window_end:
+                continue
+            first_window.append(
+                {
+                    "timestamp": timestamp,
+                    "group_key": _extract_group_key(tx, timestamp),
+                    "wallets": _extract_wallets(tx),
+                    "value": _extract_value(tx),
+                    "success": _extract_success(tx),
+                }
+            )
+
+        if not first_window:
+            return safe_null_bundle_metrics(status="ok", warning="no first-window transactions found")
+
+        grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for tx in first_window:
+            grouped[tx["group_key"]].append(tx)
+
+        inferred_bundles = [group for group in grouped.values() if len(group) >= 2]
+        if not inferred_bundles:
+            return {
+                **safe_null_bundle_metrics(status="ok", warning="no inferred bundles detected in first window"),
+                "bundle_count_first_60s": 0,
+            }
+
+        bundle_count = len(inferred_bundles)
+        wallet_counts: list[int] = []
+        bundle_values: list[float] = []
+        bundle_offsets_min: list[float] = []
+        success_values: list[float] = []
+
+        for bundle in inferred_bundles:
+            wallets = {wallet for tx in bundle for wallet in tx["wallets"]}
+            wallet_counts.append(len(wallets))
+
+            values = [value for value in (tx["value"] for tx in bundle) if value is not None]
+            if values:
+                bundle_values.append(sum(values))
+
+            timestamps = [int(tx["timestamp"]) for tx in bundle]
+            bundle_offsets_min.append((min(timestamps) - anchor_ts) / 60.0)
+
+            successes = [tx["success"] for tx in bundle if tx["success"] is not None]
+            if successes:
+                success_values.extend(1.0 if flag else 0.0 for flag in successes)
+
+        return {
+            **safe_null_bundle_metrics(status="ok"),
+            "bundle_count_first_60s": bundle_count,
+            "bundle_size_value": round(sum(bundle_values), 6) if bundle_values else None,
+            "unique_wallets_per_bundle_avg": round(sum(wallet_counts) / len(wallet_counts), 6) if wallet_counts else None,
+            "bundle_timing_from_liquidity_add_min": round(min(bundle_offsets_min), 6) if bundle_offsets_min else None,
+            "bundle_success_rate": round(sum(success_values) / len(success_values), 6) if success_values else None,
+            "bundle_enrichment_warning": source_warning,
+        }
+    except Exception as exc:  # pragma: no cover - defensive fail-open
+        log_warning(
+            "bundle_enrichment_failed",
+            token_address=str(pair.get("token_address") or ""),
+            pair_address=str(pair.get("pair_address") or ""),
+            error=str(exc),
+        )
+        return safe_null_bundle_metrics(status="failed", warning=str(exc))
+
 
 COMPOSITION_UNKNOWN = "unknown"
 COMPOSITION_BUY_ONLY = "buy-only"
@@ -26,7 +277,7 @@ _TS_KEYS = ("timestamp", "ts", "time", "block_time")
 _BLOCK_KEYS = ("slot", "block", "block_slot", "block_number")
 
 
-def _iter_bundle_lists(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
+def _iter_advanced_bundle_lists(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
     if not isinstance(payload, dict):
         return []
 
@@ -39,19 +290,19 @@ def _iter_bundle_lists(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
     for key in _NESTED_BUNDLE_KEYS:
         nested = payload.get(key)
         if isinstance(nested, dict):
-            extracted.extend(_iter_bundle_lists(nested))
+            extracted.extend(_iter_advanced_bundle_lists(nested))
 
     return extracted
 
 
-def _extract_bundle_records(*payloads: dict[str, Any] | None) -> list[dict[str, Any]]:
+def _extract_advanced_bundle_records(*payloads: dict[str, Any] | None) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     for payload in payloads:
-        records.extend(_iter_bundle_lists(payload))
+        records.extend(_iter_advanced_bundle_lists(payload))
     return records
 
 
-def _as_float(value: Any) -> float | None:
+def _advanced_as_float(value: Any) -> float | None:
     if value in (None, ""):
         return None
     try:
@@ -60,42 +311,42 @@ def _as_float(value: Any) -> float | None:
         return None
 
 
-def _as_int(value: Any) -> int | None:
-    numeric = _as_float(value)
+def _advanced_as_int(value: Any) -> int | None:
+    numeric = _advanced_as_float(value)
     if numeric is None:
         return None
     return int(numeric)
 
 
-def _first_present(record: dict[str, Any], keys: tuple[str, ...]) -> Any:
+def _advanced_first_present(record: dict[str, Any], keys: tuple[str, ...]) -> Any:
     for key in keys:
         if key in record and record.get(key) not in (None, ""):
             return record.get(key)
     return None
 
 
-def _normalized_actor(record: dict[str, Any]) -> str | None:
-    actor = _first_present(record, _ACTOR_KEYS)
+def _advanced_normalized_actor(record: dict[str, Any]) -> str | None:
+    actor = _advanced_first_present(record, _ACTOR_KEYS)
     if actor is None:
         return None
     value = str(actor).strip()
     return value or None
 
 
-def _record_ts(record: dict[str, Any]) -> int | None:
-    return _as_int(_first_present(record, _TS_KEYS))
+def _advanced_record_ts(record: dict[str, Any]) -> int | None:
+    return _advanced_as_int(_advanced_first_present(record, _TS_KEYS))
 
 
-def _record_block(record: dict[str, Any]) -> int | None:
-    return _as_int(_first_present(record, _BLOCK_KEYS))
+def _advanced_record_block(record: dict[str, Any]) -> int | None:
+    return _advanced_as_int(_advanced_first_present(record, _BLOCK_KEYS))
 
 
-def _record_failed(record: dict[str, Any]) -> bool:
+def _advanced_record_failed(record: dict[str, Any]) -> bool:
     explicit = record.get("success")
     if explicit is not None:
         return not bool(explicit)
 
-    status_value = _first_present(record, _STATUS_KEYS)
+    status_value = _advanced_first_present(record, _STATUS_KEYS)
     if status_value is None:
         return False
 
@@ -109,7 +360,7 @@ def _record_failed(record: dict[str, Any]) -> bool:
     return False
 
 
-def _infer_side(record: dict[str, Any]) -> str | None:
+def _advanced_infer_side(record: dict[str, Any]) -> str | None:
     for key in _SIDE_KEYS:
         raw_value = record.get(key)
         if raw_value in (None, ""):
@@ -120,14 +371,14 @@ def _infer_side(record: dict[str, Any]) -> str | None:
         if any(token in label for token in ("sell", "dump", "short")):
             return "sell"
 
-    token_delta = _as_float(record.get("token_delta"))
+    token_delta = _advanced_as_float(record.get("token_delta"))
     if token_delta is not None:
         if token_delta > 0:
             return "buy"
         if token_delta < 0:
             return "sell"
 
-    base_delta = _as_float(record.get("base_delta"))
+    base_delta = _advanced_as_float(record.get("base_delta"))
     if base_delta is not None:
         if base_delta < 0:
             return "buy"
@@ -141,7 +392,7 @@ def classify_bundle_composition(bundle_records: list[dict[str, Any]]) -> str:
     buys = 0
     sells = 0
     for record in bundle_records:
-        side = _infer_side(record)
+        side = _advanced_infer_side(record)
         if side == "buy":
             buys += 1
         elif side == "sell":
@@ -162,18 +413,18 @@ def compute_bundle_tip_efficiency(bundle_records: list[dict[str, Any]], bundle_s
     tip_seen = False
     value_seen = False
 
-    external_value = _as_float(bundle_size_value)
+    external_value = _advanced_as_float(bundle_size_value)
     if external_value is not None and external_value > 0:
         total_value += external_value
         value_seen = True
 
     for record in bundle_records:
-        tip_value = _as_float(_first_present(record, _TIP_KEYS))
+        tip_value = _advanced_as_float(_advanced_first_present(record, _TIP_KEYS))
         if tip_value is not None:
             total_tip += tip_value
             tip_seen = True
 
-        record_value = _as_float(_first_present(record, _VALUE_KEYS))
+        record_value = _advanced_as_float(_advanced_first_present(record, _VALUE_KEYS))
         if record_value is not None and record_value > 0:
             total_value += record_value
             value_seen = True
@@ -189,13 +440,13 @@ def detect_bundle_failure_retry_pattern(bundle_records: list[dict[str, Any]], re
     evidence_seen = False
 
     for record in bundle_records:
-        actor = _normalized_actor(record)
+        actor = _advanced_normalized_actor(record)
         if actor is None:
             continue
-        failed = _record_failed(record)
-        if failed or record.get("success") is not None or _first_present(record, _STATUS_KEYS) is not None:
+        failed = _advanced_record_failed(record)
+        if failed or record.get("success") is not None or _advanced_first_present(record, _STATUS_KEYS) is not None:
             evidence_seen = True
-        attempts_by_actor.setdefault(actor, []).append((_record_ts(record), failed))
+        attempts_by_actor.setdefault(actor, []).append((_advanced_record_ts(record), failed))
 
     if not evidence_seen:
         return None
@@ -217,8 +468,8 @@ def compute_cross_block_bundle_correlation(bundle_records: list[dict[str, Any]],
     block_evidence = False
 
     for record in bundle_records:
-        actor = _normalized_actor(record)
-        block = _record_block(record)
+        actor = _advanced_normalized_actor(record)
+        block = _advanced_record_block(record)
         if block is None:
             continue
         block_evidence = True
@@ -248,7 +499,7 @@ def compute_cross_block_bundle_correlation(bundle_records: list[dict[str, Any]],
 def compute_advanced_bundle_fields(*, candidate: dict[str, Any] | None = None, raw_pair: dict[str, Any] | None = None) -> dict[str, Any]:
     candidate = candidate or {}
     raw_pair = raw_pair or {}
-    bundle_records = _extract_bundle_records(candidate, raw_pair)
+    bundle_records = _extract_advanced_bundle_records(candidate, raw_pair)
 
     return {
         "bundle_composition_dominant": classify_bundle_composition(bundle_records),

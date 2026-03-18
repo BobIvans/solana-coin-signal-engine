@@ -8,11 +8,13 @@ from typing import Any
 
 from analytics.fast_prescore import compute_fast_prescore, fast_priority_bucket
 from collectors.bundle_detector import compute_advanced_bundle_fields
+from collectors.bundle_detector import detect_bundle_metrics_for_pair, safe_null_bundle_metrics
 from collectors.dexscreener_client import fetch_latest_solana_pairs, normalize_pair
 from config.settings import load_settings
 from utils.bundle_contract_fields import copy_bundle_contract_fields
 from utils.clock import utc_now_iso, utc_now_ts
 from utils.io import append_jsonl, ensure_dir, write_json
+from utils.logger import log_warning
 
 
 def filter_pair(pair: dict[str, Any], now_ts: int) -> tuple[bool, str]:
@@ -104,20 +106,41 @@ def run_discovery_once() -> dict[str, Any]:
     _persist_raw_artifacts(raw_pairs, timestamp_utc, settings.RAW_DATA_DIR / "discovery_raw.jsonl")
 
     candidates: list[dict[str, Any]] = []
+    bundle_status_counts: dict[str, int] = {}
+    bundle_warnings: list[str] = []
     for raw_pair in raw_pairs:
         normalized = normalize_pair(raw_pair)
         accepted, reason = filter_pair(normalized, now_ts)
         if not accepted:
             continue
 
+        bundle_payload = safe_null_bundle_metrics(status="unavailable", warning="bundle enrichment skipped")
+        try:
+            bundle_payload = detect_bundle_metrics_for_pair({**normalized, **({"bundle_transactions": raw_pair.get("bundle_transactions")} if isinstance(raw_pair.get("bundle_transactions"), list) else {})}, now_ts, settings)
+        except Exception as exc:  # pragma: no cover - defensive fail-open
+            log_warning(
+                "bundle_enrichment_failed",
+                token_address=normalized.get("token_address", ""),
+                pair_address=normalized.get("pair_address", ""),
+                error=str(exc),
+            )
+            bundle_payload = safe_null_bundle_metrics(status="failed", warning=str(exc))
+
+        bundle_status = str(bundle_payload.get("bundle_enrichment_status") or "unknown")
+        bundle_status_counts[bundle_status] = bundle_status_counts.get(bundle_status, 0) + 1
+        warning = str(bundle_payload.get("bundle_enrichment_warning") or "").strip()
+        if warning:
+            bundle_warnings.append(warning)
+
         metrics = compute_fast_prescore(normalized, now_ts)
         candidate = {
             **normalized,
             **metrics,
+            **bundle_payload,
             "filter_reason": reason,
         }
-        candidate.update(compute_advanced_bundle_fields(candidate=candidate, raw_pair=raw_pair))
         candidate["fast_priority_bucket"] = fast_priority_bucket(float(candidate["fast_prescore"]))
+        candidate.update(compute_advanced_bundle_fields(candidate=candidate, raw_pair=raw_pair))
         candidates.append(candidate)
 
     ranked = rank_candidates(candidates)
@@ -148,6 +171,11 @@ def run_discovery_once() -> dict[str, Any]:
         "pairs_fetched": len(raw_pairs),
         "pairs_filtered_in": len(ranked),
         "shortlist_count": len(shortlist),
+        "bundle_enrichment": {
+            "enabled": bool(settings.BUNDLE_ENRICHMENT_ENABLED),
+            "status_counts": bundle_status_counts,
+            "warnings": sorted(set(bundle_warnings)),
+        },
     }
     write_json(settings.SMOKE_DIR / "discovery_status.json", status_payload)
 
