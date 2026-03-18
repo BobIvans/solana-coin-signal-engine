@@ -37,3 +37,22 @@ def test_partial_fail_closed_never_pass():
     result = assess_rug_risk({"token_address": "token", "mint_authority": None, "freeze_authority": None}, DummySettings())
     assert result["rug_status"] == "partial"
     assert result["rug_verdict"] in {"WATCH", "IGNORE"}
+
+
+def test_bundle_warnings_are_non_breaking():
+    result = assess_rug_risk(
+        {
+            "token_address": "token",
+            "mint_authority": None,
+            "freeze_authority": None,
+            "top1_holder_share": 0.05,
+            "top20_holder_share": 0.4,
+            "dev_sell_pressure_5m": 0.0,
+            "bundle_composition_dominant": "sell-only",
+            "bundle_failure_retry_pattern": 3,
+        },
+        DummySettings(),
+    )
+    assert "bundle_sell_only_flow" in result["rug_warnings"]
+    assert "bundle_retry_pattern_severe" in result["rug_warnings"]
+    assert result["rug_verdict"] in {"PASS", "WATCH", "IGNORE"}

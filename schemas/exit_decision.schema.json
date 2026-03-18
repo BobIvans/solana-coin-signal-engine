@@ -49,7 +49,7 @@
         "bundle_success_rate": {"type": ["number", "null"]},
         "bundle_composition_dominant": {"type": ["string", "null"]},
         "bundle_tip_efficiency": {"type": ["number", "null"]},
-        "bundle_failure_retry_pattern": {"type": ["string", "null"]},
+        "bundle_failure_retry_pattern": {"type": ["integer", "null"]},
         "cross_block_bundle_correlation": {"type": ["number", "null"]},
         "bundle_wallet_clustering_score": {"type": ["number", "null"]},
         "cluster_concentration_ratio": {"type": ["number", "null"]},
