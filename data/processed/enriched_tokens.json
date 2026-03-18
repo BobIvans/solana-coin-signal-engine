@@ -1,0 +1,22 @@
+[
+  {
+    "token_id": "smoke-token-1",
+    "mint": "So11111111111111111111111111111111111111112",
+    "wallet_registry_status": "degraded",
+    "wallet_registry_hot_set_size": 0,
+    "wallet_registry_validated_size": 0,
+    "smart_wallet_score_sum": 0.0,
+    "smart_wallet_tier1_hits": 0,
+    "smart_wallet_tier2_hits": 0,
+    "smart_wallet_tier3_hits": 0,
+    "smart_wallet_early_entry_hits": 0,
+    "smart_wallet_active_hits": 0,
+    "smart_wallet_watch_hits": 0,
+    "smart_wallet_hit_wallets": [],
+    "smart_wallet_hit_tiers": [],
+    "smart_wallet_hit_statuses": [],
+    "smart_wallet_netflow_bias": null,
+    "smart_wallet_conviction_bonus": 0.0,
+    "smart_wallet_registry_confidence": "low"
+  }
+]

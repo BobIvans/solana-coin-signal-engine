@@ -1,0 +1,188 @@
+{
+  "contract_version": "wallet_weighting_calibration_v1",
+  "generated_at": "2026-03-18T10:05:00Z",
+  "input_summary": {
+    "max_top_n": 25,
+    "modes_available": [
+      "off",
+      "shadow",
+      "on"
+    ],
+    "outcome_inputs_found": {
+      "off": true,
+      "on": true,
+      "shadow": true
+    },
+    "processed_dir": "/workspaces/solana-coin-signal-engine/data/processed",
+    "score_inputs_found": {
+      "off": true,
+      "on": true,
+      "shadow": true
+    },
+    "sources": {
+      "off": {
+        "base_dir": "/workspaces/solana-coin-signal-engine/data/processed/off",
+        "positions_path": "/workspaces/solana-coin-signal-engine/data/processed/off/positions.json",
+        "scored_path": "/workspaces/solana-coin-signal-engine/data/processed/scored_tokens.off.json"
+      },
+      "on": {
+        "base_dir": "/workspaces/solana-coin-signal-engine/data/processed/on",
+        "positions_path": "/workspaces/solana-coin-signal-engine/data/processed/on/positions.json",
+        "scored_path": "/workspaces/solana-coin-signal-engine/data/processed/scored_tokens.on.json"
+      },
+      "shadow": {
+        "base_dir": "/workspaces/solana-coin-signal-engine/data/processed/shadow",
+        "positions_path": "/workspaces/solana-coin-signal-engine/data/processed/shadow/positions.json",
+        "scored_path": "/workspaces/solana-coin-signal-engine/data/processed/scored_tokens.shadow.json"
+      }
+    }
+  },
+  "mode_comparison": {
+    "off": {
+      "confidence_notes": [
+        "off: outcome sample confidence=low"
+      ],
+      "outcome_level": {
+        "available": true,
+        "closed_trades": 5,
+        "drawdown_proxy": 0.0,
+        "expectancy": 0.03,
+        "false_positive_rate": 0.4,
+        "friction_adjusted_expectancy": 0.03,
+        "mean_pnl": 0.04,
+        "median_pnl": 0.1,
+        "outlier_top2_positive_share": 0.777778,
+        "pnl_unit": "net_pnl_pct",
+        "winrate": 0.6
+      },
+      "token_level": {
+        "available": true,
+        "average_final_score": 66.0,
+        "average_wallet_delta": 0.0,
+        "degraded_registry_share": 0.0,
+        "tokens_available": 3,
+        "top_token_addresses": [
+          "tok_a",
+          "tok_b",
+          "tok_c"
+        ]
+      }
+    },
+    "on": {
+      "confidence_notes": [
+        "on: outcome sample confidence=low"
+      ],
+      "outcome_level": {
+        "available": true,
+        "closed_trades": 5,
+        "drawdown_proxy": 0.0,
+        "expectancy": 0.142,
+        "false_positive_rate": 0.4,
+        "friction_adjusted_expectancy": 0.142,
+        "mean_pnl": 0.152,
+        "median_pnl": 0.18,
+        "outlier_top2_positive_share": 0.769231,
+        "pnl_unit": "net_pnl_pct",
+        "winrate": 0.6
+      },
+      "token_level": {
+        "average_abs_rank_delta_vs_off": 0.0,
+        "average_score_delta_vs_off": 1.166667,
+        "degraded_registry_share": 0.0,
+        "demoted_tokens_count": 1,
+        "overlap_top_n": 3,
+        "promoted_tokens_count": 2,
+        "score_shift_concentration": 1.0,
+        "share_of_positive_score_shifts": 0.666667,
+        "tokens_compared": 3,
+        "wallet_delta_mean": 1.166667,
+        "wallet_delta_positive_share": 0.666667
+      }
+    },
+    "pairwise": {
+      "on_vs_off": {
+        "available": true,
+        "closed_trades_baseline": 5,
+        "closed_trades_candidate": 5,
+        "delta_drawdown_proxy": 0.0,
+        "delta_expectancy": 0.112,
+        "delta_false_positive_rate": 0.0,
+        "delta_friction_adjusted_expectancy": 0.112,
+        "delta_mean_pnl": 0.112,
+        "delta_median_pnl": 0.08,
+        "delta_winrate": 0.0
+      },
+      "shadow_vs_off": {
+        "available": true,
+        "closed_trades_baseline": 5,
+        "closed_trades_candidate": 5,
+        "delta_drawdown_proxy": 0.0,
+        "delta_expectancy": 0.042,
+        "delta_false_positive_rate": 0.0,
+        "delta_friction_adjusted_expectancy": 0.042,
+        "delta_mean_pnl": 0.042,
+        "delta_median_pnl": 0.02,
+        "delta_winrate": 0.0
+      }
+    },
+    "shadow": {
+      "confidence_notes": [
+        "shadow: outcome sample confidence=low"
+      ],
+      "outcome_level": {
+        "available": true,
+        "closed_trades": 5,
+        "drawdown_proxy": 0.0,
+        "expectancy": 0.072,
+        "false_positive_rate": 0.4,
+        "friction_adjusted_expectancy": 0.072,
+        "mean_pnl": 0.082,
+        "median_pnl": 0.12,
+        "outlier_top2_positive_share": 0.764706,
+        "pnl_unit": "net_pnl_pct",
+        "winrate": 0.6
+      },
+      "token_level": {
+        "average_abs_rank_delta_vs_off": 0.0,
+        "average_score_delta_vs_off": 0.666667,
+        "degraded_registry_share": 0.0,
+        "demoted_tokens_count": 1,
+        "overlap_top_n": 3,
+        "promoted_tokens_count": 2,
+        "score_shift_concentration": 1.0,
+        "share_of_positive_score_shifts": 0.666667,
+        "tokens_compared": 3,
+        "wallet_delta_mean": 0.666667,
+        "wallet_delta_positive_share": 0.666667
+      }
+    }
+  },
+  "notes": [],
+  "recommendation": {
+    "blocking_risks": [],
+    "generated_at": "2026-03-18T10:05:00Z",
+    "next_mode": "shadow",
+    "outlier_concentration_flag": false,
+    "primary_reasons": [
+      "sample size is below medium confidence threshold"
+    ],
+    "recommendation": "keep_shadow",
+    "recommendation_confidence": "low",
+    "safe_default_mode": "shadow",
+    "sample_size_confidence": "low"
+  },
+  "robustness_checks": {
+    "degraded_registry_share": {
+      "off": 0.0,
+      "on": 0.0,
+      "shadow": 0.0
+    },
+    "outlier_concentration_flag": false,
+    "recommendation_confidence": "low",
+    "sample_size_confidence": "low",
+    "score_shift_concentration": {
+      "on_vs_off": 1.0,
+      "shadow_vs_off": 1.0
+    }
+  }
+}

@@ -1,0 +1,2 @@
+{"event": "enrichment_started", "ts": "2026-03-18T13:01:05Z"}
+{"event": "wallet_registry_missing_degraded", "hot_set_size": 0, "ts": "2026-03-18T13:01:05Z", "validated_size": 0, "wallet_registry_status": "degraded_missing_registry"}
