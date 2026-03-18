@@ -22,6 +22,7 @@ from collectors.wallet_registry_loader import (
     load_wallet_registry_lookup,
 )
 from config.settings import load_settings
+from utils.bundle_contract_fields import copy_bundle_contract_fields
 from utils.clock import utc_now_iso
 from utils.io import append_jsonl, read_json, write_json
 
@@ -243,6 +244,7 @@ def run(
             "token_address": token_address,
             "symbol": str(token.get("symbol") or ""),
             "name": str(token.get("name") or ""),
+            **copy_bundle_contract_fields(token),
             "asset_metadata_present": bool(asset),
             **holder,
             "decimals": _extract_decimals_from_asset(asset) or holder.get("decimals", 0),
