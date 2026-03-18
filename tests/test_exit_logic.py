@@ -38,6 +38,9 @@ def _position():
             "x_validation_score": 71.4,
             "bundle_cluster_score": 0.66,
             "liquidity_usd": 30000,
+            "bundle_count_first_60s": 2,
+            "bundle_composition_dominant": "snipers",
+            "creator_in_cluster_flag": True,
         },
     }
 
@@ -68,3 +71,6 @@ def test_valid_hold_stays_hold():
     out = decide_exit(_position(), _current(), DummySettings())
     assert out["exit_decision"] == "HOLD"
     assert out["exit_fraction"] == 0.0
+    assert out["exit_snapshot"]["bundle_count_first_60s"] == 2
+    assert out["exit_snapshot"]["bundle_composition_dominant"] == "snipers"
+    assert out["exit_snapshot"]["creator_in_cluster_flag"] is True
