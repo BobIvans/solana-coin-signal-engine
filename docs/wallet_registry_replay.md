@@ -27,6 +27,9 @@ Supported local replay inputs include:
 - `data/processed/post_run_analysis.json`
 - `data/processed/replay_*.json`
 - `data/processed/*.csv`
+- other local `.json` / `.jsonl` replay-style artifacts already present in `data/processed`
+
+The loader prioritizes the common artifact names above, but also scans other local `.json`, `.jsonl`, and `.csv` files in `data/processed` so failures can report what was actually inspected.
 
 If no usable wallet-specific replay evidence exists, the CLI fails clearly instead of silently writing misleading outputs.
 

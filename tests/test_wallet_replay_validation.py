@@ -163,7 +163,7 @@ def test_missing_replay_inputs_fails_clearly(tmp_path: Path):
     tmp_path.mkdir(parents=True, exist_ok=True)
     processed_dir = tmp_path / "processed"
     processed_dir.mkdir()
-    with pytest.raises(ReplayInputError, match="No usable wallet-specific replay evidence found"):
+    with pytest.raises(ReplayInputError, match="No usable wallet-specific replay evidence found") as exc_info:
         evaluate_wallet_registry_replay(
             registry_path=registry_path,
             processed_dir=processed_dir,
@@ -173,6 +173,34 @@ def test_missing_replay_inputs_fails_clearly(tmp_path: Path):
             event_log=tmp_path / "events.jsonl",
             generated_at=FIXED_TS,
         )
+    assert "Examined 0 files and 0 records" in str(exc_info.value)
+    assert "Discovered files: none" in str(exc_info.value)
+
+
+def test_generic_processed_json_is_examined_and_aggregate_counts_do_not_fake_wallets(tmp_path: Path):
+    registry_path = _write_registry(tmp_path / "smart_wallets.json", [_wallet_record("wallet-a", tier="tier_3")])
+    processed_dir = tmp_path / "processed"
+    processed_dir.mkdir()
+    (processed_dir / "entry_candidates.json").write_text(
+        json.dumps([{"token_address": "tok1", "wallet_features": {"smart_wallet_hits": 1}}]) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ReplayInputError, match="No usable wallet-specific replay evidence found") as exc_info:
+        evaluate_wallet_registry_replay(
+            registry_path=registry_path,
+            processed_dir=processed_dir,
+            out_report=tmp_path / "report.json",
+            out_registry=tmp_path / "validated.json",
+            out_hot=tmp_path / "hot.json",
+            event_log=tmp_path / "events.jsonl",
+            generated_at=FIXED_TS,
+        )
+
+    message = str(exc_info.value)
+    assert "Examined 1 files and 1 records" in message
+    assert "Discovered files: entry_candidates.json" in message
+    assert "Skipped 1 records without wallet-specific attribution" in message
 
 
 def test_mixed_quality_replay_evidence_handled_gracefully(tmp_path: Path):

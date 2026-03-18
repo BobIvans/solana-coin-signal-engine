@@ -147,7 +147,9 @@ def _normalize_wallet(wallet: Any) -> str | None:
             if key in wallet:
                 return _normalize_wallet(wallet.get(key))
         return None
-    value = str(wallet or "").strip()
+    if not isinstance(wallet, str):
+        return None
+    value = wallet.strip()
     return value or None
 
 
@@ -310,10 +312,22 @@ def discover_replay_inputs(processed_dir: str | Path) -> list[Path]:
         root / "paper_trades.jsonl",
         root / "post_run_analysis.json",
     ]
-    discovered: set[Path] = {path for path in preferred if path.exists()}
-    discovered.update(sorted(root.glob("replay_*.json")))
-    discovered.update(sorted(root.glob("*.csv")))
-    return sorted(discovered)
+    discovered: list[Path] = []
+    seen: set[Path] = set()
+
+    def _add(path: Path) -> None:
+        if path.exists() and path.is_file() and path not in seen:
+            seen.add(path)
+            discovered.append(path)
+
+    for path in preferred:
+        _add(path)
+    for path in sorted(root.glob("replay_*.json")):
+        _add(path)
+    for pattern in ("*.json", "*.jsonl", "*.csv"):
+        for path in sorted(root.glob(pattern)):
+            _add(path)
+    return discovered
 
 
 def load_replay_observations(processed_dir: str | Path) -> tuple[list[ReplayObservation], dict[str, Any]]:
@@ -353,9 +367,12 @@ def load_replay_observations(processed_dir: str | Path) -> tuple[list[ReplayObse
             usable_files += 1
 
     if not observations:
+        discovered_names = ", ".join(path.name for path in discovered_files) or "none"
         raise ReplayInputError(
             "No usable wallet-specific replay evidence found in local processed artifacts. "
-            f"Examined {files_examined} files and {records_seen} records under {Path(processed_dir)}."
+            f"Examined {files_examined} files and {records_seen} records under {Path(processed_dir)}. "
+            f"Discovered files: {discovered_names}. "
+            f"Skipped {skipped_no_wallet_specific} records without wallet-specific attribution."
         )
 
     deduped = _dedupe_observations(observations)
