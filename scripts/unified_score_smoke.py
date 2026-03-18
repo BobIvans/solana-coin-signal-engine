@@ -1,6 +1,19 @@
+from __future__ import annotations
+
+from pathlib import Path
+import sys
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from scoring.unified_score import main as _pr_sw5_main
+
+if __name__ == "__main__":
+    raise SystemExit(_pr_sw5_main())
+
 """Smoke runner for unified scoring contract (PR-6)."""
 
-from __future__ import annotations
 
 import argparse
 import json
