@@ -100,7 +100,17 @@ def test_onchain_enrichment_smoke_with_validated_registry(monkeypatch, tmp_path:
     validated_registry = tmp_path / "smart_wallets.validated.json"
     hot_registry = tmp_path / "hot_wallets.validated.json"
 
-    _write_json(shortlist, {"shortlist": [{"token_address": "mint1", "pair_created_at": "2026-03-18T11:59:00Z", "pair_address": "pair1", "symbol": "ABC", "name": "Alpha"}]})
+    _write_json(shortlist, {"shortlist": [{
+        "token_address": "mint1",
+        "pair_created_at": "2026-03-18T11:59:00Z",
+        "pair_address": "pair1",
+        "symbol": "ABC",
+        "name": "Alpha",
+        "bundle_composition_dominant": "buy-only",
+        "bundle_tip_efficiency": 0.15,
+        "bundle_failure_retry_pattern": 2,
+        "cross_block_bundle_correlation": 0.75,
+    }]})
     _write_json(x_validated, {"tokens": [{"token_address": "mint1"}]})
     _write_json(validated_registry, {
         "contract_version": "smart_wallet_registry_validated.v1",
@@ -125,6 +135,10 @@ def test_onchain_enrichment_smoke_with_validated_registry(monkeypatch, tmp_path:
     assert token["smart_wallet_tier1_hits"] == 1
     assert token["smart_wallet_watch_hits"] == 1
     assert token["smart_wallet_registry_confidence"] == "medium"
+    assert token["bundle_composition_dominant"] == "buy-only"
+    assert token["bundle_tip_efficiency"] == 0.15
+    assert token["bundle_failure_retry_pattern"] == 2
+    assert token["cross_block_bundle_correlation"] == 0.75
 
     event_lines = (tmp_path / "processed" / "onchain_enrichment_events.jsonl").read_text(encoding="utf-8").splitlines()
     assert any('"event": "wallet_registry_loaded"' in line for line in event_lines)
@@ -134,7 +148,12 @@ def test_onchain_enrichment_smoke_with_validated_registry(monkeypatch, tmp_path:
 def test_onchain_enrichment_smoke_degrades_when_registry_missing(monkeypatch, tmp_path: Path):
     shortlist = tmp_path / "shortlist.json"
     x_validated = tmp_path / "x_validated.json"
-    _write_json(shortlist, {"shortlist": [{"token_address": "mint1", "pair_created_at": "2026-03-18T11:59:00Z", "pair_address": "pair1"}]})
+    _write_json(shortlist, {"shortlist": [{
+        "token_address": "mint1",
+        "pair_created_at": "2026-03-18T11:59:00Z",
+        "pair_address": "pair1",
+        "bundle_composition_dominant": "unknown",
+    }]})
     _write_json(x_validated, {"tokens": [{"token_address": "mint1"}]})
     _patch_dependencies(monkeypatch, tmp_path)
 
@@ -150,6 +169,10 @@ def test_onchain_enrichment_smoke_degrades_when_registry_missing(monkeypatch, tm
     assert token["smart_wallet_tier1_hits"] == 0
     assert token["smart_wallet_registry_confidence"] == "low"
     assert token["smart_wallet_hit_wallets"] == ["hot1", "watch1"]
+    assert token["bundle_composition_dominant"] == "unknown"
+    assert token["bundle_tip_efficiency"] is None
+    assert token["bundle_failure_retry_pattern"] is None
+    assert token["cross_block_bundle_correlation"] is None
 
 
 def test_enriched_schema_declares_wallet_registry_fields_and_accepts_smoke_record(monkeypatch, tmp_path: Path):
@@ -158,7 +181,12 @@ def test_enriched_schema_declares_wallet_registry_fields_and_accepts_smoke_recor
     validated_registry = tmp_path / "smart_wallets.validated.json"
     hot_registry = tmp_path / "hot_wallets.validated.json"
 
-    _write_json(shortlist, {"shortlist": [{"token_address": "mint1", "pair_created_at": "2026-03-18T11:59:00Z", "pair_address": "pair1"}]})
+    _write_json(shortlist, {"shortlist": [{
+        "token_address": "mint1",
+        "pair_created_at": "2026-03-18T11:59:00Z",
+        "pair_address": "pair1",
+        "bundle_failure_retry_pattern": 1,
+    }]})
     _write_json(x_validated, {"tokens": [{"token_address": "mint1"}]})
     _write_json(validated_registry, {"contract_version": "smart_wallet_registry_validated.v1", "wallets": [{"wallet": "hot1", "new_tier": "tier_1", "new_status": "active", "registry_score": 0.9}]})
     _write_json(hot_registry, {"contract_version": "hot_wallets_validated.v1", "wallets": [{"wallet": "hot1", "new_tier": "tier_1", "new_status": "active"}]})
@@ -172,6 +200,7 @@ def test_enriched_schema_declares_wallet_registry_fields_and_accepts_smoke_recor
     token_schema = schema["properties"]["tokens"]["items"]
     required = set(token_schema["required"])
     assert {"wallet_registry_status", "smart_wallet_score_sum", "smart_wallet_registry_confidence"}.issubset(required)
+    assert {"bundle_composition_dominant", "bundle_tip_efficiency", "bundle_failure_retry_pattern", "cross_block_bundle_correlation"}.issubset(token_schema["properties"].keys())
 
     if Draft7Validator is not None:
         Draft7Validator(schema).validate(payload)

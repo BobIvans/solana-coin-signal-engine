@@ -3,6 +3,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from collectors.bundle_detector import (
+    classify_bundle_composition,
+    compute_advanced_bundle_fields,
+    compute_bundle_tip_efficiency,
+    compute_cross_block_bundle_correlation,
+    detect_bundle_failure_retry_pattern,
+)
+from collectors.discovery_engine import build_shortlist, run_discovery_once
+
 from collectors.bundle_detector import detect_bundle_metrics_for_pair, safe_null_bundle_metrics
 
 
@@ -69,3 +78,121 @@ def test_detect_bundle_metrics_is_honest_when_anchor_missing():
     result = detect_bundle_metrics_for_pair({}, now_ts=1_000, settings=DummySettings())
 
     assert result == safe_null_bundle_metrics(status="unavailable", warning="missing liquidity/pair creation anchor")
+
+
+def test_classify_bundle_composition_variants():
+    assert classify_bundle_composition([
+        {"side": "buy"},
+        {"action": "buy"},
+    ]) == "buy-only"
+    assert classify_bundle_composition([
+        {"side": "buy"},
+        {"side": "sell"},
+    ]) == "mixed"
+    assert classify_bundle_composition([
+        {"side": "sell"},
+        {"token_delta": -5},
+    ]) == "sell-only"
+    assert classify_bundle_composition([{}, {"status": "confirmed"}]) == "unknown"
+
+
+def test_compute_bundle_tip_efficiency_requires_honest_evidence():
+    records = [
+        {"tip_amount": 0.2, "bundle_value": 100},
+        {"tip_amount": 0.1, "bundle_value": 50},
+    ]
+    assert compute_bundle_tip_efficiency(records) == 0.002
+    assert compute_bundle_tip_efficiency([{"bundle_value": 100}]) is None
+    assert compute_bundle_tip_efficiency([{"tip_amount": 0.1}]) is None
+
+
+def test_detect_bundle_failure_retry_pattern_counts_retries():
+    assert detect_bundle_failure_retry_pattern([
+        {"wallet": "w1", "status": "confirmed", "timestamp": 10},
+    ]) == 0
+    assert detect_bundle_failure_retry_pattern([
+        {"wallet": "w1", "status": "failed", "timestamp": 10},
+        {"wallet": "w1", "status": "retry", "timestamp": 20},
+        {"wallet": "w1", "status": "confirmed", "timestamp": 25},
+        {"wallet": "w2", "status": "failed", "timestamp": 30},
+        {"wallet": "w2", "status": "retry", "timestamp": 40},
+    ]) == 3
+    assert detect_bundle_failure_retry_pattern([{"wallet": "w1"}]) is None
+
+
+def test_compute_cross_block_bundle_correlation_variants():
+    assert compute_cross_block_bundle_correlation([
+        {"wallet": "solo", "slot": 101},
+    ]) == 0.0
+    assert compute_cross_block_bundle_correlation([
+        {"wallet": "actor", "slot": 101},
+        {"wallet": "actor", "slot": 102},
+        {"wallet": "actor", "slot": 104},
+    ]) == 1.0
+    assert compute_cross_block_bundle_correlation([
+        {"wallet": "actor", "slot": 101},
+        {"wallet": "actor", "slot": 110},
+    ]) == 0.0
+    assert compute_cross_block_bundle_correlation([{"wallet": "actor"}]) is None
+
+
+def test_compute_advanced_bundle_fields_uses_unknown_and_none_when_missing():
+    out = compute_advanced_bundle_fields(candidate={"bundle_size_value": None}, raw_pair={})
+    assert out == {
+        "bundle_composition_dominant": "unknown",
+        "bundle_tip_efficiency": None,
+        "bundle_failure_retry_pattern": None,
+        "cross_block_bundle_correlation": None,
+    }
+
+
+def test_discovery_smoke_enriches_candidates_and_shortlist(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("RAW_DATA_DIR", str(tmp_path / "raw"))
+    monkeypatch.setenv("PROCESSED_DATA_DIR", str(tmp_path / "processed"))
+    monkeypatch.setenv("SMOKE_DIR", str(tmp_path / "smoke"))
+    monkeypatch.setenv("X_MAX_TOKENS_PER_CYCLE", "2")
+
+    raw_pair = {
+        "pairAddress": "pair-1",
+        "chainId": "solana",
+        "dexId": "raydium",
+        "pairCreatedAt": 900,
+        "baseToken": {"address": "mint-1", "symbol": "BNDL", "name": "Bundle Coin"},
+        "priceUsd": "0.1",
+        "fdv": 300000,
+        "marketCap": 0,
+        "liquidity": {"usd": 25000},
+        "volume": {"m5": 10000, "h1": 12000},
+        "txns": {"m5": {"buys": 15, "sells": 10}},
+        "bundle_activity": [
+            {"wallet": "actor-1", "side": "buy", "tip_amount": 0.2, "bundle_value": 100, "status": "failed", "timestamp": 905, "slot": 1001},
+            {"wallet": "actor-1", "side": "buy", "tip_amount": 0.1, "bundle_value": 50, "status": "retry", "timestamp": 915, "slot": 1002},
+            {"wallet": "actor-1", "side": "buy", "tip_amount": 0.05, "bundle_value": 25, "status": "confirmed", "timestamp": 925, "slot": 1004},
+        ],
+    }
+
+    monkeypatch.setattr("collectors.discovery_engine.fetch_latest_solana_pairs", lambda: [raw_pair])
+    monkeypatch.setattr("collectors.discovery_engine.utc_now_ts", lambda: 1000)
+    monkeypatch.setattr("collectors.discovery_engine.utc_now_iso", lambda: "2026-03-18T12:00:00Z")
+
+    result = run_discovery_once()
+
+    candidate = result["candidates"]["candidates"][0]
+    shortlist_item = result["shortlist"]["shortlist"][0]
+
+    for row in (candidate, shortlist_item):
+        assert row["bundle_composition_dominant"] == "buy-only"
+        assert row["bundle_tip_efficiency"] == 0.002
+        assert row["bundle_failure_retry_pattern"] == 2
+        assert row["cross_block_bundle_correlation"] == 1.0
+
+
+def test_build_shortlist_preserves_missing_advanced_fields_without_crash():
+    shortlist = build_shortlist([
+        {"token_address": "tok-1", "pair_address": "pair-1", "fast_prescore": 50, "volume_m5": 10},
+    ], top_k=1)
+    item = shortlist[0]
+    assert item["bundle_composition_dominant"] is None
+    assert item["bundle_tip_efficiency"] is None
+    assert item["bundle_failure_retry_pattern"] is None
+    assert item["cross_block_bundle_correlation"] is None

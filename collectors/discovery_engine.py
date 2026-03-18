@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from analytics.fast_prescore import compute_fast_prescore, fast_priority_bucket
+from collectors.bundle_detector import compute_advanced_bundle_fields
 from collectors.bundle_detector import detect_bundle_metrics_for_pair, safe_null_bundle_metrics
 from collectors.dexscreener_client import fetch_latest_solana_pairs, normalize_pair
 from config.settings import load_settings
@@ -139,6 +140,7 @@ def run_discovery_once() -> dict[str, Any]:
             "filter_reason": reason,
         }
         candidate["fast_priority_bucket"] = fast_priority_bucket(float(candidate["fast_prescore"]))
+        candidate.update(compute_advanced_bundle_fields(candidate=candidate, raw_pair=raw_pair))
         candidates.append(candidate)
 
     ranked = rank_candidates(candidates)

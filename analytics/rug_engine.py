@@ -64,6 +64,14 @@ def assess_rug_risk(token_ctx: dict, settings: Any) -> dict[str, Any]:
     flags = authority["authority_flags"] + lp["lp_flags"] + concentration["concentration_flags"] + dev["dev_flags"]
     warnings = lp["lp_warnings"] + dev["dev_warnings"]
 
+    bundle_composition = str(token_ctx.get("bundle_composition_dominant") or "unknown").lower()
+    retry_pattern = token_ctx.get("bundle_failure_retry_pattern")
+    retry_count = int(retry_pattern) if isinstance(retry_pattern, (int, float)) else 0
+    if bundle_composition == "sell-only":
+        warnings.append("bundle_sell_only_flow")
+    if retry_count >= 2:
+        warnings.append("bundle_retry_pattern_severe")
+
     status = "ok"
     critical_missing = []
     for key in ("top1_holder_share", "top20_holder_share"):
