@@ -183,3 +183,41 @@ def test_cli_reports_written_paths(tmp_path: Path):
     assert watch_path.as_posix() in completed.stdout
     assert hot_path.as_posix() in completed.stdout
     assert event_path.as_posix() in completed.stdout
+
+
+def test_cli_reports_zero_summary_for_empty_input(tmp_path: Path):
+    in_path = tmp_path / "normalized_wallet_candidates.json"
+    out_path = tmp_path / "smart_wallets.json"
+    watch_path = tmp_path / "active_watchlist.json"
+    hot_path = tmp_path / "hot_wallets.json"
+    event_path = tmp_path / "filter_events.jsonl"
+    _write_input(in_path, [])
+
+    import subprocess
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/build_wallet_registry.py",
+            "--in",
+            str(in_path),
+            "--out",
+            str(out_path),
+            "--watch-out",
+            str(watch_path),
+            "--hot-out",
+            str(hot_path),
+            "--event-log",
+            str(event_path),
+            "--generated-at",
+            "2024-01-02T00:00:00Z",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "total_candidates=0 kept=0 rejected=0 active=0 watch=0" in completed.stdout
+    assert json.loads(out_path.read_text(encoding="utf-8"))["wallets"] == []
+    assert json.loads(watch_path.read_text(encoding="utf-8"))["wallets"] == []
+    assert json.loads(hot_path.read_text(encoding="utf-8"))["wallets"] == []

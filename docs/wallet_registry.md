@@ -150,7 +150,7 @@ Optional bounds:
 - `--event-log data/registry/filter_events.jsonl`
 - `--generated-at 2024-01-01T00:00:00Z`
 
-The CLI prints a post-run summary and the written output paths. To inspect the JSON artifacts locally, use a reader such as `cat`, `jq`, or `python -m json.tool` rather than executing the `.json` files as shell commands.
+The CLI prints a post-run summary and the written output paths. When the normalized input is empty, the summary reports zero candidates and still writes deterministic empty registry/watch/hot artifacts. To inspect the JSON artifacts locally, use a reader such as `cat`, `jq`, or `python -m json.tool` rather than executing the `.json` files as shell commands.
 
 ## What this PR does not do yet
 
