@@ -35,6 +35,13 @@ _MATRIX_NUMERIC_FIELDS = [
     "mae_pct",
     "x_validation_score_entry",
     "x_validation_delta_entry",
+    "net_unique_buyers_60s",
+    "liquidity_refill_ratio_120s",
+    "cluster_sell_concentration_120s",
+    "smart_wallet_dispersion_score",
+    "x_author_velocity_5m",
+    "seller_reentry_ratio",
+    "liquidity_shock_recovery_sec",
 ]
 
 _MATRIX_CATEGORICAL_FIELDS = [

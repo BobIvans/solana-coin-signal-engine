@@ -88,3 +88,4 @@ def test_wallet_registry_bias_counts_are_deterministic_and_capped():
     assert first["smart_wallet_registry_confidence"] == "high"
     assert first["smart_wallet_conviction_bonus"] <= CONVICTION_BONUS_CAP
     assert first["smart_wallet_netflow_bias"] is None
+    assert first["smart_wallet_dispersion_score"] > 0

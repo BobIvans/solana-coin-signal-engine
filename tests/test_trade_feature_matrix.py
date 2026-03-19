@@ -44,6 +44,13 @@ REQUIRED_MATRIX_KEYS = [
     "volume_velocity_entry",
     "holder_growth_5m_entry",
     "smart_wallet_hits_entry",
+    "net_unique_buyers_60s",
+    "liquidity_refill_ratio_120s",
+    "cluster_sell_concentration_120s",
+    "smart_wallet_dispersion_score",
+    "x_author_velocity_5m",
+    "seller_reentry_ratio",
+    "liquidity_shock_recovery_sec",
     "x_status",
     "x_validation_score_entry",
     "x_validation_delta_entry",
@@ -165,6 +172,9 @@ def test_trade_feature_matrix_handles_legacy_payloads_with_null_safe_placeholder
     assert row["entry_confidence"] is None
     assert row["recommended_position_pct"] is None
     assert row["bundle_count_first_60s"] is None
+    assert row["net_unique_buyers_60s"] is None
+    assert row["x_author_velocity_5m"] is None
+    assert row["liquidity_shock_recovery_sec"] is None
     assert row["exit_decision"] is None
     assert row["gross_pnl_pct"] is None
     assert row["schema_version"] == "trade_feature_matrix.v1"
@@ -207,6 +217,13 @@ def test_trade_feature_matrix_preserves_enriched_payload_fields():
                     "volume_velocity": 4.2,
                     "holder_growth_5m": 18,
                     "smart_wallet_hits": 4,
+                    "net_unique_buyers_60s": 6,
+                    "liquidity_refill_ratio_120s": 0.8,
+                    "cluster_sell_concentration_120s": 0.62,
+                    "smart_wallet_dispersion_score": 0.55,
+                    "x_author_velocity_5m": 0.6,
+                    "seller_reentry_ratio": 0.25,
+                    "liquidity_shock_recovery_sec": 45,
                     "x_validation_delta": 11,
                 },
                 "x_status": "ok",
@@ -257,6 +274,10 @@ def test_trade_feature_matrix_preserves_enriched_payload_fields():
     assert row["smart_wallet_score_sum"] == 14.5
     assert row["smart_wallet_tier1_hits"] == 2
     assert row["smart_wallet_netflow_bias"] == 0.35
+    assert row["net_unique_buyers_60s"] == 6
+    assert row["smart_wallet_dispersion_score"] == 0.55
+    assert row["x_author_velocity_5m"] == 0.6
+    assert row["liquidity_shock_recovery_sec"] == 45
 
 
 def test_trade_feature_matrix_smoke_file_exists_for_replay_run():

@@ -135,6 +135,7 @@ def test_onchain_enrichment_smoke_with_validated_registry(monkeypatch, tmp_path:
     assert token["smart_wallet_tier1_hits"] == 1
     assert token["smart_wallet_watch_hits"] == 1
     assert token["smart_wallet_registry_confidence"] == "medium"
+    assert token["smart_wallet_dispersion_score"] == 0.333333
     assert token["bundle_composition_dominant"] == "buy-only"
     assert token["bundle_tip_efficiency"] == 0.15
     assert token["bundle_failure_retry_pattern"] == 2
@@ -168,6 +169,7 @@ def test_onchain_enrichment_smoke_degrades_when_registry_missing(monkeypatch, tm
     assert token["smart_wallet_score_sum"] == 0.0
     assert token["smart_wallet_tier1_hits"] == 0
     assert token["smart_wallet_registry_confidence"] == "low"
+    assert token["smart_wallet_dispersion_score"] is None
     assert token["smart_wallet_hit_wallets"] == ["hot1", "watch1"]
     assert token["bundle_composition_dominant"] == "unknown"
     assert token["bundle_tip_efficiency"] is None
@@ -199,7 +201,7 @@ def test_enriched_schema_declares_wallet_registry_fields_and_accepts_smoke_recor
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
     token_schema = schema["properties"]["tokens"]["items"]
     required = set(token_schema["required"])
-    assert {"wallet_registry_status", "smart_wallet_score_sum", "smart_wallet_registry_confidence"}.issubset(required)
+    assert {"wallet_registry_status", "smart_wallet_score_sum", "smart_wallet_registry_confidence", "net_unique_buyers_60s", "x_author_velocity_5m", "liquidity_shock_recovery_sec"}.issubset(required)
     assert {"bundle_composition_dominant", "bundle_tip_efficiency", "bundle_failure_retry_pattern", "cross_block_bundle_correlation"}.issubset(token_schema["properties"].keys())
 
     if Draft7Validator is not None:

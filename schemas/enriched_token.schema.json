@@ -45,6 +45,13 @@
           "smart_wallet_netflow_bias",
           "smart_wallet_conviction_bonus",
           "smart_wallet_registry_confidence",
+          "net_unique_buyers_60s",
+          "liquidity_refill_ratio_120s",
+          "cluster_sell_concentration_120s",
+          "smart_wallet_dispersion_score",
+          "x_author_velocity_5m",
+          "seller_reentry_ratio",
+          "liquidity_shock_recovery_sec",
           "enrichment_status",
           "enrichment_warnings",
           "enriched_at",
@@ -285,6 +292,48 @@
           },
           "contract_version": {
             "type": "string"
+          },
+          "net_unique_buyers_60s": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "liquidity_refill_ratio_120s": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "cluster_sell_concentration_120s": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "smart_wallet_dispersion_score": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "x_author_velocity_5m": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "seller_reentry_ratio": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "liquidity_shock_recovery_sec": {
+            "type": [
+              "integer",
+              "null"
+            ]
           }
         }
       }
