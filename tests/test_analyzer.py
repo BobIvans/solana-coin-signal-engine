@@ -68,3 +68,7 @@ def test_run_post_run_analysis_outputs(tmp_path):
     assert Path(result["summary_path"]).exists()
     assert Path(result["recommendations_path"]).exists()
     assert Path(result["report_path"]).exists()
+
+    summary = json.loads(Path(result["summary_path"]).read_text(encoding="utf-8"))
+    assert summary["matrix_analysis_available"] is False
+    assert "matrix_input_missing" in summary["warnings"]
