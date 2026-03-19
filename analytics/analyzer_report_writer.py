@@ -31,6 +31,19 @@ def _append_slice_lines(lines: list[str], rows: list[dict[str, Any]]) -> None:
         )
 
 
+def _append_numeric_summary(lines: list[str], label: str, summary: dict[str, Any]) -> None:
+    lines.append(
+        "- {label}: count={count} avg={avg} median={median} min={minv} max={maxv}".format(
+            label=label,
+            count=summary.get("count", 0),
+            avg=_fmt_float(summary.get("avg")),
+            median=_fmt_float(summary.get("median")),
+            minv=_fmt_float(summary.get("min")),
+            maxv=_fmt_float(summary.get("max")),
+        )
+    )
+
+
 def write_markdown_report(summary: dict[str, Any], recommendations: dict[str, Any], output_path: str) -> None:
     lines: list[str] = ["# Post-run analyzer report", ""]
 
@@ -88,6 +101,28 @@ def write_markdown_report(summary: dict[str, Any], recommendations: dict[str, An
         lines.append(
             f"- {name}: count={bucket.get('count', 0)} avg_net_pnl_pct={float(bucket.get('avg_net_pnl_pct', 0.0)):.4f} winrate={float(bucket.get('winrate', 0.0)):.4f}"
         )
+
+    lines += [_section("calibration-only outcome summaries")]
+    scalp_vs_trend = summary.get("scalp_vs_trend_outcome_summary", {})
+    for regime in ("SCALP", "TREND"):
+        regime_summary = scalp_vs_trend.get(regime, {})
+        lines.append(f"- {regime}: count={regime_summary.get('count', 0)}")
+        for field in ("time_to_first_profit_sec", "mfe_pct_240s", "mae_pct_240s", "trend_survival_15m", "trend_survival_60m"):
+            _append_numeric_summary(lines, f"{regime}.{field}", regime_summary.get(field, {}))
+
+    lines.append("- overall time_to_first_profit_summary:")
+    time_to_first_profit = summary.get("time_to_first_profit_summary", {})
+    _append_numeric_summary(lines, "overall", time_to_first_profit.get("overall", {}))
+    for regime, regime_summary in time_to_first_profit.get("by_regime", {}).items():
+        _append_numeric_summary(lines, f"by_regime.{regime}", regime_summary)
+
+    lines.append("- mfe_mae_summary:")
+    for field, field_summary in summary.get("mfe_mae_summary", {}).items():
+        _append_numeric_summary(lines, field, field_summary)
+
+    lines.append("- trend_survival_summary:")
+    for field, field_summary in summary.get("trend_survival_summary", {}).items():
+        _append_numeric_summary(lines, field, field_summary)
 
     lines += [_section("strongest positive/negative feature slices"), "- strongest positive slices:"]
     _append_slice_lines(lines, summary.get("top_positive_feature_slices", []))

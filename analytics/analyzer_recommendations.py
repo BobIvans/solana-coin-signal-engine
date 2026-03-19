@@ -136,6 +136,8 @@ def generate_recommendations(
         regime_confusion = summary.get("regime_confusion_summary", {})
         trend_failed = summary.get("trend_failure_summary", {})
         scalp_missed = summary.get("scalp_missed_trend_summary", {})
+        scalp_vs_trend_outcomes = summary.get("scalp_vs_trend_outcome_summary", {})
+        trend_survival_summary = summary.get("trend_survival_summary", {})
         pattern_slices = summary.get("pattern_expectancy_slices", {})
 
         if int(trend_failed.get("count", 0)) >= min_sample and float(trend_failed.get("avg_net_pnl_pct", 0.0)) < 0:
@@ -157,6 +159,44 @@ def generate_recommendations(
                     "allow_more_trend_follow_through_when_continuation_evidence_is_present",
                     0.69,
                     "SCALP entries left material MFE uncaptured despite trend-like continuation evidence",
+                )
+            )
+
+        scalp_survival = float(scalp_vs_trend_outcomes.get("SCALP", {}).get("trend_survival_15m", {}).get("avg") or 0.0)
+        trend_survival = float(scalp_vs_trend_outcomes.get("TREND", {}).get("trend_survival_15m", {}).get("avg") or 0.0)
+        if trend_survival >= 0.0 and scalp_survival >= 0.0 and trend_survival + 0.20 < scalp_survival:
+            recommendations.append(
+                _mk_rec(
+                    "matrix_calibration_observation",
+                    "SCALP runners",
+                    "review_scalp_exit_capture_for_longer_follow_through",
+                    0.62,
+                    "SCALP trades are surviving above entry longer than TREND trades in the 15m hindsight window",
+                )
+            )
+
+        fast_profit_summary = summary.get("time_to_first_profit_summary", {}).get("by_regime", {})
+        scalp_fast_profit = float(fast_profit_summary.get("SCALP", {}).get("avg") or 0.0)
+        trend_fast_profit = float(fast_profit_summary.get("TREND", {}).get("avg") or 0.0)
+        if scalp_fast_profit > 0 and trend_fast_profit > 0 and trend_fast_profit + 30 < scalp_fast_profit:
+            recommendations.append(
+                _mk_rec(
+                    "matrix_calibration_observation",
+                    "slow starters",
+                    "review_trend-promotion patience versus quick-scalp assumptions",
+                    0.58,
+                    "TREND trades are reaching first profit materially faster than SCALP trades in hindsight",
+                )
+            )
+
+        if int(trend_survival_summary.get("trend_survival_60m", {}).get("count", 0)) >= min_sample and float(trend_survival_summary.get("trend_survival_60m", {}).get("avg") or 0.0) < 0.25:
+            recommendations.append(
+                _mk_rec(
+                    "matrix_calibration_observation",
+                    "TREND longevity",
+                    "review failed promotions that could not hold above entry across the 60m window",
+                    0.6,
+                    "Long-window trend survival is weak in hindsight, suggesting many promoted trends failed early",
                 )
             )
 

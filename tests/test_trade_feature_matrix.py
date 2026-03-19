@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 
 REQUIRED_MATRIX_KEYS = [
@@ -75,6 +77,11 @@ REQUIRED_MATRIX_KEYS = [
     "net_pnl_pct",
     "mfe_pct",
     "mae_pct",
+    "time_to_first_profit_sec",
+    "mfe_pct_240s",
+    "mae_pct_240s",
+    "trend_survival_15m",
+    "trend_survival_60m",
     "wallet_weighting",
     "dry_run",
     "synthetic_trade_flag",
@@ -259,6 +266,57 @@ def test_trade_feature_matrix_preserves_enriched_payload_fields():
     assert row["smart_wallet_netflow_bias"] == 0.35
 
 
+def test_trade_feature_matrix_calibration_metrics_are_none_without_path_evidence():
+    rows, _summary = _run_replay(
+        "matrix_calibration_none",
+        [
+            {
+                "token_address": "tok_none",
+                "pair_address": "pair_none",
+                "decision": "paper_enter",
+                "price": 1.0,
+            }
+        ],
+    )
+
+    row = rows[0]
+    assert row["time_to_first_profit_sec"] is None
+    assert row["mfe_pct_240s"] is None
+    assert row["mae_pct_240s"] is None
+    assert row["trend_survival_15m"] is None
+    assert row["trend_survival_60m"] is None
+
+
+def test_trade_feature_matrix_derives_calibration_metrics_from_price_path():
+    rows, _summary = _run_replay(
+        "matrix_calibration_path",
+        [
+            {
+                "token_address": "tok_path",
+                "pair_address": "pair_path",
+                "decision": "paper_enter",
+                "price": 1.0,
+                "price_path": [
+                    {"offset_sec": 0, "price": 1.0},
+                    {"offset_sec": 15, "price": 0.97},
+                    {"offset_sec": 45, "price": 1.03},
+                    {"offset_sec": 180, "price": 1.12},
+                    {"offset_sec": 240, "price": 1.08},
+                    {"offset_sec": 900, "price": 1.05},
+                    {"offset_sec": 3600, "price": 0.98},
+                ],
+            }
+        ],
+    )
+
+    row = rows[0]
+    assert row["time_to_first_profit_sec"] == 45.0
+    assert row["mfe_pct_240s"] == pytest.approx(12.0)
+    assert row["mae_pct_240s"] == pytest.approx(-3.0)
+    assert row["trend_survival_15m"] == pytest.approx(0.95)
+    assert row["trend_survival_60m"] == pytest.approx(0.2375)
+
+
 def test_trade_feature_matrix_smoke_file_exists_for_replay_run():
     rows, _summary = _run_replay(
         "matrix_smoke_exists",
@@ -268,3 +326,33 @@ def test_trade_feature_matrix_smoke_file_exists_for_replay_run():
     matrix_path = ROOT / "runs" / "matrix_smoke_exists" / "trade_feature_matrix.jsonl"
     assert matrix_path.exists()
     assert len(rows) == 1
+
+
+def test_calibration_metrics_remain_matrix_only_and_do_not_change_replay_decisions():
+    run_id = "matrix_only_calibration_metrics"
+    rows, _summary = _run_replay(
+        run_id,
+        [
+            {
+                "token_address": "tok_guard",
+                "pair_address": "pair_guard",
+                "decision": "paper_enter",
+                "price": 1.0,
+                "price_path": [
+                    {"offset_sec": 0, "price": 1.0},
+                    {"offset_sec": 30, "price": 1.02},
+                    {"offset_sec": 240, "price": 1.05},
+                ],
+            }
+        ],
+    )
+
+    signal = json.loads((ROOT / "runs" / run_id / "signals.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    trade = json.loads((ROOT / "runs" / run_id / "trades.jsonl").read_text(encoding="utf-8").splitlines()[0])
+
+    assert signal["decision"] == "paper_enter"
+    assert trade["side"] == "buy"
+    assert "time_to_first_profit_sec" not in signal
+    assert "mfe_pct_240s" not in signal
+    assert "trend_survival_15m" not in trade
+    assert rows[0]["time_to_first_profit_sec"] == 30.0

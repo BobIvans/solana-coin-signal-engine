@@ -17,6 +17,7 @@ from analytics.analyzer_metrics import (
 )
 from analytics.analyzer_recommendations import generate_recommendations
 from analytics.analyzer_report_writer import write_markdown_report
+from src.replay.calibration_metrics import derive_outcome_metrics
 from analytics.analyzer_slices import bucketize_metric, slice_positions
 from analytics.config_suggestions import write_config_suggestions
 from config.settings import Settings
@@ -99,6 +100,7 @@ def _derive_lifecycle_from_trades(trades: list[dict[str, Any]]) -> list[dict[str
         net_pnl_pct = (net_pnl_sol / entry_value * 100) if entry_value > 0 else float(final_exit.get("net_pnl_pct", 0.0))
 
         snapshot = entry.get("entry_snapshot", {}) if isinstance(entry.get("entry_snapshot"), dict) else {}
+        calibration_metrics = derive_outcome_metrics(entry, snapshot)
 
         positions.append(
             {
@@ -125,6 +127,7 @@ def _derive_lifecycle_from_trades(trades: list[dict[str, Any]]) -> list[dict[str
                 "entry_confidence": entry.get("entry_confidence", snapshot.get("entry_confidence")),
                 "entry_snapshot": snapshot,
                 **{metric: entry.get(metric, snapshot.get(metric)) for metric in _REQUIRED_METRICS},
+                **{metric: entry.get(metric, snapshot.get(metric, calibration_metrics.get(metric))) for metric in calibration_metrics},
                 "first_exit_reason": first_exit.get("exit_reason", "unknown"),
             }
         )
@@ -141,6 +144,8 @@ def _reconstruct_closed_positions(trades: list[dict[str, Any]], positions_state:
     for row in positions_state:
         if str(row.get("status", "")).lower() != "closed":
             continue
+        snapshot = row.get("entry_snapshot", {}) if isinstance(row.get("entry_snapshot"), dict) else {}
+        calibration_metrics = derive_outcome_metrics(row, snapshot)
         fallback.append(
             {
                 "position_id": row.get("position_id", "unknown"),
@@ -164,8 +169,9 @@ def _reconstruct_closed_positions(trades: list[dict[str, Any]], positions_state:
                 "liquidity_usd": row.get("liquidity_usd"),
                 "final_score": row.get("final_score"),
                 "entry_confidence": row.get("entry_confidence"),
-                "entry_snapshot": row.get("entry_snapshot", {}),
-                **{metric: row.get(metric, row.get("entry_snapshot", {}).get(metric)) for metric in _REQUIRED_METRICS},
+                "entry_snapshot": snapshot,
+                **{metric: row.get(metric, snapshot.get(metric)) for metric in _REQUIRED_METRICS},
+                **{metric: row.get(metric, snapshot.get(metric, calibration_metrics.get(metric))) for metric in calibration_metrics},
             }
         )
     return fallback
@@ -271,6 +277,10 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
         "regime_confusion_summary": matrix_analysis.get("regime_confusion_summary", {}),
         "trend_failure_summary": matrix_analysis.get("trend_failure_summary", {}),
         "scalp_missed_trend_summary": matrix_analysis.get("scalp_missed_trend_summary", {}),
+        "scalp_vs_trend_outcome_summary": matrix_analysis.get("scalp_vs_trend_outcome_summary", {}),
+        "time_to_first_profit_summary": matrix_analysis.get("time_to_first_profit_summary", {}),
+        "mfe_mae_summary": matrix_analysis.get("mfe_mae_summary", {}),
+        "trend_survival_summary": matrix_analysis.get("trend_survival_summary", {}),
         "pattern_expectancy_slices": matrix_analysis.get("pattern_expectancy_slices", {}),
         "top_positive_feature_slices": matrix_analysis.get("top_positive_feature_slices", []),
         "top_negative_feature_slices": matrix_analysis.get("top_negative_feature_slices", []),
