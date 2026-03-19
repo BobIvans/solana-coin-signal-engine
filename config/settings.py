@@ -153,6 +153,11 @@ class Settings:
     EXIT_TREND_PARTIAL2_PCT: float
     EXIT_CLUSTER_DUMP_HARD: float
     EXIT_CLUSTER_CONCENTRATION_SELL_THRESHOLD: float
+    EXIT_CLUSTER_SELL_CONCENTRATION_WARN: float
+    EXIT_CLUSTER_SELL_CONCENTRATION_HARD: float
+    EXIT_LIQUIDITY_REFILL_FAIL_MIN: float
+    EXIT_SELLER_REENTRY_WEAK_MAX: float
+    EXIT_SHOCK_RECOVERY_TOO_SLOW_SEC: int
     EXIT_BUNDLE_FAILURE_SPIKE_THRESHOLD: float
     EXIT_RETRY_MANIPULATION_HARD: float
     EXIT_CREATOR_CLUSTER_RISK_HARD: float
@@ -693,6 +698,26 @@ def load_settings() -> Settings:
         EXIT_CLUSTER_CONCENTRATION_SELL_THRESHOLD=_as_unit_float(
             _get_env(merged, "EXIT_CLUSTER_CONCENTRATION_SELL_THRESHOLD", "0.65"),
             key="EXIT_CLUSTER_CONCENTRATION_SELL_THRESHOLD",
+        ),
+        EXIT_CLUSTER_SELL_CONCENTRATION_WARN=_as_unit_float(
+            _get_env(merged, "EXIT_CLUSTER_SELL_CONCENTRATION_WARN", "0.72"),
+            key="EXIT_CLUSTER_SELL_CONCENTRATION_WARN",
+        ),
+        EXIT_CLUSTER_SELL_CONCENTRATION_HARD=_as_unit_float(
+            _get_env(merged, "EXIT_CLUSTER_SELL_CONCENTRATION_HARD", "0.78"),
+            key="EXIT_CLUSTER_SELL_CONCENTRATION_HARD",
+        ),
+        EXIT_LIQUIDITY_REFILL_FAIL_MIN=_as_positive_float(
+            _get_env(merged, "EXIT_LIQUIDITY_REFILL_FAIL_MIN", "0.85"),
+            key="EXIT_LIQUIDITY_REFILL_FAIL_MIN",
+        ),
+        EXIT_SELLER_REENTRY_WEAK_MAX=_as_positive_float(
+            _get_env(merged, "EXIT_SELLER_REENTRY_WEAK_MAX", "0.20"),
+            key="EXIT_SELLER_REENTRY_WEAK_MAX",
+        ),
+        EXIT_SHOCK_RECOVERY_TOO_SLOW_SEC=_as_positive_int(
+            _get_env(merged, "EXIT_SHOCK_RECOVERY_TOO_SLOW_SEC", "180"),
+            key="EXIT_SHOCK_RECOVERY_TOO_SLOW_SEC",
         ),
         EXIT_BUNDLE_FAILURE_SPIKE_THRESHOLD=_as_positive_float(
             _get_env(merged, "EXIT_BUNDLE_FAILURE_SPIKE_THRESHOLD", "2.0"),

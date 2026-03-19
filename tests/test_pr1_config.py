@@ -90,6 +90,11 @@ def test_exit_settings_load(monkeypatch):
     monkeypatch.setenv("EXIT_TREND_BUY_PRESSURE_FLOOR", "0.50")
     monkeypatch.setenv("EXIT_CLUSTER_DUMP_HARD", "0.82")
     monkeypatch.setenv("EXIT_CLUSTER_CONCENTRATION_SELL_THRESHOLD", "0.65")
+    monkeypatch.setenv("EXIT_CLUSTER_SELL_CONCENTRATION_WARN", "0.72")
+    monkeypatch.setenv("EXIT_CLUSTER_SELL_CONCENTRATION_HARD", "0.78")
+    monkeypatch.setenv("EXIT_LIQUIDITY_REFILL_FAIL_MIN", "0.85")
+    monkeypatch.setenv("EXIT_SELLER_REENTRY_WEAK_MAX", "0.20")
+    monkeypatch.setenv("EXIT_SHOCK_RECOVERY_TOO_SLOW_SEC", "180")
     monkeypatch.setenv("EXIT_BUNDLE_FAILURE_SPIKE_THRESHOLD", "2.0")
     monkeypatch.setenv("EXIT_RETRY_MANIPULATION_HARD", "5.0")
     monkeypatch.setenv("EXIT_CREATOR_CLUSTER_RISK_HARD", "0.75")
@@ -101,6 +106,11 @@ def test_exit_settings_load(monkeypatch):
     assert 0 <= settings.EXIT_TREND_BUY_PRESSURE_FLOOR <= 1
     assert 0 <= settings.EXIT_CLUSTER_DUMP_HARD <= 1
     assert 0 <= settings.EXIT_CLUSTER_CONCENTRATION_SELL_THRESHOLD <= 1
+    assert 0 <= settings.EXIT_CLUSTER_SELL_CONCENTRATION_WARN <= 1
+    assert 0 <= settings.EXIT_CLUSTER_SELL_CONCENTRATION_HARD <= 1
+    assert settings.EXIT_LIQUIDITY_REFILL_FAIL_MIN > 0
+    assert settings.EXIT_SELLER_REENTRY_WEAK_MAX > 0
+    assert settings.EXIT_SHOCK_RECOVERY_TOO_SLOW_SEC > 0
     assert settings.EXIT_BUNDLE_FAILURE_SPIKE_THRESHOLD > 0
     assert settings.EXIT_RETRY_MANIPULATION_HARD > 0
     assert 0 <= settings.EXIT_CREATOR_CLUSTER_RISK_HARD <= 1

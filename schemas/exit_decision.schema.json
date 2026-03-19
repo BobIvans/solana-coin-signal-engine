@@ -169,6 +169,42 @@
             "null"
           ]
         },
+        "liquidity_refill_ratio_120s": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "seller_reentry_ratio": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "liquidity_shock_recovery_sec": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "net_unique_buyers_60s": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "smart_wallet_dispersion_score": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "x_author_velocity_5m": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "bundle_failure_retry_pattern_now": {
           "type": [
             "number",
