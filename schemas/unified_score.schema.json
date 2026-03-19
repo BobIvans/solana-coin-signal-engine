@@ -147,6 +147,41 @@
       "minimum": 0,
       "maximum": 4
     },
+    "organic_buyer_flow_bonus": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2.5
+    },
+    "liquidity_refill_bonus": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2
+    },
+    "smart_wallet_dispersion_bonus": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1.75
+    },
+    "x_author_velocity_bonus": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1.5
+    },
+    "seller_reentry_bonus": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1.5
+    },
+    "shock_recovery_bonus": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2
+    },
+    "cluster_distribution_risk_penalty": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2.5
+    },
     "bundle_sell_heavy_penalty": {
       "type": "number",
       "minimum": 0,
@@ -220,7 +255,7 @@
     },
     "net_unique_buyers_60s": {
       "type": [
-        "integer",
+        "number",
         "null"
       ]
     },
@@ -256,7 +291,7 @@
     },
     "liquidity_shock_recovery_sec": {
       "type": [
-        "integer",
+        "number",
         "null"
       ]
     }
