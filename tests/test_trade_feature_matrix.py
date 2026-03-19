@@ -37,6 +37,8 @@ REQUIRED_MATRIX_KEYS = [
     "organic_multi_cluster_bonus",
     "single_cluster_penalty",
     "creator_cluster_penalty",
+    "cluster_dev_link_penalty",
+    "shared_funder_penalty",
     "bundle_sell_heavy_penalty",
     "retry_manipulation_penalty",
     "age_sec",
@@ -69,6 +71,21 @@ REQUIRED_MATRIX_KEYS = [
     "cluster_concentration_ratio",
     "num_unique_clusters_first_60s",
     "creator_in_cluster_flag",
+    "creator_dev_link_score",
+    "creator_buyer_link_score",
+    "dev_buyer_link_score",
+    "shared_funder_link_score",
+    "creator_cluster_link_score",
+    "cluster_dev_link_score",
+    "linkage_risk_score",
+    "creator_funder_overlap_count",
+    "buyer_funder_overlap_count",
+    "funder_overlap_count",
+    "linkage_reason_codes",
+    "linkage_confidence",
+    "linkage_metric_origin",
+    "linkage_status",
+    "linkage_warning",
     "smart_wallet_score_sum",
     "smart_wallet_tier1_hits",
     "smart_wallet_tier2_hits",
@@ -215,6 +232,8 @@ def test_trade_feature_matrix_preserves_enriched_payload_fields():
                 "organic_multi_cluster_bonus": 1.4,
                 "single_cluster_penalty": 0.0,
                 "creator_cluster_penalty": 0.0,
+                "cluster_dev_link_penalty": 0.8,
+                "shared_funder_penalty": 0.6,
                 "bundle_sell_heavy_penalty": 0.0,
                 "retry_manipulation_penalty": 0.3,
                 "features": {
@@ -249,6 +268,21 @@ def test_trade_feature_matrix_preserves_enriched_payload_fields():
                     "cluster_concentration_ratio": 0.48,
                     "num_unique_clusters_first_60s": 3,
                     "creator_in_cluster_flag": False,
+                    "creator_dev_link_score": 0.28,
+                    "creator_buyer_link_score": 0.74,
+                    "dev_buyer_link_score": 0.62,
+                    "shared_funder_link_score": 0.7,
+                    "creator_cluster_link_score": 0.5,
+                    "cluster_dev_link_score": 0.58,
+                    "linkage_risk_score": 0.52,
+                    "creator_funder_overlap_count": 1,
+                    "buyer_funder_overlap_count": 2,
+                    "funder_overlap_count": 2,
+                    "linkage_reason_codes": ["creator_buyer_same_funder"],
+                    "linkage_confidence": 0.66,
+                    "linkage_metric_origin": "mixed_evidence",
+                    "linkage_status": "ok",
+                    "linkage_warning": None,
                 },
                 "wallet_features": {
                     "smart_wallet_score_sum": 14.5,
@@ -278,6 +312,9 @@ def test_trade_feature_matrix_preserves_enriched_payload_fields():
     assert row["x_validation_delta_entry"] == 11
     assert row["bundle_count_first_60s"] == 5
     assert row["bundle_wallet_clustering_score"] == 0.59
+    assert row["creator_buyer_link_score"] == 0.74
+    assert row["linkage_status"] == "ok"
+    assert row["cluster_dev_link_penalty"] == 0.8
     assert row["smart_wallet_score_sum"] == 14.5
     assert row["smart_wallet_tier1_hits"] == 2
     assert row["smart_wallet_netflow_bias"] == 0.35

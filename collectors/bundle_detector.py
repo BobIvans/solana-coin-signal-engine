@@ -226,7 +226,10 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
         clustering_metrics = compute_wallet_clustering_metrics(
             clustering_participants,
             creator_wallet=creator_wallet,
+            dev_wallet=_dev_wallet_from_payload(pair),
             participant_wallets=participant_wallets,
+            token_address=str(pair.get("token_address") or "") or None,
+            pair_address=str(pair.get("pair_address") or "") or None,
         )
 
         for bundle in inferred_bundles:
@@ -274,6 +277,14 @@ def _creator_wallet_from_payload(payload: dict[str, Any]) -> str | None:
     return None
 
 
+def _dev_wallet_from_payload(payload: dict[str, Any]) -> str | None:
+    for key in ("dev_wallet", "dev_wallet_est", "developer_wallet", "team_wallet", "deployer_wallet"):
+        value = str(payload.get(key) or "").strip()
+        if value:
+            return value
+    return None
+
+
 def _extract_clustering_participants(
     payload: dict[str, Any],
     first_window: list[dict[str, Any]],
@@ -309,6 +320,7 @@ def _extract_clustering_participants(
             merge(wallet_value, group_id=[group_key] if group_key else None, funder=tx_funder)
 
     creator_wallet = _creator_wallet_from_payload(payload)
+    dev_wallet = _dev_wallet_from_payload(payload)
 
     list_keys = (
         "early_buyers",
@@ -362,6 +374,10 @@ def _extract_clustering_participants(
     creator_funder = str(payload.get("creator_funder") or payload.get("creator_funding_source") or "").strip() or None
     if creator_wallet and (creator_funder or creator_wallet in participants):
         merge(creator_wallet, funder=creator_funder, creator_linked=True)
+
+    dev_funder = str(payload.get("dev_funder") or payload.get("dev_funding_source") or "").strip() or None
+    if dev_wallet and (dev_funder or dev_wallet in participants):
+        merge(dev_wallet, funder=dev_funder, dev_linked=True)
 
     return sorted(participants.values(), key=lambda item: str(item.get("wallet") or "")), sorted(participant_wallets), creator_wallet
 

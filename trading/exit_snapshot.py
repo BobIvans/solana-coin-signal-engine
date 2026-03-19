@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from trading.position_monitor import compute_position_deltas
-from utils.bundle_contract_fields import BUNDLE_CONTRACT_FIELDS
+from utils.bundle_contract_fields import BUNDLE_CONTRACT_FIELDS, LINKAGE_CONTRACT_FIELDS
 
 
 def _to_float(value: Any, default: float = 0.0) -> float:
@@ -33,7 +33,7 @@ def build_exit_snapshot(position_ctx: dict, current_ctx: dict) -> dict:
         "rug_flag_now": bool(current_ctx.get("rug_flag_now", False)),
     }
 
-    for field in BUNDLE_CONTRACT_FIELDS:
+    for field in [*BUNDLE_CONTRACT_FIELDS, *LINKAGE_CONTRACT_FIELDS]:
         if field in current_ctx:
             snapshot[field] = current_ctx.get(field)
         elif field in entry_snapshot:
@@ -57,6 +57,11 @@ def build_exit_snapshot(position_ctx: dict, current_ctx: dict) -> dict:
         "creator_cluster_activity_now",
         "bundle_composition_dominant_now",
         "cross_block_bundle_correlation_now",
+        "linkage_risk_score_now",
+        "creator_buyer_link_score_now",
+        "dev_buyer_link_score_now",
+        "shared_funder_link_score_now",
+        "cluster_dev_link_score_now",
     ):
         if optional_field in current_ctx and current_ctx.get(optional_field) is not None:
             snapshot[optional_field] = current_ctx.get(optional_field)

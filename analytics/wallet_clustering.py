@@ -6,6 +6,8 @@ from collections import defaultdict
 from math import ceil
 from typing import Any
 
+from analytics.linkage_scorer import score_creator_dev_funder_linkage
+
 _CLUSTER_SCORE_MAX_UNIQUE = 5
 _FUNDING_KEYS = (
     "funder",
@@ -301,7 +303,10 @@ def compute_wallet_clustering_metrics(
     participants: list[dict[str, Any]],
     *,
     creator_wallet: str | None = None,
+    dev_wallet: str | None = None,
     participant_wallets: list[str] | None = None,
+    token_address: str | None = None,
+    pair_address: str | None = None,
 ) -> dict[str, Any]:
     """Convenience wrapper returning all wallet clustering contract fields."""
 
@@ -316,9 +321,21 @@ def compute_wallet_clustering_metrics(
         num_unique_clusters_first_60s=unique_clusters,
         creator_in_cluster_flag=creator_flag,
     )
+    linkage = score_creator_dev_funder_linkage(
+        participants,
+        creator_wallet=creator_wallet,
+        dev_wallet=dev_wallet,
+        early_buyer_wallets=wallets,
+        cluster_ids_by_wallet=cluster_ids,
+        token_address=token_address,
+        pair_address=pair_address,
+    )
+    if linkage.get("creator_in_cluster_flag") is None:
+        linkage["creator_in_cluster_flag"] = creator_flag
     return {
         "bundle_wallet_clustering_score": clustering_score,
         "cluster_concentration_ratio": concentration_ratio,
         "num_unique_clusters_first_60s": unique_clusters,
         "creator_in_cluster_flag": creator_flag,
+        **linkage,
     }

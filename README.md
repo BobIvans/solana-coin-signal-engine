@@ -120,3 +120,21 @@ Run smoke:
 ```bash
 python scripts/post_run_analyzer_smoke.py --base-dir data/smoke/post_run
 ```
+
+
+## PR-CL-3 linkage scorer
+
+PR-CL-3 adds a creator/dev/funder linkage layer that keeps the existing cluster heuristics but emits explicit evidence-backed linkage outputs for downstream scoring, regime checks, exits, replay, and future analyzer work.
+
+Key points:
+
+- linkage uses shared funders, shared cluster ids, shared launch groups, and direct creator/dev-linked participation hints;
+- outputs remain additive and fail-open when creator/dev/funder evidence is missing or malformed;
+- confidence and provenance are exposed through `linkage_confidence`, `linkage_reason_codes`, `linkage_metric_origin`, and `linkage_status`;
+- this PR does **not** claim identity certainty, and weak evidence stays low-confidence.
+
+Run smoke:
+
+```bash
+python scripts/linkage_smoke.py
+```

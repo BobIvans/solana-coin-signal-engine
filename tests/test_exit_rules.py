@@ -31,6 +31,7 @@ class DummySettings:
     EXIT_BUNDLE_FAILURE_SPIKE_THRESHOLD = 2.0
     EXIT_RETRY_MANIPULATION_HARD = 5.0
     EXIT_CREATOR_CLUSTER_RISK_HARD = 0.75
+    EXIT_LINKAGE_RISK_HARD = 0.78
 
 
 def test_hard_exit_rug_takes_precedence():
@@ -212,3 +213,21 @@ def test_slow_shock_recovery_triggers_protective_trend_exit():
     assert out["exit_decision"] == "FULL_EXIT"
     assert out["exit_reason"] == "shock_not_recovered_exit"
     assert "shock_not_recovered_detected" in out["exit_flags"]
+
+
+def test_high_linkage_risk_triggers_trend_exit_when_distribution_confirms():
+    position = {"entry_snapshot": {"linkage_confidence": 0.72, "creator_buyer_link_score": 0.82}}
+    current = {
+        "pnl_pct": 16,
+        "buy_pressure_now": 0.64,
+        "liquidity_drop_pct": 3,
+        "x_validation_score_delta": 2,
+        "linkage_risk_score_now": 0.84,
+        "creator_buyer_link_score_now": 0.82,
+        "shared_funder_link_score_now": 0.75,
+        "cluster_sell_concentration_120s": 0.76,
+    }
+    out = evaluate_trend_exit(position, current, DummySettings())
+    assert out["exit_decision"] == "FULL_EXIT"
+    assert out["exit_reason"] == "linkage_exit_risk"
+    assert "linkage_exit_risk" in out["exit_flags"]

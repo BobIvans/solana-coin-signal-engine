@@ -101,6 +101,8 @@ class Settings:
     UNIFIED_SCORE_MULTI_CLUSTER_BONUS_MAX: float
     UNIFIED_SCORE_SINGLE_CLUSTER_PENALTY_MAX: float
     UNIFIED_SCORE_CREATOR_CLUSTER_PENALTY: float
+    UNIFIED_SCORE_CLUSTER_DEV_LINK_PENALTY_MAX: float
+    UNIFIED_SCORE_SHARED_FUNDER_PENALTY_MAX: float
     UNIFIED_SCORE_ORGANIC_BUYER_FLOW_MAX: float
     UNIFIED_SCORE_LIQUIDITY_REFILL_MAX: float
     UNIFIED_SCORE_SMART_WALLET_DISPERSION_MAX: float
@@ -167,8 +169,15 @@ class Settings:
     EXIT_BUNDLE_FAILURE_SPIKE_THRESHOLD: float
     EXIT_RETRY_MANIPULATION_HARD: float
     EXIT_CREATOR_CLUSTER_RISK_HARD: float
+    EXIT_LINKAGE_RISK_HARD: float
     EXIT_POLL_INTERVAL_SEC: int
     EXIT_CONTRACT_VERSION: str
+
+    LINKAGE_SCORING_ENABLED: bool
+    LINKAGE_DIRECT_OVERLAP_WEIGHT: float
+    LINKAGE_FUNDER_OVERLAP_WEIGHT: float
+    LINKAGE_CLUSTER_OVERLAP_WEIGHT: float
+    LINKAGE_HIGH_RISK_THRESHOLD: float
 
     PAPER_TRADER_ENABLED: bool
     PAPER_STARTING_CAPITAL_SOL: float
@@ -536,6 +545,14 @@ def load_settings() -> Settings:
             _get_env(merged, "UNIFIED_SCORE_CREATOR_CLUSTER_PENALTY", "4.0"),
             key="UNIFIED_SCORE_CREATOR_CLUSTER_PENALTY",
         ),
+        UNIFIED_SCORE_CLUSTER_DEV_LINK_PENALTY_MAX=_as_positive_float(
+            _get_env(merged, "UNIFIED_SCORE_CLUSTER_DEV_LINK_PENALTY_MAX", "3.0"),
+            key="UNIFIED_SCORE_CLUSTER_DEV_LINK_PENALTY_MAX",
+        ),
+        UNIFIED_SCORE_SHARED_FUNDER_PENALTY_MAX=_as_positive_float(
+            _get_env(merged, "UNIFIED_SCORE_SHARED_FUNDER_PENALTY_MAX", "2.5"),
+            key="UNIFIED_SCORE_SHARED_FUNDER_PENALTY_MAX",
+        ),
         UNIFIED_SCORE_ORGANIC_BUYER_FLOW_MAX=_as_positive_float(
             _get_env(merged, "UNIFIED_SCORE_ORGANIC_BUYER_FLOW_MAX", "2.5"),
             key="UNIFIED_SCORE_ORGANIC_BUYER_FLOW_MAX",
@@ -771,12 +788,36 @@ def load_settings() -> Settings:
             _get_env(merged, "EXIT_CREATOR_CLUSTER_RISK_HARD", "0.75"),
             key="EXIT_CREATOR_CLUSTER_RISK_HARD",
         ),
+        EXIT_LINKAGE_RISK_HARD=_as_unit_float(
+            _get_env(merged, "EXIT_LINKAGE_RISK_HARD", "0.78"),
+            key="EXIT_LINKAGE_RISK_HARD",
+        ),
         EXIT_POLL_INTERVAL_SEC=_as_positive_int(
             _get_env(merged, "EXIT_POLL_INTERVAL_SEC", "3"),
             key="EXIT_POLL_INTERVAL_SEC",
         ),
         EXIT_CONTRACT_VERSION=str(
             _get_env(merged, "EXIT_CONTRACT_VERSION", "exit_engine_v1")
+        ),
+        LINKAGE_SCORING_ENABLED=_as_bool(
+            _get_env(merged, "LINKAGE_SCORING_ENABLED", "true"),
+            key="LINKAGE_SCORING_ENABLED",
+        ),
+        LINKAGE_DIRECT_OVERLAP_WEIGHT=_as_unit_float(
+            _get_env(merged, "LINKAGE_DIRECT_OVERLAP_WEIGHT", "0.55"),
+            key="LINKAGE_DIRECT_OVERLAP_WEIGHT",
+        ),
+        LINKAGE_FUNDER_OVERLAP_WEIGHT=_as_unit_float(
+            _get_env(merged, "LINKAGE_FUNDER_OVERLAP_WEIGHT", "0.35"),
+            key="LINKAGE_FUNDER_OVERLAP_WEIGHT",
+        ),
+        LINKAGE_CLUSTER_OVERLAP_WEIGHT=_as_unit_float(
+            _get_env(merged, "LINKAGE_CLUSTER_OVERLAP_WEIGHT", "0.30"),
+            key="LINKAGE_CLUSTER_OVERLAP_WEIGHT",
+        ),
+        LINKAGE_HIGH_RISK_THRESHOLD=_as_unit_float(
+            _get_env(merged, "LINKAGE_HIGH_RISK_THRESHOLD", "0.70"),
+            key="LINKAGE_HIGH_RISK_THRESHOLD",
         ),
         PAPER_TRADER_ENABLED=_as_bool(
             _get_env(merged, "PAPER_TRADER_ENABLED", "true"), key="PAPER_TRADER_ENABLED"
