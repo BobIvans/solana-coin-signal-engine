@@ -130,9 +130,27 @@ class Settings:
     # Exit engine + paper trader (PR-8/PR-9)
     EXIT_ENGINE_ENABLED: bool
     EXIT_ENGINE_FAILCLOSED: bool
+    EXIT_DEV_SELL_HARD: bool
+    EXIT_RUG_FLAG_HARD: bool
+    EXIT_SCALP_STOP_LOSS_PCT: float
+    EXIT_SCALP_LIQUIDITY_DROP_PCT: float
+    EXIT_SCALP_MAX_HOLD_SEC: int
+    EXIT_SCALP_RECHECK_SEC: int
+    EXIT_SCALP_VOLUME_VELOCITY_DECAY: float
+    EXIT_SCALP_X_SCORE_DECAY: float
     EXIT_SCALP_BUY_PRESSURE_FLOOR: float
+    EXIT_TREND_HARD_STOP_PCT: float
     EXIT_TREND_BUY_PRESSURE_FLOOR: float
+    EXIT_TREND_LIQUIDITY_DROP_PCT: float
+    EXIT_TREND_PARTIAL1_PCT: float
+    EXIT_TREND_PARTIAL2_PCT: float
+    EXIT_CLUSTER_DUMP_HARD: float
+    EXIT_CLUSTER_CONCENTRATION_SELL_THRESHOLD: float
+    EXIT_BUNDLE_FAILURE_SPIKE_THRESHOLD: float
+    EXIT_RETRY_MANIPULATION_HARD: float
+    EXIT_CREATOR_CLUSTER_RISK_HARD: float
     EXIT_POLL_INTERVAL_SEC: int
+    EXIT_CONTRACT_VERSION: str
 
     PAPER_TRADER_ENABLED: bool
     PAPER_STARTING_CAPITAL_SOL: float
@@ -205,6 +223,13 @@ def _as_positive_float(raw_value: Any, *, key: str) -> float:
     if value <= 0:
         raise ValueError(f"{key} must be > 0")
     return value
+
+
+def _as_float(raw_value: Any, *, key: str) -> float:
+    try:
+        return float(raw_value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid float for {key}: {raw_value}") from exc
 
 
 def _as_abs_path(raw_value: Any) -> Path:
@@ -566,17 +591,88 @@ def load_settings() -> Settings:
             _get_env(merged, "EXIT_ENGINE_FAILCLOSED", "true"),
             key="EXIT_ENGINE_FAILCLOSED",
         ),
+        EXIT_DEV_SELL_HARD=_as_bool(
+            _get_env(merged, "EXIT_DEV_SELL_HARD", "true"),
+            key="EXIT_DEV_SELL_HARD",
+        ),
+        EXIT_RUG_FLAG_HARD=_as_bool(
+            _get_env(merged, "EXIT_RUG_FLAG_HARD", "true"),
+            key="EXIT_RUG_FLAG_HARD",
+        ),
+        EXIT_SCALP_STOP_LOSS_PCT=_as_float(
+            _get_env(merged, "EXIT_SCALP_STOP_LOSS_PCT", "-10"),
+            key="EXIT_SCALP_STOP_LOSS_PCT",
+        ),
+        EXIT_SCALP_LIQUIDITY_DROP_PCT=_as_positive_float(
+            _get_env(merged, "EXIT_SCALP_LIQUIDITY_DROP_PCT", "20"),
+            key="EXIT_SCALP_LIQUIDITY_DROP_PCT",
+        ),
+        EXIT_SCALP_MAX_HOLD_SEC=_as_positive_int(
+            _get_env(merged, "EXIT_SCALP_MAX_HOLD_SEC", "120"),
+            key="EXIT_SCALP_MAX_HOLD_SEC",
+        ),
+        EXIT_SCALP_RECHECK_SEC=_as_positive_int(
+            _get_env(merged, "EXIT_SCALP_RECHECK_SEC", "18"),
+            key="EXIT_SCALP_RECHECK_SEC",
+        ),
+        EXIT_SCALP_VOLUME_VELOCITY_DECAY=_as_unit_float(
+            _get_env(merged, "EXIT_SCALP_VOLUME_VELOCITY_DECAY", "0.70"),
+            key="EXIT_SCALP_VOLUME_VELOCITY_DECAY",
+        ),
+        EXIT_SCALP_X_SCORE_DECAY=_as_unit_float(
+            _get_env(merged, "EXIT_SCALP_X_SCORE_DECAY", "0.70"),
+            key="EXIT_SCALP_X_SCORE_DECAY",
+        ),
         EXIT_SCALP_BUY_PRESSURE_FLOOR=_as_unit_float(
             _get_env(merged, "EXIT_SCALP_BUY_PRESSURE_FLOOR", "0.60"),
             key="EXIT_SCALP_BUY_PRESSURE_FLOOR",
+        ),
+        EXIT_TREND_HARD_STOP_PCT=_as_float(
+            _get_env(merged, "EXIT_TREND_HARD_STOP_PCT", "-18"),
+            key="EXIT_TREND_HARD_STOP_PCT",
         ),
         EXIT_TREND_BUY_PRESSURE_FLOOR=_as_unit_float(
             _get_env(merged, "EXIT_TREND_BUY_PRESSURE_FLOOR", "0.50"),
             key="EXIT_TREND_BUY_PRESSURE_FLOOR",
         ),
+        EXIT_TREND_LIQUIDITY_DROP_PCT=_as_positive_float(
+            _get_env(merged, "EXIT_TREND_LIQUIDITY_DROP_PCT", "25"),
+            key="EXIT_TREND_LIQUIDITY_DROP_PCT",
+        ),
+        EXIT_TREND_PARTIAL1_PCT=_as_positive_float(
+            _get_env(merged, "EXIT_TREND_PARTIAL1_PCT", "35"),
+            key="EXIT_TREND_PARTIAL1_PCT",
+        ),
+        EXIT_TREND_PARTIAL2_PCT=_as_positive_float(
+            _get_env(merged, "EXIT_TREND_PARTIAL2_PCT", "100"),
+            key="EXIT_TREND_PARTIAL2_PCT",
+        ),
+        EXIT_CLUSTER_DUMP_HARD=_as_unit_float(
+            _get_env(merged, "EXIT_CLUSTER_DUMP_HARD", "0.82"),
+            key="EXIT_CLUSTER_DUMP_HARD",
+        ),
+        EXIT_CLUSTER_CONCENTRATION_SELL_THRESHOLD=_as_unit_float(
+            _get_env(merged, "EXIT_CLUSTER_CONCENTRATION_SELL_THRESHOLD", "0.65"),
+            key="EXIT_CLUSTER_CONCENTRATION_SELL_THRESHOLD",
+        ),
+        EXIT_BUNDLE_FAILURE_SPIKE_THRESHOLD=_as_positive_float(
+            _get_env(merged, "EXIT_BUNDLE_FAILURE_SPIKE_THRESHOLD", "2.0"),
+            key="EXIT_BUNDLE_FAILURE_SPIKE_THRESHOLD",
+        ),
+        EXIT_RETRY_MANIPULATION_HARD=_as_positive_float(
+            _get_env(merged, "EXIT_RETRY_MANIPULATION_HARD", "5.0"),
+            key="EXIT_RETRY_MANIPULATION_HARD",
+        ),
+        EXIT_CREATOR_CLUSTER_RISK_HARD=_as_unit_float(
+            _get_env(merged, "EXIT_CREATOR_CLUSTER_RISK_HARD", "0.75"),
+            key="EXIT_CREATOR_CLUSTER_RISK_HARD",
+        ),
         EXIT_POLL_INTERVAL_SEC=_as_positive_int(
             _get_env(merged, "EXIT_POLL_INTERVAL_SEC", "3"),
             key="EXIT_POLL_INTERVAL_SEC",
+        ),
+        EXIT_CONTRACT_VERSION=str(
+            _get_env(merged, "EXIT_CONTRACT_VERSION", "exit_engine_v1")
         ),
         PAPER_TRADER_ENABLED=_as_bool(
             _get_env(merged, "PAPER_TRADER_ENABLED", "true"), key="PAPER_TRADER_ENABLED"

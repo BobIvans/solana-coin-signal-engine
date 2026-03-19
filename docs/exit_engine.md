@@ -33,6 +33,7 @@ Hard exits always win over partial-profit logic.
 - Recheck at `EXIT_SCALP_RECHECK_SEC`:
   - this is a **re-evaluation threshold**, not a forced sell
   - if profitable and momentum/social confirmation decays, trigger `FULL_EXIT`
+  - severe `cluster_dump_detected`, `bundle_failure_spike`, or creator-linked cluster risk may also force an immediate protective exit
 
 ### TREND
 
@@ -41,6 +42,7 @@ Hard exits always win over partial-profit logic.
   - buy-pressure floor break
   - liquidity breakdown
   - social/holder collapse
+  - concentrated post-entry cluster dump / creator-cluster escalation
   - global hard flags (`dev_sell`, `rug_flag`)
 - Partial exits:
   - partial 1 at `EXIT_TREND_PARTIAL1_PCT` (`exit_fraction=0.33`)
@@ -62,6 +64,7 @@ Each decision includes `exit_snapshot` with load-bearing fields:
 - `bundle_cluster_delta`
 - `dev_sell_pressure_now`
 - `rug_flag_now`
+- optional bundle/cluster risk evidence such as `cluster_sell_concentration_120s`, `bundle_failure_retry_delta`, `creator_cluster_activity_now`, and `smart_wallet_netflow_bias` when present
 
 Optional attribution fields:
 
