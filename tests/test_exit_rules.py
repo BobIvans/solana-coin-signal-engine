@@ -23,6 +23,11 @@ class DummySettings:
     EXIT_TREND_PARTIAL2_PCT = 100
     EXIT_CLUSTER_DUMP_HARD = 0.82
     EXIT_CLUSTER_CONCENTRATION_SELL_THRESHOLD = 0.65
+    EXIT_CLUSTER_SELL_CONCENTRATION_WARN = 0.72
+    EXIT_CLUSTER_SELL_CONCENTRATION_HARD = 0.78
+    EXIT_LIQUIDITY_REFILL_FAIL_MIN = 0.85
+    EXIT_SELLER_REENTRY_WEAK_MAX = 0.20
+    EXIT_SHOCK_RECOVERY_TOO_SLOW_SEC = 180
     EXIT_BUNDLE_FAILURE_SPIKE_THRESHOLD = 2.0
     EXIT_RETRY_MANIPULATION_HARD = 5.0
     EXIT_CREATOR_CLUSTER_RISK_HARD = 0.75
@@ -75,7 +80,7 @@ def test_severe_cluster_dump_forces_trend_full_exit():
         "buy_pressure_now": 0.42,
         "liquidity_drop_pct": 4,
         "x_validation_score_delta": 1,
-        "cluster_sell_concentration_120s": 0.91,
+        "cluster_sell_concentration_120s": 0.79,
         "cluster_concentration_ratio_now": 0.88,
         "bundle_composition_dominant_now": "distribution",
         "wallet_features": {"smart_wallet_netflow_bias": -0.4},
@@ -144,3 +149,66 @@ def test_hard_exit_bundle_risk_overrides_scalp_recheck_logic():
     out = evaluate_hard_exit(position, current, DummySettings())
     assert out["exit_decision"] == "FULL_EXIT"
     assert out["exit_reason"] == "retry_manipulation_detected"
+
+
+def test_severe_cluster_distribution_triggers_trend_exit():
+    position = {"entry_snapshot": {"cluster_concentration_ratio": 0.40}}
+    current = {
+        "pnl_pct": 18,
+        "buy_pressure_now": 0.58,
+        "liquidity_drop_pct": 3,
+        "x_validation_score_delta": 1,
+        "cluster_sell_concentration_120s": 0.79,
+        "cluster_concentration_ratio_now": 0.82,
+        "liquidity_refill_ratio_120s": 0.78,
+    }
+    out = evaluate_trend_exit(position, current, DummySettings())
+    assert out["exit_decision"] == "FULL_EXIT"
+    assert out["exit_reason"] == "cluster_distribution_exit"
+    assert "cluster_distribution_detected" in out["exit_flags"]
+
+
+def test_failed_liquidity_refill_triggers_trend_exit():
+    position = {"entry_snapshot": {}}
+    current = {
+        "pnl_pct": 9,
+        "buy_pressure_now": 0.58,
+        "liquidity_drop_pct": 6,
+        "x_validation_score_delta": 2,
+        "liquidity_refill_ratio_120s": 0.60,
+        "liquidity_shock_recovery_sec": 210,
+    }
+    out = evaluate_trend_exit(position, current, DummySettings())
+    assert out["exit_decision"] == "FULL_EXIT"
+    assert out["exit_reason"] == "failed_liquidity_refill_exit"
+    assert "failed_liquidity_refill_detected" in out["exit_flags"]
+
+
+def test_weak_reentry_adds_warning_without_forcing_exit_alone():
+    position = {"entry_snapshot": {}}
+    current = {
+        "pnl_pct": 12,
+        "buy_pressure_now": 0.74,
+        "liquidity_drop_pct": 2,
+        "x_validation_score_delta": 3,
+        "seller_reentry_ratio": 0.16,
+    }
+    out = evaluate_trend_exit(position, current, DummySettings())
+    assert out["exit_decision"] == "HOLD"
+    assert "weak_reentry_detected" in out["exit_warnings"]
+
+
+def test_slow_shock_recovery_triggers_protective_trend_exit():
+    position = {"entry_snapshot": {}}
+    current = {
+        "pnl_pct": 7,
+        "buy_pressure_now": 0.55,
+        "liquidity_drop_pct": 5,
+        "x_validation_score_delta": 1,
+        "liquidity_shock_recovery_sec": 320,
+        "liquidity_refill_ratio_120s": 0.82,
+    }
+    out = evaluate_trend_exit(position, current, DummySettings())
+    assert out["exit_decision"] == "FULL_EXIT"
+    assert out["exit_reason"] == "shock_not_recovered_exit"
+    assert "shock_not_recovered_detected" in out["exit_flags"]

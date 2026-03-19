@@ -80,9 +80,33 @@ def _wallet_netflow_bias(current_ctx: dict[str, Any]) -> float:
     return _to_float(wallet_features.get("smart_wallet_netflow_bias"))
 
 
+def _setting(settings: Any, name: str, default: Any) -> Any:
+    return getattr(settings, name, default)
+
+
 def _is_sell_heavy_composition(value: Any) -> bool:
     composition = _text(value).replace('_', '-')
     return composition in _SELL_HEAVY_COMPOSITIONS
+
+
+def _continuation_warning_flags(position_ctx: dict[str, Any], current_ctx: dict[str, Any]) -> list[str]:
+    warnings: list[str] = []
+    net_unique_buyers = _to_float(_current_or_entry(position_ctx, current_ctx, "net_unique_buyers_60s"), default=0.0)
+    if _current_or_entry(position_ctx, current_ctx, "net_unique_buyers_60s") is not None and net_unique_buyers <= 0:
+        warnings.append("net_unique_buyers_stalled")
+
+    dispersion = _to_float(
+        _current_or_entry(position_ctx, current_ctx, "smart_wallet_dispersion_score"),
+        default=-1.0,
+    )
+    if dispersion >= 0 and dispersion < 0.35:
+        warnings.append("smart_wallet_dispersion_narrow")
+
+    x_velocity = _to_float(_current_or_entry(position_ctx, current_ctx, "x_author_velocity_5m"), default=-1.0)
+    if x_velocity >= 0 and x_velocity < 0.2:
+        warnings.append("x_author_velocity_cooling")
+
+    return warnings
 
 
 def detect_cluster_dump(position_ctx: dict[str, Any], current_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
@@ -123,6 +147,171 @@ def detect_cluster_dump(position_ctx: dict[str, Any], current_ctx: dict[str, Any
             "severity": "warn",
             "flags": [],
             "warnings": ["cluster_dump_detected"],
+        }
+
+    return {"severity": "none", "flags": [], "warnings": []}
+
+
+def detect_cluster_distribution_exit(position_ctx: dict[str, Any], current_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
+    sell_concentration = _to_float(
+        _current_or_entry(position_ctx, current_ctx, "cluster_sell_concentration_120s"),
+        default=-1.0,
+    )
+    if sell_concentration < 0:
+        return {"severity": "none", "flags": [], "warnings": []}
+
+    warn_threshold = float(
+        _setting(settings, "EXIT_CLUSTER_SELL_CONCENTRATION_WARN", getattr(settings, "EXIT_CLUSTER_CONCENTRATION_SELL_THRESHOLD", 0.65))
+    )
+    hard_threshold = float(
+        _setting(settings, "EXIT_CLUSTER_SELL_CONCENTRATION_HARD", getattr(settings, "EXIT_CLUSTER_DUMP_HARD", 0.82))
+    )
+    liquidity_refill = _to_float(_current_or_entry(position_ctx, current_ctx, "liquidity_refill_ratio_120s"), default=-1.0)
+    shock_recovery_sec = _to_float(_current_or_entry(position_ctx, current_ctx, "liquidity_shock_recovery_sec"), default=-1.0)
+    concentration_ratio = _to_float(
+        _current_or_entry(position_ctx, current_ctx, "cluster_concentration_ratio_now", "cluster_concentration_ratio")
+    )
+    buy_pressure = _to_float(current_ctx.get("buy_pressure_now", current_ctx.get("buy_pressure")), default=1.0)
+    suspicious_distribution = _is_sell_heavy_composition(
+        _current_or_entry(position_ctx, current_ctx, "bundle_composition_dominant_now", "bundle_composition_dominant")
+    )
+    confirmations = 0
+    if concentration_ratio >= warn_threshold:
+        confirmations += 1
+    if liquidity_refill >= 0 and liquidity_refill < float(_setting(settings, "EXIT_LIQUIDITY_REFILL_FAIL_MIN", 0.85)):
+        confirmations += 1
+    if shock_recovery_sec >= float(_setting(settings, "EXIT_SHOCK_RECOVERY_TOO_SLOW_SEC", 180)):
+        confirmations += 1
+    if suspicious_distribution:
+        confirmations += 1
+    if buy_pressure < float(settings.EXIT_TREND_BUY_PRESSURE_FLOOR):
+        confirmations += 1
+    if _wallet_netflow_bias(current_ctx) < 0:
+        confirmations += 1
+
+    secondary_warnings = _continuation_warning_flags(position_ctx, current_ctx)
+    if sell_concentration >= hard_threshold and confirmations >= 1:
+        return {
+            "severity": "exit",
+            "flags": ["cluster_distribution_detected", "cluster_sell_concentration_spike"],
+            "warnings": secondary_warnings,
+        }
+
+    if sell_concentration >= warn_threshold and confirmations >= 1:
+        return {
+            "severity": "warn",
+            "flags": [],
+            "warnings": ["cluster_distribution_detected", *secondary_warnings],
+        }
+
+    return {"severity": "none", "flags": [], "warnings": []}
+
+
+def detect_failed_liquidity_refill(position_ctx: dict[str, Any], current_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
+    refill_ratio = _to_float(_current_or_entry(position_ctx, current_ctx, "liquidity_refill_ratio_120s"), default=-1.0)
+    if refill_ratio < 0:
+        return {"severity": "none", "flags": [], "warnings": []}
+
+    fail_min = float(_setting(settings, "EXIT_LIQUIDITY_REFILL_FAIL_MIN", 0.85))
+    severe_min = fail_min * 0.75
+    shock_recovery_sec = _to_float(_current_or_entry(position_ctx, current_ctx, "liquidity_shock_recovery_sec"), default=-1.0)
+    seller_reentry = _to_float(_current_or_entry(position_ctx, current_ctx, "seller_reentry_ratio"), default=-1.0)
+    buy_pressure = _to_float(current_ctx.get("buy_pressure_now", current_ctx.get("buy_pressure")), default=1.0)
+
+    confirmations = 0
+    if shock_recovery_sec >= float(_setting(settings, "EXIT_SHOCK_RECOVERY_TOO_SLOW_SEC", 180)):
+        confirmations += 1
+    if seller_reentry >= 0 and seller_reentry <= float(_setting(settings, "EXIT_SELLER_REENTRY_WEAK_MAX", 0.2)):
+        confirmations += 1
+    if buy_pressure < float(settings.EXIT_TREND_BUY_PRESSURE_FLOOR):
+        confirmations += 1
+
+    secondary_warnings = _continuation_warning_flags(position_ctx, current_ctx)
+    if refill_ratio <= severe_min and confirmations >= 1:
+        return {
+            "severity": "exit",
+            "flags": ["failed_liquidity_refill_detected"],
+            "warnings": secondary_warnings,
+        }
+
+    if refill_ratio < fail_min:
+        return {
+            "severity": "warn",
+            "flags": [],
+            "warnings": ["failed_liquidity_refill_detected", *secondary_warnings],
+        }
+
+    return {"severity": "none", "flags": [], "warnings": []}
+
+
+def detect_weak_reentry_exit(position_ctx: dict[str, Any], current_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
+    reentry_ratio = _to_float(_current_or_entry(position_ctx, current_ctx, "seller_reentry_ratio"), default=-1.0)
+    if reentry_ratio < 0:
+        return {"severity": "none", "flags": [], "warnings": []}
+
+    weak_max = float(_setting(settings, "EXIT_SELLER_REENTRY_WEAK_MAX", 0.2))
+    severe_max = weak_max * 0.5
+    refill_ratio = _to_float(_current_or_entry(position_ctx, current_ctx, "liquidity_refill_ratio_120s"), default=-1.0)
+    shock_recovery_sec = _to_float(_current_or_entry(position_ctx, current_ctx, "liquidity_shock_recovery_sec"), default=-1.0)
+    secondary_warnings = _continuation_warning_flags(position_ctx, current_ctx)
+
+    paired_weakness = 0
+    if refill_ratio >= 0 and refill_ratio < float(_setting(settings, "EXIT_LIQUIDITY_REFILL_FAIL_MIN", 0.85)):
+        paired_weakness += 1
+    if shock_recovery_sec >= float(_setting(settings, "EXIT_SHOCK_RECOVERY_TOO_SLOW_SEC", 180)):
+        paired_weakness += 1
+    if _to_float(
+        _current_or_entry(position_ctx, current_ctx, "cluster_sell_concentration_120s"),
+        default=0.0,
+    ) >= float(_setting(settings, "EXIT_CLUSTER_SELL_CONCENTRATION_WARN", getattr(settings, "EXIT_CLUSTER_CONCENTRATION_SELL_THRESHOLD", 0.65))):
+        paired_weakness += 1
+
+    if reentry_ratio <= severe_max and paired_weakness >= 1:
+        return {
+            "severity": "exit",
+            "flags": ["weak_reentry_detected"],
+            "warnings": secondary_warnings,
+        }
+
+    if reentry_ratio <= weak_max:
+        return {
+            "severity": "warn",
+            "flags": [],
+            "warnings": ["weak_reentry_detected", *secondary_warnings],
+        }
+
+    return {"severity": "none", "flags": [], "warnings": []}
+
+
+def detect_shock_not_recovered_exit(position_ctx: dict[str, Any], current_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
+    recovery_sec = _to_float(_current_or_entry(position_ctx, current_ctx, "liquidity_shock_recovery_sec"), default=-1.0)
+    if recovery_sec < 0:
+        return {"severity": "none", "flags": [], "warnings": []}
+
+    too_slow_sec = float(_setting(settings, "EXIT_SHOCK_RECOVERY_TOO_SLOW_SEC", 180))
+    severe_sec = too_slow_sec * 1.5
+    refill_ratio = _to_float(_current_or_entry(position_ctx, current_ctx, "liquidity_refill_ratio_120s"), default=-1.0)
+    sell_concentration = _to_float(_current_or_entry(position_ctx, current_ctx, "cluster_sell_concentration_120s"), default=-1.0)
+    secondary_warnings = _continuation_warning_flags(position_ctx, current_ctx)
+
+    confirmations = 0
+    if refill_ratio >= 0 and refill_ratio < float(_setting(settings, "EXIT_LIQUIDITY_REFILL_FAIL_MIN", 0.85)):
+        confirmations += 1
+    if sell_concentration >= float(_setting(settings, "EXIT_CLUSTER_SELL_CONCENTRATION_WARN", getattr(settings, "EXIT_CLUSTER_CONCENTRATION_SELL_THRESHOLD", 0.65))):
+        confirmations += 1
+
+    if recovery_sec >= severe_sec and confirmations >= 1:
+        return {
+            "severity": "exit",
+            "flags": ["shock_not_recovered_detected"],
+            "warnings": secondary_warnings,
+        }
+
+    if recovery_sec >= too_slow_sec:
+        return {
+            "severity": "warn",
+            "flags": [],
+            "warnings": ["shock_not_recovered_detected", *secondary_warnings],
         }
 
     return {"severity": "none", "flags": [], "warnings": []}
@@ -279,11 +468,19 @@ def evaluate_scalp_exit(position_ctx: dict, current_ctx: dict, settings: Any) ->
     pnl_pct = _to_float(current_ctx.get("pnl_pct"))
     liquidity_drop_pct = _to_float(current_ctx.get("liquidity_drop_pct"))
     cluster_dump = detect_cluster_dump(position_ctx, current_ctx, settings)
+    cluster_distribution = detect_cluster_distribution_exit(position_ctx, current_ctx, settings)
+    failed_refill = detect_failed_liquidity_refill(position_ctx, current_ctx, settings)
+    weak_reentry = detect_weak_reentry_exit(position_ctx, current_ctx, settings)
+    shock_recovery = detect_shock_not_recovered_exit(position_ctx, current_ctx, settings)
     bundle_failure = detect_bundle_failure_spike(position_ctx, current_ctx, settings)
     retry_manipulation = detect_retry_manipulation(position_ctx, current_ctx, settings)
     creator_risk = detect_creator_cluster_exit_risk(position_ctx, current_ctx, settings)
     warnings = [
         *cluster_dump["warnings"],
+        *cluster_distribution["warnings"],
+        *failed_refill["warnings"],
+        *weak_reentry["warnings"],
+        *shock_recovery["warnings"],
         *bundle_failure["warnings"],
         *retry_manipulation["warnings"],
         *creator_risk["warnings"],
@@ -291,6 +488,20 @@ def evaluate_scalp_exit(position_ctx: dict, current_ctx: dict, settings: Any) ->
 
     if cluster_dump["severity"] in {"hard", "exit"}:
         return _full("cluster_dump_detected", ["cluster_dump_detected", *cluster_dump["flags"]], warnings=warnings)
+
+    if cluster_distribution["severity"] == "exit" and failed_refill["severity"] == "exit":
+        return _full(
+            "cluster_distribution_exit",
+            ["cluster_distribution_detected", *cluster_distribution["flags"], *failed_refill["flags"]],
+            warnings=warnings,
+        )
+
+    if shock_recovery["severity"] == "exit" and failed_refill["severity"] == "exit":
+        return _full(
+            "shock_not_recovered_exit",
+            ["shock_not_recovered_detected", *shock_recovery["flags"], *failed_refill["flags"]],
+            warnings=warnings,
+        )
 
     if retry_manipulation["severity"] == "hard":
         return _full("retry_manipulation_detected", retry_manipulation["flags"], warnings=warnings)
@@ -361,11 +572,19 @@ def evaluate_trend_exit(position_ctx: dict, current_ctx: dict, settings: Any) ->
     liquidity_drop_pct = _to_float(current_ctx.get("liquidity_drop_pct"))
     x_delta = _to_float(current_ctx.get("x_validation_score_delta"))
     cluster_dump = detect_cluster_dump(position_ctx, current_ctx, settings)
+    cluster_distribution = detect_cluster_distribution_exit(position_ctx, current_ctx, settings)
+    failed_refill = detect_failed_liquidity_refill(position_ctx, current_ctx, settings)
+    weak_reentry = detect_weak_reentry_exit(position_ctx, current_ctx, settings)
+    shock_recovery = detect_shock_not_recovered_exit(position_ctx, current_ctx, settings)
     bundle_failure = detect_bundle_failure_spike(position_ctx, current_ctx, settings)
     retry_manipulation = detect_retry_manipulation(position_ctx, current_ctx, settings)
     creator_risk = detect_creator_cluster_exit_risk(position_ctx, current_ctx, settings)
     warnings = [
         *cluster_dump["warnings"],
+        *cluster_distribution["warnings"],
+        *failed_refill["warnings"],
+        *weak_reentry["warnings"],
+        *shock_recovery["warnings"],
         *bundle_failure["warnings"],
         *retry_manipulation["warnings"],
         *creator_risk["warnings"],
@@ -373,6 +592,32 @@ def evaluate_trend_exit(position_ctx: dict, current_ctx: dict, settings: Any) ->
 
     if cluster_dump["severity"] in {"hard", "exit"}:
         return _full("cluster_dump_detected", ["cluster_dump_detected", *cluster_dump["flags"]], warnings=warnings)
+
+    if cluster_distribution["severity"] == "exit":
+        return _full("cluster_distribution_exit", cluster_distribution["flags"], warnings=warnings)
+
+    if failed_refill["severity"] == "exit" and shock_recovery["severity"] in {"exit", "warn"}:
+        return _full(
+            "failed_liquidity_refill_exit",
+            [*failed_refill["flags"], "shock_not_recovered_detected"],
+            warnings=warnings,
+        )
+
+    if shock_recovery["severity"] == "exit" and failed_refill["severity"] in {"exit", "warn"}:
+        return _full(
+            "shock_not_recovered_exit",
+            [*shock_recovery["flags"], "failed_liquidity_refill_detected"],
+            warnings=warnings,
+        )
+
+    if weak_reentry["severity"] == "exit" and (
+        failed_refill["severity"] in {"exit", "warn"} or cluster_distribution["severity"] in {"exit", "warn"}
+    ):
+        return _full(
+            "weak_reentry_exit",
+            [*weak_reentry["flags"], "continuation_failure_confirmed"],
+            warnings=warnings,
+        )
 
     if creator_risk["severity"] in {"hard", "exit"}:
         return _full("creator_cluster_exit_risk", creator_risk["flags"], warnings=warnings)
