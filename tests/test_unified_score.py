@@ -56,6 +56,16 @@ BUNDLE_COMPONENT_KEYS = {
     "retry_manipulation_penalty",
 }
 
+CONTINUATION_COMPONENT_KEYS = {
+    "organic_buyer_flow_bonus",
+    "liquidity_refill_bonus",
+    "smart_wallet_dispersion_bonus",
+    "x_author_velocity_bonus",
+    "seller_reentry_bonus",
+    "shock_recovery_bonus",
+    "cluster_distribution_risk_penalty",
+}
+
 
 def test_unified_score_strong_token_watch_or_entry(monkeypatch):
     monkeypatch.setenv("UNIFIED_SCORE_ENTRY_THRESHOLD", "45")
@@ -110,6 +120,88 @@ def test_no_bundle_data_stays_neutral_safe():
     for key in BUNDLE_COMPONENT_KEYS:
         assert key in out
         assert out[key] == 0.0
+
+
+def test_legacy_payload_without_continuation_fields_stays_neutral_safe():
+    settings = load_settings()
+    out = score_token(_base_token(), settings)
+    assert out["final_score"] >= 0
+    for key in CONTINUATION_COMPONENT_KEYS:
+        assert key in out
+        assert out[key] == 0.0
+
+
+def test_strong_continuation_fixture_gets_bounded_positive_lift():
+    settings = load_settings()
+    token = {
+        **_base_token(),
+        "net_unique_buyers_60s": 18,
+        "liquidity_refill_ratio_120s": 1.75,
+        "smart_wallet_dispersion_score": 0.88,
+        "x_author_velocity_5m": 2.6,
+        "seller_reentry_ratio": 0.68,
+        "liquidity_shock_recovery_sec": 26,
+    }
+    out = score_token(token, settings)
+    assert out["organic_buyer_flow_bonus"] > 0
+    assert out["liquidity_refill_bonus"] > 0
+    assert out["smart_wallet_dispersion_bonus"] > 0
+    assert (
+        out["organic_buyer_flow_bonus"]
+        <= settings.UNIFIED_SCORE_ORGANIC_BUYER_FLOW_MAX
+    )
+    assert (
+        out["liquidity_refill_bonus"] <= settings.UNIFIED_SCORE_LIQUIDITY_REFILL_MAX
+    )
+    assert (
+        out["smart_wallet_dispersion_bonus"]
+        <= settings.UNIFIED_SCORE_SMART_WALLET_DISPERSION_MAX
+    )
+    assert "continuation_quality_supported" in out["score_flags"]
+
+
+def test_weak_continuation_fixture_stays_neutral_or_low():
+    settings = load_settings()
+    token = {
+        **_base_token(),
+        "net_unique_buyers_60s": 1,
+        "liquidity_refill_ratio_120s": 0.82,
+        "smart_wallet_dispersion_score": 0.24,
+        "x_author_velocity_5m": 1.02,
+        "seller_reentry_ratio": 0.08,
+        "liquidity_shock_recovery_sec": 240,
+    }
+    out = score_token(token, settings)
+    assert out["organic_buyer_flow_bonus"] == 0.0
+    assert out["liquidity_refill_bonus"] == 0.0
+    assert out["smart_wallet_dispersion_bonus"] == 0.0
+    assert out["x_author_velocity_bonus"] == 0.0
+    assert out["seller_reentry_bonus"] == 0.0
+    assert out["shock_recovery_bonus"] == 0.0
+
+
+def test_cluster_distribution_risk_penalty_applies_when_sell_concentration_is_high():
+    settings = load_settings()
+    token = {**_base_token(), "cluster_sell_concentration_120s": 0.86}
+    out = score_token(token, settings)
+    assert out["cluster_distribution_risk_penalty"] > 0
+    assert "cluster_distribution_risk" in out["score_flags"]
+
+
+def test_x_author_velocity_bonus_applies():
+    settings = load_settings()
+    token = {**_base_token(), "x_author_velocity_5m": 2.2}
+    out = score_token(token, settings)
+    assert out["x_author_velocity_bonus"] > 0
+    assert "x_author_velocity_expanding" in out["score_flags"]
+
+
+def test_shock_recovery_bonus_applies():
+    settings = load_settings()
+    token = {**_base_token(), "liquidity_shock_recovery_sec": 22}
+    out = score_token(token, settings)
+    assert out["shock_recovery_bonus"] > 0
+    assert "liquidity_shock_recovered_fast" in out["score_flags"]
 
 
 def test_strong_organic_bundle_gets_bounded_positive_lift():
@@ -195,4 +287,6 @@ def test_score_payload_contract_includes_new_component_keys():
     )
     jsonschema.validate(token, schema)
     for key in BUNDLE_COMPONENT_KEYS:
+        assert key in token
+    for key in CONTINUATION_COMPONENT_KEYS:
         assert key in token

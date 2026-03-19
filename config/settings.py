@@ -101,6 +101,13 @@ class Settings:
     UNIFIED_SCORE_MULTI_CLUSTER_BONUS_MAX: float
     UNIFIED_SCORE_SINGLE_CLUSTER_PENALTY_MAX: float
     UNIFIED_SCORE_CREATOR_CLUSTER_PENALTY: float
+    UNIFIED_SCORE_ORGANIC_BUYER_FLOW_MAX: float
+    UNIFIED_SCORE_LIQUIDITY_REFILL_MAX: float
+    UNIFIED_SCORE_SMART_WALLET_DISPERSION_MAX: float
+    UNIFIED_SCORE_X_AUTHOR_VELOCITY_MAX: float
+    UNIFIED_SCORE_SELLER_REENTRY_MAX: float
+    UNIFIED_SCORE_SHOCK_RECOVERY_MAX: float
+    UNIFIED_SCORE_CLUSTER_DISTRIBUTION_RISK_MAX: float
     UNIFIED_SCORE_BUNDLE_SELL_HEAVY_PENALTY_MAX: float
     UNIFIED_SCORE_RETRY_MANIPULATION_PENALTY_MAX: float
     UNIFIED_SCORE_CONTRACT_VERSION: str
@@ -507,6 +514,34 @@ def load_settings() -> Settings:
         UNIFIED_SCORE_CREATOR_CLUSTER_PENALTY=_as_positive_float(
             _get_env(merged, "UNIFIED_SCORE_CREATOR_CLUSTER_PENALTY", "4.0"),
             key="UNIFIED_SCORE_CREATOR_CLUSTER_PENALTY",
+        ),
+        UNIFIED_SCORE_ORGANIC_BUYER_FLOW_MAX=_as_positive_float(
+            _get_env(merged, "UNIFIED_SCORE_ORGANIC_BUYER_FLOW_MAX", "2.5"),
+            key="UNIFIED_SCORE_ORGANIC_BUYER_FLOW_MAX",
+        ),
+        UNIFIED_SCORE_LIQUIDITY_REFILL_MAX=_as_positive_float(
+            _get_env(merged, "UNIFIED_SCORE_LIQUIDITY_REFILL_MAX", "2.0"),
+            key="UNIFIED_SCORE_LIQUIDITY_REFILL_MAX",
+        ),
+        UNIFIED_SCORE_SMART_WALLET_DISPERSION_MAX=_as_positive_float(
+            _get_env(merged, "UNIFIED_SCORE_SMART_WALLET_DISPERSION_MAX", "1.75"),
+            key="UNIFIED_SCORE_SMART_WALLET_DISPERSION_MAX",
+        ),
+        UNIFIED_SCORE_X_AUTHOR_VELOCITY_MAX=_as_positive_float(
+            _get_env(merged, "UNIFIED_SCORE_X_AUTHOR_VELOCITY_MAX", "1.5"),
+            key="UNIFIED_SCORE_X_AUTHOR_VELOCITY_MAX",
+        ),
+        UNIFIED_SCORE_SELLER_REENTRY_MAX=_as_positive_float(
+            _get_env(merged, "UNIFIED_SCORE_SELLER_REENTRY_MAX", "1.5"),
+            key="UNIFIED_SCORE_SELLER_REENTRY_MAX",
+        ),
+        UNIFIED_SCORE_SHOCK_RECOVERY_MAX=_as_positive_float(
+            _get_env(merged, "UNIFIED_SCORE_SHOCK_RECOVERY_MAX", "2.0"),
+            key="UNIFIED_SCORE_SHOCK_RECOVERY_MAX",
+        ),
+        UNIFIED_SCORE_CLUSTER_DISTRIBUTION_RISK_MAX=_as_positive_float(
+            _get_env(merged, "UNIFIED_SCORE_CLUSTER_DISTRIBUTION_RISK_MAX", "2.5"),
+            key="UNIFIED_SCORE_CLUSTER_DISTRIBUTION_RISK_MAX",
         ),
         UNIFIED_SCORE_BUNDLE_SELL_HEAVY_PENALTY_MAX=_as_positive_float(
             _get_env(merged, "UNIFIED_SCORE_BUNDLE_SELL_HEAVY_PENALTY_MAX", "5.0"),
