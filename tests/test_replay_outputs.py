@@ -42,5 +42,5 @@ def test_replay_writes_required_artifacts_and_fields():
         assert key in signal
 
     matrix_row = json.loads((base / "trade_feature_matrix.jsonl").read_text().splitlines()[0])
-    for key in ["run_id", "ts", "token_address", "pair_address", "config_hash", "decision", "schema_version"]:
+    for key in ["run_id", "ts", "token_address", "pair_address", "symbol", "config_hash", "decision", "entry_confidence", "recommended_position_pct", "schema_version"]:
         assert key in matrix_row

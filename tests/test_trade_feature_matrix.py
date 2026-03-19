@@ -12,6 +12,7 @@ REQUIRED_MATRIX_KEYS = [
     "ts",
     "token_address",
     "pair_address",
+    "symbol",
     "config_hash",
     "decision",
     "entry_decision",
@@ -20,6 +21,8 @@ REQUIRED_MATRIX_KEYS = [
     "regime_reason_flags",
     "regime_blockers",
     "expected_hold_class",
+    "entry_confidence",
+    "recommended_position_pct",
     "final_score",
     "onchain_core",
     "early_signal_bonus",
@@ -154,10 +157,13 @@ def test_trade_feature_matrix_handles_legacy_payloads_with_null_safe_placeholder
     assert row["run_id"] == "matrix_legacy_payload"
     assert row["token_address"] == "tok_legacy"
     assert row["pair_address"] == "pair_legacy"
+    assert row["symbol"] is None
     assert row["decision"] == "paper_enter"
     assert row["entry_decision"] == "paper_enter"
     assert row["age_minutes"] == 3
     assert row["liquidity_usd"] == 1250.0
+    assert row["entry_confidence"] is None
+    assert row["recommended_position_pct"] is None
     assert row["bundle_count_first_60s"] is None
     assert row["exit_decision"] is None
     assert row["gross_pnl_pct"] is None
@@ -171,12 +177,15 @@ def test_trade_feature_matrix_preserves_enriched_payload_fields():
             {
                 "token_address": "tok_enriched",
                 "pair_address": "pair_enriched",
+                "symbol": "ENR",
                 "decision": "paper_enter",
                 "regime_decision": "trend",
                 "regime_confidence": 0.81,
                 "regime_reason_flags": ["fast_momentum"],
                 "regime_blockers": [],
                 "expected_hold_class": "swing",
+                "entry_confidence": 0.84,
+                "recommended_position_pct": 0.35,
                 "final_score": 91.5,
                 "onchain_core": 33.2,
                 "early_signal_bonus": 12.0,
@@ -231,10 +240,13 @@ def test_trade_feature_matrix_preserves_enriched_payload_fields():
 
     row = rows[0]
     assert row["config_hash"] == summary["config_hash"]
+    assert row["symbol"] == "ENR"
     assert row["regime_decision"] == "trend"
     assert row["regime_confidence"] == 0.81
     assert row["regime_reason_flags"] == ["fast_momentum"]
     assert row["expected_hold_class"] == "swing"
+    assert row["entry_confidence"] == 0.84
+    assert row["recommended_position_pct"] == 0.35
     assert row["final_score"] == 91.5
     assert row["wallet_adjustment"] == 1.25
     assert row["buy_pressure_entry"] == 0.88
@@ -245,3 +257,14 @@ def test_trade_feature_matrix_preserves_enriched_payload_fields():
     assert row["smart_wallet_score_sum"] == 14.5
     assert row["smart_wallet_tier1_hits"] == 2
     assert row["smart_wallet_netflow_bias"] == 0.35
+
+
+def test_trade_feature_matrix_smoke_file_exists_for_replay_run():
+    rows, _summary = _run_replay(
+        "matrix_smoke_exists",
+        [{"token_address": "tok_smoke", "pair_address": "pair_smoke", "decision": "paper_enter"}],
+    )
+
+    matrix_path = ROOT / "runs" / "matrix_smoke_exists" / "trade_feature_matrix.jsonl"
+    assert matrix_path.exists()
+    assert len(rows) == 1

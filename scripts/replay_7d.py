@@ -33,6 +33,7 @@ _TRADE_FEATURE_MATRIX_FIELDS = [
     "ts",
     "token_address",
     "pair_address",
+    "symbol",
     "config_hash",
     "decision",
     "entry_decision",
@@ -41,6 +42,8 @@ _TRADE_FEATURE_MATRIX_FIELDS = [
     "regime_reason_flags",
     "regime_blockers",
     "expected_hold_class",
+    "entry_confidence",
+    "recommended_position_pct",
     "final_score",
     "onchain_core",
     "early_signal_bonus",
@@ -136,6 +139,13 @@ def _normalize_wallet_adjustment(value: Any) -> Any:
     return None
 
 
+def _normalize_synthetic_trade_flag(*sources: dict[str, Any]) -> bool:
+    for source in sources:
+        if "synthetic_trade_flag" in source:
+            return bool(source.get("synthetic_trade_flag"))
+    return True
+
+
 def build_trade_feature_row(
     *,
     args: argparse.Namespace,
@@ -176,6 +186,7 @@ def build_trade_feature_row(
             "ts": _first_present(sources, "ts") or args.start_ts or args.end_ts or _DEFAULT_TS,
             "token_address": _first_present(sources, "token_address"),
             "pair_address": _first_present(sources, "pair_address"),
+            "symbol": _first_present(sources, "symbol"),
             "config_hash": config_hash,
             "decision": _first_present(sources, "decision", "entry_decision"),
             "entry_decision": _first_present(sources, "entry_decision", "decision"),
@@ -184,6 +195,8 @@ def build_trade_feature_row(
             "regime_reason_flags": _first_present(sources, "regime_reason_flags", "reason_flags"),
             "regime_blockers": _first_present(sources, "regime_blockers"),
             "expected_hold_class": _first_present(sources, "expected_hold_class"),
+            "entry_confidence": _first_present(sources, "entry_confidence"),
+            "recommended_position_pct": _first_present(sources, "recommended_position_pct"),
             "final_score": _first_present(sources, "final_score"),
             "onchain_core": _first_present(sources, "onchain_core"),
             "early_signal_bonus": _first_present(sources, "early_signal_bonus"),
@@ -238,7 +251,7 @@ def build_trade_feature_row(
             "mae_pct": _first_present(sources, "mae_pct"),
             "wallet_weighting": args.wallet_weighting,
             "dry_run": args.dry_run,
-            "synthetic_trade_flag": True,
+            "synthetic_trade_flag": _normalize_synthetic_trade_flag(trade, signal, item),
             "schema_version": _TRADE_FEATURE_MATRIX_SCHEMA_VERSION,
         }
     )
@@ -402,6 +415,7 @@ def main() -> int:
                 f"- dry_run: {summary_payload['dry_run']}",
                 f"- signals: {summary_payload['signals']}",
                 f"- trades: {summary_payload['trades']}",
+                f"- trade_feature_matrix_rows: {summary_payload['trade_feature_matrix_rows']}",
             ]
         )
         + "\n",
