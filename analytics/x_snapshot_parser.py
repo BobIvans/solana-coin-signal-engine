@@ -6,6 +6,7 @@ import re
 from collections import Counter
 from typing import Any
 
+from analytics.short_horizon_signals import compute_x_author_velocity_5m
 from utils.clock import utc_now_iso
 
 _COUNTER_RE = re.compile(r"^([0-9]+(?:\.[0-9]+)?)([KMB])?$", re.IGNORECASE)
@@ -66,6 +67,11 @@ def parse_query_snapshot(raw: dict[str, Any]) -> dict[str, Any]:
                     "likes": _parse_counter(engagement.get("likes")),
                     "views": _parse_counter(engagement.get("views")),
                 },
+                "created_at": card.get("created_at"),
+                "posted_at": card.get("posted_at"),
+                "published_at": card.get("published_at"),
+                "timestamp": card.get("timestamp"),
+                "tweet_created_at": card.get("tweet_created_at"),
                 "captured_rank": int(card.get("captured_rank", idx) or idx),
             }
         )
@@ -150,4 +156,5 @@ def aggregate_token_snapshots(token: dict[str, Any], snapshots: list[dict[str, A
         "x_queries_succeeded": ok_count,
         "x_cache_hit": cache_hit,
         "x_snapshot_at": utc_now_iso(),
+        "x_author_velocity_5m": compute_x_author_velocity_5m(parsed),
     }

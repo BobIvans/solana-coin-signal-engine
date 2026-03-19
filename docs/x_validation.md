@@ -46,3 +46,7 @@ python scripts/x_validation_smoke.py --shortlist data/processed/shortlist.json
 ```
 
 Exit code is `0` for `ok` and `degraded` outcomes. Non-zero only for unhandled code crash / schema violation.
+
+
+## PR-SIG-2 additive field
+- `x_author_velocity_5m`: distinct newly visible authors per minute over the first five minutes of timestamped visible posts. It remains `null` when OpenClaw-visible cards do not expose honest post timestamps.

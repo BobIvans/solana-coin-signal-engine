@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from analytics.short_horizon_signals import compute_smart_wallet_dispersion_score
 from collectors.wallet_registry_loader import (
     WALLET_REGISTRY_STATUS_EMPTY,
     WALLET_REGISTRY_STATUS_MISSING,
@@ -79,6 +80,7 @@ def default_wallet_registry_bias(
         "smart_wallet_netflow_bias": None,
         "smart_wallet_conviction_bonus": 0.0,
         "smart_wallet_registry_confidence": "low",
+        "smart_wallet_dispersion_score": None,
     }
 
 
@@ -137,6 +139,7 @@ def compute_wallet_registry_bias(raw_hit_wallets: list[str] | tuple[str, ...] | 
         "smart_wallet_hit_statuses": sorted({str(record.get("status") or "") for record in matched_records if record.get("status")}),
         "smart_wallet_conviction_bonus": conviction_bonus,
         "smart_wallet_registry_confidence": confidence,
+        "smart_wallet_dispersion_score": compute_smart_wallet_dispersion_score(raw_hit_wallets, lookup),
     }
 
 

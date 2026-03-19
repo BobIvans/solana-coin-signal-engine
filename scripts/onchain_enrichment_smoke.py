@@ -12,6 +12,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from analytics.dev_activity import compute_dev_sell_pressure_5m, infer_dev_wallet
 from analytics.holder_metrics import compute_holder_metrics
 from analytics.launch_path import estimate_launch_path
+from analytics.short_horizon_signals import (
+    _parse_ts,
+    compute_cluster_sell_concentration_120s,
+    compute_liquidity_refill_ratio_120s,
+    compute_liquidity_shock_recovery_sec,
+    compute_net_unique_buyers_60s,
+    compute_seller_reentry_ratio,
+)
 from analytics.smart_wallet_hits import compute_smart_wallet_hits
 from analytics.wallet_registry_bias import compute_wallet_registry_bias
 from collectors.helius_client import HeliusClient
@@ -24,6 +32,7 @@ from collectors.wallet_registry_loader import (
 from config.settings import load_settings
 from utils.bundle_contract_fields import copy_bundle_contract_fields
 from utils.clock import utc_now_iso
+from utils.short_horizon_contract_fields import copy_short_horizon_contract_fields
 from utils.io import append_jsonl, read_json, write_json
 
 CONTRACT_VERSION = "onchain_enrichment_v1"
@@ -62,6 +71,13 @@ def _validate_record(record: dict) -> None:
         "smart_wallet_registry_confidence",
         "enrichment_status",
         "enrichment_warnings",
+        "net_unique_buyers_60s",
+        "liquidity_refill_ratio_120s",
+        "cluster_sell_concentration_120s",
+        "smart_wallet_dispersion_score",
+        "x_author_velocity_5m",
+        "seller_reentry_ratio",
+        "liquidity_shock_recovery_sec",
         "contract_version",
     }
     missing = sorted(required - set(record.keys()))
@@ -220,6 +236,17 @@ def run(
             },
         )
         wallet_bias = compute_wallet_registry_bias(smart.get("smart_wallet_hit_wallets") or [], wallet_lookup)
+        short_horizon = {
+            "net_unique_buyers_60s": compute_net_unique_buyers_60s(pair_created_ts=_parse_ts(token.get("pair_created_at")), txs=txs),
+            "liquidity_refill_ratio_120s": compute_liquidity_refill_ratio_120s(pair_created_ts=_parse_ts(token.get("pair_created_at")), txs=txs),
+            "cluster_sell_concentration_120s": compute_cluster_sell_concentration_120s(
+                pair_created_ts=_parse_ts(token.get("pair_created_at")),
+                txs=txs,
+                creator_wallet=str(token.get("creator_wallet") or "") or None,
+            ),
+            "seller_reentry_ratio": compute_seller_reentry_ratio(pair_created_ts=_parse_ts(token.get("pair_created_at")), txs=txs),
+            "liquidity_shock_recovery_sec": compute_liquidity_shock_recovery_sec(pair_created_ts=_parse_ts(token.get("pair_created_at")), txs=txs),
+        }
         append_jsonl(
             events_path,
             {
@@ -252,7 +279,9 @@ def run(
             **dev_metrics,
             **launch,
             **smart,
+            **copy_short_horizon_contract_fields(token),
             **wallet_bias,
+            **short_horizon,
             "enrichment_status": status,
             "enrichment_warnings": sorted(set(warnings)),
             "enriched_at": utc_now_iso(),

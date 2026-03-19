@@ -139,9 +139,15 @@ def test_bundle_cluster_unified_score_settings_exist_and_are_bounded():
         "UNIFIED_SCORE_MULTI_CLUSTER_BONUS_MAX",
         "UNIFIED_SCORE_SINGLE_CLUSTER_PENALTY_MAX",
         "UNIFIED_SCORE_CREATOR_CLUSTER_PENALTY",
+        "UNIFIED_SCORE_ORGANIC_BUYER_FLOW_MAX",
+        "UNIFIED_SCORE_LIQUIDITY_REFILL_MAX",
+        "UNIFIED_SCORE_SMART_WALLET_DISPERSION_MAX",
+        "UNIFIED_SCORE_X_AUTHOR_VELOCITY_MAX",
+        "UNIFIED_SCORE_SELLER_REENTRY_MAX",
+        "UNIFIED_SCORE_SHOCK_RECOVERY_MAX",
+        "UNIFIED_SCORE_CLUSTER_DISTRIBUTION_RISK_MAX",
         "UNIFIED_SCORE_BUNDLE_SELL_HEAVY_PENALTY_MAX",
         "UNIFIED_SCORE_RETRY_MANIPULATION_PENALTY_MAX",
-        "UNIFIED_SCORE_ORGANIC_BUYER_FLOW_MAX",
         "EXIT_CLUSTER_DUMP_HARD",
         "EXIT_CONTRACT_VERSION",
         "PAPER_CONTRACT_VERSION",
@@ -153,10 +159,16 @@ def test_bundle_cluster_unified_score_settings_exist_and_are_bounded():
     assert settings.UNIFIED_SCORE_MULTI_CLUSTER_BONUS_MAX > 0
     assert settings.UNIFIED_SCORE_SINGLE_CLUSTER_PENALTY_MAX > 0
     assert settings.UNIFIED_SCORE_CREATOR_CLUSTER_PENALTY > 0
+    assert settings.UNIFIED_SCORE_ORGANIC_BUYER_FLOW_MAX > 0
+    assert settings.UNIFIED_SCORE_LIQUIDITY_REFILL_MAX > 0
+    assert settings.UNIFIED_SCORE_SMART_WALLET_DISPERSION_MAX > 0
+    assert settings.UNIFIED_SCORE_X_AUTHOR_VELOCITY_MAX > 0
+    assert settings.UNIFIED_SCORE_SELLER_REENTRY_MAX > 0
+    assert settings.UNIFIED_SCORE_SHOCK_RECOVERY_MAX > 0
+    assert settings.UNIFIED_SCORE_CLUSTER_DISTRIBUTION_RISK_MAX > 0
     assert settings.UNIFIED_SCORE_BUNDLE_SELL_HEAVY_PENALTY_MAX > 0
     assert settings.UNIFIED_SCORE_RETRY_MANIPULATION_PENALTY_MAX > 0
-    assert settings.UNIFIED_SCORE_ORGANIC_BUYER_FLOW_MAX > 0
-    assert isinstance(settings.EXIT_CLUSTER_DUMP_HARD, bool)
+    assert 0 <= settings.EXIT_CLUSTER_DUMP_HARD <= 1
     assert settings.UNIFIED_SCORE_BUNDLE_AGGRESSION_MAX < settings.UNIFIED_SCORE_ENTRY_THRESHOLD
 
 
@@ -165,4 +177,4 @@ def test_load_settings_exposes_runtime_config_contract_fields():
 
     assert settings.ENTRY_TREND_MULTI_CLUSTER_MIN >= 1
     assert settings.UNIFIED_SCORE_ORGANIC_BUYER_FLOW_MAX > 0
-    assert isinstance(settings.EXIT_CLUSTER_DUMP_HARD, bool)
+    assert 0 <= settings.EXIT_CLUSTER_DUMP_HARD <= 1

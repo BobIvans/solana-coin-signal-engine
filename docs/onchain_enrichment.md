@@ -37,6 +37,27 @@ Important honesty rule: standard `getTokenLargestAccounts` covers only top 20 to
 PR-SW-4 keeps the existing PR-4 raw smart-wallet hit detector and adds a deterministic registry-aware overlay.
 The validated registry affects enrichment only. It does **not** change PR-6 unified score, entry selection, exit logic, paper runner, or live execution in this PR.
 
+## Short-horizon continuation enrichment
+PR-SIG-2 adds additive, replay-safe continuation-quality metrics to enrichment output without changing PR-6 scoring, entry selection, regime routing, or exits.
+
+New per-token fields:
+- `net_unique_buyers_60s`
+- `liquidity_refill_ratio_120s`
+- `cluster_sell_concentration_120s`
+- `smart_wallet_dispersion_score`
+- `x_author_velocity_5m`
+- `seller_reentry_ratio`
+- `liquidity_shock_recovery_sec`
+
+Formula / honesty notes:
+- `net_unique_buyers_60s` = distinct early buyers minus distinct early sellers from exact side-classified token transfers; returns `null` when side evidence is missing.
+- `liquidity_refill_ratio_120s` = `(max_liquidity_after_shock - post_shock_min) / (initial_baseline - post_shock_min)` over the first 120 seconds; returns `null` when no honest liquidity shock is observed.
+- `cluster_sell_concentration_120s` = dominant inferred cluster share of early sell volume; returns `null` when cluster evidence coverage is too weak.
+- `smart_wallet_dispersion_score` is a bounded diversity score over smart-wallet hit tiers plus any available family / cluster groupings; returns `null` when registry evidence is absent.
+- `x_author_velocity_5m` measures newly visible authors per minute over the first five minutes of timestamped visible X posts; returns `null` when per-post author timing is unavailable.
+- `seller_reentry_ratio` measures the fraction of early sellers who had an earlier buy and later rebought inside the observation window; returns `null` when lifecycle evidence is insufficient.
+- `liquidity_shock_recovery_sec` measures seconds from the first meaningful liquidity shock (>=10% drop from baseline) until full observed recovery to baseline; returns `null` when recovery is not honestly observed.
+
 New per-token fields:
 - `wallet_registry_status`
 - `wallet_registry_hot_set_size`

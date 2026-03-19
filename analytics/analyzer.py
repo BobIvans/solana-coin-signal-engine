@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from analytics.analyzer_correlations import compute_metric_correlations
+from analytics.analyzer_matrix import compute_matrix_analysis, merge_closed_positions_with_matrix, read_trade_feature_matrix
 from analytics.analyzer_metrics import (
     compute_exit_reason_metrics,
     compute_friction_metrics,
@@ -16,7 +17,9 @@ from analytics.analyzer_metrics import (
 )
 from analytics.analyzer_recommendations import generate_recommendations
 from analytics.analyzer_report_writer import write_markdown_report
+from src.replay.calibration_metrics import derive_outcome_metrics
 from analytics.analyzer_slices import bucketize_metric, slice_positions
+from analytics.config_suggestions import write_config_suggestions
 from config.settings import Settings
 from utils.io import append_jsonl, read_json, write_json
 
@@ -97,6 +100,7 @@ def _derive_lifecycle_from_trades(trades: list[dict[str, Any]]) -> list[dict[str
         net_pnl_pct = (net_pnl_sol / entry_value * 100) if entry_value > 0 else float(final_exit.get("net_pnl_pct", 0.0))
 
         snapshot = entry.get("entry_snapshot", {}) if isinstance(entry.get("entry_snapshot"), dict) else {}
+        calibration_metrics = derive_outcome_metrics(entry, snapshot)
 
         positions.append(
             {
@@ -123,6 +127,7 @@ def _derive_lifecycle_from_trades(trades: list[dict[str, Any]]) -> list[dict[str
                 "entry_confidence": entry.get("entry_confidence", snapshot.get("entry_confidence")),
                 "entry_snapshot": snapshot,
                 **{metric: entry.get(metric, snapshot.get(metric)) for metric in _REQUIRED_METRICS},
+                **{metric: entry.get(metric, snapshot.get(metric, calibration_metrics.get(metric))) for metric in calibration_metrics},
                 "first_exit_reason": first_exit.get("exit_reason", "unknown"),
             }
         )
@@ -139,6 +144,8 @@ def _reconstruct_closed_positions(trades: list[dict[str, Any]], positions_state:
     for row in positions_state:
         if str(row.get("status", "")).lower() != "closed":
             continue
+        snapshot = row.get("entry_snapshot", {}) if isinstance(row.get("entry_snapshot"), dict) else {}
+        calibration_metrics = derive_outcome_metrics(row, snapshot)
         fallback.append(
             {
                 "position_id": row.get("position_id", "unknown"),
@@ -162,8 +169,9 @@ def _reconstruct_closed_positions(trades: list[dict[str, Any]], positions_state:
                 "liquidity_usd": row.get("liquidity_usd"),
                 "final_score": row.get("final_score"),
                 "entry_confidence": row.get("entry_confidence"),
-                "entry_snapshot": row.get("entry_snapshot", {}),
-                **{metric: row.get(metric, row.get("entry_snapshot", {}).get(metric)) for metric in _REQUIRED_METRICS},
+                "entry_snapshot": snapshot,
+                **{metric: row.get(metric, snapshot.get(metric)) for metric in _REQUIRED_METRICS},
+                **{metric: row.get(metric, snapshot.get(metric, calibration_metrics.get(metric))) for metric in calibration_metrics},
             }
         )
     return fallback
@@ -189,9 +197,21 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
     signals = _read_jsonl(signals_path)
     positions_state = read_json(positions_path, default=[])
     portfolio_state = read_json(portfolio_path, default={})
+    matrix_path, trade_feature_matrix = read_trade_feature_matrix(settings)
 
     closed_positions = _reconstruct_closed_positions(trades, positions_state)
+    matrix_analysis_rows = merge_closed_positions_with_matrix(closed_positions, trade_feature_matrix)
     append_jsonl(events_path, {"ts": datetime.now(timezone.utc).isoformat(), "event": "closed_positions_reconstructed", "count": len(closed_positions)})
+    append_jsonl(
+        events_path,
+        {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "event": "trade_feature_matrix_loaded",
+            "count": len(trade_feature_matrix),
+            "path": str(matrix_path) if matrix_path else "",
+            "usable_row_count": len(matrix_analysis_rows),
+        },
+    )
 
     portfolio_metrics = compute_portfolio_metrics(
         {
@@ -222,6 +242,8 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
         "entry_confidence_bucket": bucketize_metric(closed_positions, "entry_confidence", [(0.50, 0.65), (0.65, 0.80), (0.80, None)]),
     }
 
+    matrix_analysis = compute_matrix_analysis(matrix_analysis_rows, settings)
+
     warnings = ["correlation_not_causation"]
     if len(closed_positions) < settings.POST_RUN_MIN_TRADES_FOR_REGIME_COMPARISON:
         warnings.append("small_sample_warning")
@@ -236,6 +258,11 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
         warnings.append("open_positions_bias")
     if settings.POST_RUN_OUTLIER_CLIP_PCT > 0:
         warnings.append("high_outlier_sensitivity")
+    if not trade_feature_matrix:
+        warnings.append("matrix_input_missing")
+    elif not matrix_analysis_rows:
+        warnings.append("matrix_input_unusable")
+    warnings.extend(matrix_analysis.get("warnings", []))
 
     summary = {
         "as_of": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -244,6 +271,20 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
         **exit_metrics,
         "friction_summary": friction_metrics,
         "metric_correlations": correlations,
+        "matrix_analysis_available": matrix_analysis.get("matrix_analysis_available", False),
+        "matrix_row_count": matrix_analysis.get("matrix_row_count", 0),
+        "bundle_cluster_correlations": matrix_analysis.get("bundle_cluster_correlations", []),
+        "regime_confusion_summary": matrix_analysis.get("regime_confusion_summary", {}),
+        "trend_failure_summary": matrix_analysis.get("trend_failure_summary", {}),
+        "scalp_missed_trend_summary": matrix_analysis.get("scalp_missed_trend_summary", {}),
+        "scalp_vs_trend_outcome_summary": matrix_analysis.get("scalp_vs_trend_outcome_summary", {}),
+        "time_to_first_profit_summary": matrix_analysis.get("time_to_first_profit_summary", {}),
+        "mfe_mae_summary": matrix_analysis.get("mfe_mae_summary", {}),
+        "trend_survival_summary": matrix_analysis.get("trend_survival_summary", {}),
+        "pattern_expectancy_slices": matrix_analysis.get("pattern_expectancy_slices", {}),
+        "top_positive_feature_slices": matrix_analysis.get("top_positive_feature_slices", []),
+        "top_negative_feature_slices": matrix_analysis.get("top_negative_feature_slices", []),
+        "trade_feature_matrix_path": str(matrix_path) if matrix_path else "",
         "warnings": warnings,
         "contract_version": settings.POST_RUN_CONTRACT_VERSION,
     }
@@ -255,9 +296,17 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
     summary_path = settings.PROCESSED_DATA_DIR / "post_run_summary.json"
     recommendations_path = settings.PROCESSED_DATA_DIR / "post_run_recommendations.json"
     report_path = settings.PROCESSED_DATA_DIR / "post_run_report.md"
+    config_suggestions_path = settings.PROCESSED_DATA_DIR / "config_suggestions.json"
 
     write_json(summary_path, summary)
     write_json(recommendations_path, recommendations_payload)
+    write_config_suggestions(
+        settings=settings,
+        summary=summary,
+        recommendations_payload=recommendations_payload,
+        matrix_rows=matrix_analysis_rows,
+        output_path=config_suggestions_path,
+    )
     write_markdown_report(summary, recommendations_payload, str(report_path))
 
     append_jsonl(events_path, {"ts": datetime.now(timezone.utc).isoformat(), "event": "analysis_completed", "summary_path": str(summary_path)})
@@ -265,6 +314,7 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
     return {
         "summary_path": str(summary_path),
         "recommendations_path": str(recommendations_path),
+        "config_suggestions_path": str(config_suggestions_path),
         "report_path": str(report_path),
         "closed_positions": len(closed_positions),
     }
