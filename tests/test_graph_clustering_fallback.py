@@ -100,3 +100,27 @@ def test_fixture_6_stable_id_rerun_via_graph_path_is_deterministic():
     second = compute_wallet_clustering_metrics(list(reversed(ORGANIC)), participant_wallets=[item["wallet"] for item in reversed(ORGANIC)], settings=DummySettings())
 
     assert first["dominant_cluster_id"] == second["dominant_cluster_id"]
+
+
+def test_explicit_artifact_input_is_required_to_use_persisted_clusters(tmp_path: Path):
+    stale_clusters = {
+        "wallet_to_cluster": {"wallet_a": "cluster_stale", "wallet_b": "cluster_stale", "wallet_c": "cluster_stale"},
+        "clusters": [{"cluster_id": "cluster_stale", "cluster_confidence": 0.99}],
+        "summary": {"cluster_count": 1},
+    }
+    settings = DummySettings()
+    settings.PROCESSED_DATA_DIR = tmp_path
+    settings.WALLET_GRAPH_OUTPUT_PATH = tmp_path / "wallet_graph.json"
+    settings.WALLET_CLUSTER_OUTPUT_PATH = tmp_path / "wallet_clusters.json"
+    settings.WALLET_GRAPH_EVENTS_PATH = tmp_path / "wallet_graph_events.jsonl"
+    settings.WALLET_CLUSTER_OUTPUT_PATH.write_text(__import__("json").dumps(stale_clusters), encoding="utf-8")
+
+    metrics = compute_wallet_clustering_metrics(
+        ORGANIC,
+        participant_wallets=[item["wallet"] for item in ORGANIC],
+        settings=settings,
+        artifact_scope={"token_address": "tok-1", "pair_address": "pair-1"},
+    )
+
+    assert metrics["cluster_metric_origin"] == "graph_evidence"
+    assert metrics["dominant_cluster_id"] != "cluster_stale"

@@ -6,7 +6,7 @@ from collections import defaultdict
 from math import ceil
 from typing import Any
 
-from analytics.cluster_store import load_wallet_clusters, persist_wallet_cluster_artifacts
+from analytics.cluster_store import persist_wallet_cluster_artifacts
 from analytics.wallet_graph_builder import build_wallet_graph, derive_wallet_clusters
 from utils.logger import log_info, log_warning
 
@@ -375,11 +375,6 @@ def resolve_wallet_cluster_assignments(
 
     graph_enabled = True if settings is None else bool(getattr(settings, "WALLET_GRAPH_ENABLED", True))
     existing_clusters = clusters_artifact or {}
-    if not existing_clusters and settings is not None and artifact_scope:
-        loaded = load_wallet_clusters(settings=settings)
-        if isinstance(loaded, dict) and loaded.get("wallet_to_cluster"):
-            existing_clusters = loaded
-
     wallet_to_cluster = existing_clusters.get("wallet_to_cluster") if isinstance(existing_clusters, dict) else {}
     if isinstance(wallet_to_cluster, dict):
         mapped = {wallet: str(cluster_id) for wallet, cluster_id in wallet_to_cluster.items() if _as_wallet(wallet)}
