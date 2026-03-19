@@ -29,6 +29,11 @@ def _mk_rec(rec_type: str, target: str, action: str, confidence: float, reason: 
     }
 
 
+def _add_if_confident(recommendations: list[dict[str, Any]], rec: dict[str, Any], confidence_min: float) -> None:
+    if float(rec.get("confidence", 0.0)) >= confidence_min:
+        recommendations.append(rec)
+
+
 def generate_recommendations(
     summary: dict[str, Any], correlations: list[dict[str, Any]], slices: dict[str, Any], settings: Settings
 ) -> list[dict[str, Any]]:
@@ -73,17 +78,18 @@ def generate_recommendations(
             confidence = min(0.9, 0.55 + abs_corr)
             reason = "negative correlation with pnl"
 
-        if confidence >= confidence_min:
-            recommendations.append(
-                {
-                    "type": "weight_adjustment",
-                    "target": _METRIC_TO_WEIGHT_TARGET[metric],
-                    "current_direction": "positive",
-                    "suggested_action": action,
-                    "confidence": round(confidence, 4),
-                    "reason": reason,
-                }
-            )
+        _add_if_confident(
+            recommendations,
+            {
+                "type": "weight_adjustment",
+                "target": _METRIC_TO_WEIGHT_TARGET[metric],
+                "current_direction": "positive",
+                "suggested_action": action,
+                "confidence": round(confidence, 4),
+                "reason": reason,
+            },
+            confidence_min,
+        )
 
     regime_metrics = slices.get("regime", {})
     scalp_count = int(regime_metrics.get("SCALP", {}).get("count", 0))
@@ -125,5 +131,99 @@ def generate_recommendations(
                 "degraded X appears frequently; reduce risk in degraded mode",
             )
         )
+
+    if summary.get("matrix_analysis_available"):
+        regime_confusion = summary.get("regime_confusion_summary", {})
+        trend_failed = summary.get("trend_failure_summary", {})
+        scalp_missed = summary.get("scalp_missed_trend_summary", {})
+        pattern_slices = summary.get("pattern_expectancy_slices", {})
+
+        if int(trend_failed.get("count", 0)) >= min_sample and float(trend_failed.get("avg_net_pnl_pct", 0.0)) < 0:
+            recommendations.append(
+                _mk_rec(
+                    "matrix_threshold_adjustment",
+                    "TREND promotion guard",
+                    "raise_trend_confidence_and_breakdown_filters",
+                    0.71,
+                    "TREND promotions are failing fast with negative expectancy in the feature matrix",
+                )
+            )
+
+        if int(scalp_missed.get("count", 0)) >= min_sample and float(scalp_missed.get("avg_mfe_capture_gap_pct", 0.0)) >= 8.0:
+            recommendations.append(
+                _mk_rec(
+                    "matrix_threshold_adjustment",
+                    "SCALP->TREND upgrade path",
+                    "allow_more_trend_follow_through_when_continuation_evidence_is_present",
+                    0.69,
+                    "SCALP entries left material MFE uncaptured despite trend-like continuation evidence",
+                )
+            )
+
+        creator_slice = pattern_slices.get("creator_in_cluster_flag:true", {})
+        if int(creator_slice.get("count", 0)) >= min_sample and float(creator_slice.get("avg_net_pnl_pct", 0.0)) < 0:
+            recommendations.append(
+                _mk_rec(
+                    "matrix_risk_adjustment",
+                    "creator-linked clusters",
+                    "tighten_or_penalize_creator_cluster_exposure",
+                    0.74,
+                    "creator-linked cluster slice shows negative expectancy in matrix-derived trades",
+                )
+            )
+
+        concentration_slice = pattern_slices.get("cluster_concentration_ratio:gte_0.6", {})
+        if int(concentration_slice.get("count", 0)) >= min_sample and float(concentration_slice.get("avg_net_pnl_pct", 0.0)) < 0:
+            recommendations.append(
+                _mk_rec(
+                    "matrix_risk_adjustment",
+                    "cluster concentration",
+                    "reduce_size_when_cluster_concentration_is_high",
+                    0.72,
+                    "high concentration bundles underperform in the trade feature matrix",
+                )
+            )
+
+        retry_slice = pattern_slices.get("retry_manipulation_penalty:gte_0.5", {})
+        if int(retry_slice.get("count", 0)) >= min_sample and float(retry_slice.get("avg_net_pnl_pct", 0.0)) < 0:
+            recommendations.append(
+                _mk_rec(
+                    "matrix_risk_adjustment",
+                    "retry-heavy bundles",
+                    "increase_penalty_for_retry_manipulation_patterns",
+                    0.68,
+                    "retry-heavy bundle slice carries negative expectancy",
+                )
+            )
+
+        sell_heavy_slice = pattern_slices.get("bundle_sell_heavy_penalty:gte_0.5", {})
+        if int(sell_heavy_slice.get("count", 0)) >= min_sample and float(sell_heavy_slice.get("avg_net_pnl_pct", 0.0)) < 0:
+            recommendations.append(
+                _mk_rec(
+                    "matrix_risk_adjustment",
+                    "sell-heavy bundle exposure",
+                    "raise_sell_heavy_penalty",
+                    0.66,
+                    "sell-heavy bundle slice underperforms on realized net pnl",
+                )
+            )
+
+        confidence_buckets = regime_confusion.get("regime_confidence_buckets", {})
+        high_conf = confidence_buckets.get("regime_confidence:gte_0.7", {})
+        low_conf = confidence_buckets.get("regime_confidence:lt_0.7", {})
+        if (
+            int(high_conf.get("count", 0)) >= min_sample
+            and int(low_conf.get("count", 0)) >= min_sample
+            and float(high_conf.get("avg_net_pnl_pct", 0.0)) > float(low_conf.get("avg_net_pnl_pct", 0.0)) + 3.0
+        ):
+            recommendations.append(
+                _mk_rec(
+                    "matrix_threshold_adjustment",
+                    "regime_confidence",
+                    "prefer_high_confidence_regime_calls",
+                    0.63,
+                    "high-confidence regime calls outperform low-confidence calls in matrix slices",
+                )
+            )
 
     return recommendations

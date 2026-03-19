@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from analytics.analyzer_correlations import compute_metric_correlations
+from analytics.analyzer_matrix import compute_matrix_analysis, merge_closed_positions_with_matrix, read_trade_feature_matrix
 from analytics.analyzer_metrics import (
     compute_exit_reason_metrics,
     compute_friction_metrics,
@@ -189,9 +190,21 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
     signals = _read_jsonl(signals_path)
     positions_state = read_json(positions_path, default=[])
     portfolio_state = read_json(portfolio_path, default={})
+    matrix_path, trade_feature_matrix = read_trade_feature_matrix(settings)
 
     closed_positions = _reconstruct_closed_positions(trades, positions_state)
+    matrix_analysis_rows = merge_closed_positions_with_matrix(closed_positions, trade_feature_matrix)
     append_jsonl(events_path, {"ts": datetime.now(timezone.utc).isoformat(), "event": "closed_positions_reconstructed", "count": len(closed_positions)})
+    append_jsonl(
+        events_path,
+        {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "event": "trade_feature_matrix_loaded",
+            "count": len(trade_feature_matrix),
+            "path": str(matrix_path) if matrix_path else "",
+            "usable_row_count": len(matrix_analysis_rows),
+        },
+    )
 
     portfolio_metrics = compute_portfolio_metrics(
         {
@@ -222,6 +235,8 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
         "entry_confidence_bucket": bucketize_metric(closed_positions, "entry_confidence", [(0.50, 0.65), (0.65, 0.80), (0.80, None)]),
     }
 
+    matrix_analysis = compute_matrix_analysis(matrix_analysis_rows, settings)
+
     warnings = ["correlation_not_causation"]
     if len(closed_positions) < settings.POST_RUN_MIN_TRADES_FOR_REGIME_COMPARISON:
         warnings.append("small_sample_warning")
@@ -236,6 +251,11 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
         warnings.append("open_positions_bias")
     if settings.POST_RUN_OUTLIER_CLIP_PCT > 0:
         warnings.append("high_outlier_sensitivity")
+    if not trade_feature_matrix:
+        warnings.append("matrix_input_missing")
+    elif not matrix_analysis_rows:
+        warnings.append("matrix_input_unusable")
+    warnings.extend(matrix_analysis.get("warnings", []))
 
     summary = {
         "as_of": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -244,6 +264,16 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
         **exit_metrics,
         "friction_summary": friction_metrics,
         "metric_correlations": correlations,
+        "matrix_analysis_available": matrix_analysis.get("matrix_analysis_available", False),
+        "matrix_row_count": matrix_analysis.get("matrix_row_count", 0),
+        "bundle_cluster_correlations": matrix_analysis.get("bundle_cluster_correlations", []),
+        "regime_confusion_summary": matrix_analysis.get("regime_confusion_summary", {}),
+        "trend_failure_summary": matrix_analysis.get("trend_failure_summary", {}),
+        "scalp_missed_trend_summary": matrix_analysis.get("scalp_missed_trend_summary", {}),
+        "pattern_expectancy_slices": matrix_analysis.get("pattern_expectancy_slices", {}),
+        "top_positive_feature_slices": matrix_analysis.get("top_positive_feature_slices", []),
+        "top_negative_feature_slices": matrix_analysis.get("top_negative_feature_slices", []),
+        "trade_feature_matrix_path": str(matrix_path) if matrix_path else "",
         "warnings": warnings,
         "contract_version": settings.POST_RUN_CONTRACT_VERSION,
     }
