@@ -1,4 +1,4 @@
-"""Shared bundle/cluster contract field helpers."""
+"""Shared bundle/cluster and linkage contract field helpers."""
 
 from __future__ import annotations
 
@@ -69,3 +69,17 @@ def copy_linkage_contract_fields(
 
     fallback = fallback or {}
     return _copy_fields(LINKAGE_CONTRACT_FIELDS, source, fallback)
+
+
+ALL_BUNDLE_LINKAGE_CONTRACT_FIELDS = [*BUNDLE_CONTRACT_FIELDS, *LINKAGE_CONTRACT_FIELDS]
+
+
+def copy_bundle_and_linkage_contract_fields(
+    source: dict[str, Any],
+    *,
+    fallback: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Copy both bundle/cluster and linkage contract fields with optional fallback lookup."""
+
+    fallback = fallback or {}
+    return _copy_fields(ALL_BUNDLE_LINKAGE_CONTRACT_FIELDS, source, fallback)

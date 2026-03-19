@@ -130,6 +130,7 @@ Key points:
 
 - linkage uses shared funders, shared cluster ids, shared launch groups, and direct creator/dev-linked participation hints;
 - outputs remain additive and fail-open when creator/dev/funder evidence is missing or malformed;
+- bundle-stage enrichment keeps linkage fields null-filled when evidence is unavailable so downstream contracts stay stable;
 - confidence and provenance are exposed through `linkage_confidence`, `linkage_reason_codes`, `linkage_metric_origin`, and `linkage_status`;
 - this PR does **not** claim identity certainty, and weak evidence stays low-confidence.
 

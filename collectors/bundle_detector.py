@@ -7,7 +7,7 @@ from typing import Any
 
 from analytics.wallet_clustering import compute_wallet_clustering_metrics
 from collectors.helius_client import HeliusClient
-from utils.bundle_contract_fields import BUNDLE_CONTRACT_FIELDS
+from utils.bundle_contract_fields import BUNDLE_CONTRACT_FIELDS, LINKAGE_CONTRACT_FIELDS
 from utils.logger import log_warning
 from utils.rate_limit import acquire
 
@@ -34,7 +34,7 @@ def safe_null_bundle_metrics(
         "bundle_enrichment_status": status,
         "bundle_enrichment_warning": warning,
     }
-    for field in BUNDLE_CONTRACT_FIELDS:
+    for field in [*BUNDLE_CONTRACT_FIELDS, *LINKAGE_CONTRACT_FIELDS]:
         payload.setdefault(field, None)
     return payload
 
