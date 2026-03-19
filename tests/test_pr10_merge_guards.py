@@ -18,6 +18,9 @@ def test_post_run_settings_coexist_with_unified_and_entry():
     assert settings.POST_RUN_MIN_SAMPLE_FOR_RECOMMENDATION > 0
     assert 0 <= settings.POST_RUN_OUTLIER_CLIP_PCT <= 1
     assert 0 <= settings.POST_RUN_RECOMMENDATION_CONFIDENCE_MIN <= 1
+    assert isinstance(settings.CONFIG_SUGGESTIONS_ENABLED, bool)
+    assert settings.CONFIG_SUGGESTIONS_MIN_SAMPLE > 0
+    assert isinstance(settings.CONFIG_SUGGESTIONS_TRAINING_WHEELS_MODE, bool)
 
 
 def test_env_example_contains_post_run_block_once():
@@ -30,6 +33,10 @@ def test_env_example_contains_post_run_block_once():
     assert 'POST_RUN_MIN_SAMPLE_FOR_RECOMMENDATION=' in env_example
     assert 'POST_RUN_OUTLIER_CLIP_PCT=' in env_example
     assert 'POST_RUN_CONTRACT_VERSION=' in env_example
+    assert env_example.count('CONFIG_SUGGESTIONS_ENABLED=') == 1
+    assert 'CONFIG_SUGGESTIONS_MIN_SAMPLE=' in env_example
+    assert 'CONFIG_SUGGESTIONS_TRAINING_WHEELS_MODE=' in env_example
+    assert 'CONFIG_SUGGESTIONS_CONTRACT_VERSION=' in env_example
 
 
 def test_readme_mentions_pr10_without_removing_pr7_section():
