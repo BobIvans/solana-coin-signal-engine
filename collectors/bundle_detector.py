@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
+from analytics.wallet_clustering import compute_wallet_clustering_metrics
 from collectors.helius_client import HeliusClient
 from utils.bundle_contract_fields import BUNDLE_CONTRACT_FIELDS
 from utils.logger import log_warning
@@ -198,6 +199,7 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
                     "wallets": _extract_wallets(tx),
                     "value": _extract_value(tx),
                     "success": _extract_success(tx),
+                    "funder": str(tx.get("funder") or tx.get("funding_source") or tx.get("funded_by") or "").strip() or None,
                 }
             )
 
@@ -220,6 +222,12 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
         bundle_values: list[float] = []
         bundle_offsets_min: list[float] = []
         success_values: list[float] = []
+        clustering_participants, participant_wallets, creator_wallet = _extract_clustering_participants(pair, first_window)
+        clustering_metrics = compute_wallet_clustering_metrics(
+            clustering_participants,
+            creator_wallet=creator_wallet,
+            participant_wallets=participant_wallets,
+        )
 
         for bundle in inferred_bundles:
             wallets = {wallet for tx in bundle for wallet in tx["wallets"]}
@@ -244,6 +252,7 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
             "bundle_timing_from_liquidity_add_min": round(min(bundle_offsets_min), 6) if bundle_offsets_min else None,
             "bundle_success_rate": round(sum(success_values) / len(success_values), 6) if success_values else None,
             "bundle_enrichment_warning": source_warning,
+            **clustering_metrics,
         }
     except Exception as exc:  # pragma: no cover - defensive fail-open
         log_warning(
@@ -254,6 +263,107 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
         )
         return safe_null_bundle_metrics(status="failed", warning=str(exc))
 
+
+
+
+def _creator_wallet_from_payload(payload: dict[str, Any]) -> str | None:
+    for key in ("creator_wallet", "deployer_wallet", "mint_authority", "update_authority", "dev_wallet_est"):
+        value = str(payload.get(key) or "").strip()
+        if value:
+            return value
+    return None
+
+
+def _extract_clustering_participants(
+    payload: dict[str, Any],
+    first_window: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[str], str | None]:
+    participants: dict[str, dict[str, Any]] = {}
+    participant_wallets: set[str] = set()
+
+    def ensure(wallet: str) -> dict[str, Any]:
+        return participants.setdefault(wallet, {"wallet": wallet})
+
+    def merge(wallet: str, **extra: Any) -> None:
+        participant_wallets.add(wallet)
+        bucket = ensure(wallet)
+        for key, value in extra.items():
+            if value in (None, "", [], {}):
+                continue
+            if isinstance(value, list):
+                merged = list(bucket.get(key) or [])
+                for item in value:
+                    if item not in merged:
+                        merged.append(item)
+                bucket[key] = merged
+            else:
+                bucket[key] = value
+
+    for tx in first_window:
+        group_key = str(tx.get("group_key") or "").strip() or None
+        tx_funder = str(tx.get("funder") or "").strip() or None
+        for wallet in tx.get("wallets", []):
+            wallet_value = str(wallet).strip()
+            if not wallet_value:
+                continue
+            merge(wallet_value, group_id=[group_key] if group_key else None, funder=tx_funder)
+
+    creator_wallet = _creator_wallet_from_payload(payload)
+
+    list_keys = (
+        "early_buyers",
+        "early_participants",
+        "bundle_participants",
+        "bundle_wallets",
+        "first_window_buyers",
+        "first_window_participants",
+        "buyers_first_60s",
+    )
+    for key in list_keys:
+        values = payload.get(key)
+        if not isinstance(values, list):
+            continue
+        for item in values:
+            if isinstance(item, dict):
+                wallet = str(
+                    item.get("wallet")
+                    or item.get("wallet_address")
+                    or item.get("address")
+                    or item.get("owner")
+                    or item.get("signer")
+                    or item.get("actor")
+                    or ""
+                ).strip()
+                if not wallet:
+                    continue
+                merge(
+                    wallet,
+                    group_id=[item.get("group_id") or item.get("group_key") or item.get("bundle_id")] if (item.get("group_id") or item.get("group_key") or item.get("bundle_id")) else None,
+                    funder=item.get("funder") or item.get("funding_source") or item.get("funded_by"),
+                    launch_id=[item.get("launch_id") or item.get("launch_group") or item.get("same_launch_tag")] if (item.get("launch_id") or item.get("launch_group") or item.get("same_launch_tag")) else None,
+                    creator_linked=item.get("creator_linked") or item.get("creator_overlap") or item.get("dev_linked"),
+                )
+            elif isinstance(item, str) and item.strip():
+                merge(item.strip())
+
+    advanced_records = _extract_advanced_bundle_records(payload)
+    for record in advanced_records:
+        wallet = _advanced_normalized_actor(record)
+        if not wallet:
+            continue
+        merge(
+            wallet,
+            group_id=[str(_advanced_record_block(record))] if _advanced_record_block(record) is not None else None,
+            funder=_advanced_first_present(record, ("funder", "funding_source", "source_wallet", "funded_by")),
+            launch_id=[_advanced_first_present(record, ("launch_id", "launch_group", "same_launch_tag"))] if _advanced_first_present(record, ("launch_id", "launch_group", "same_launch_tag")) is not None else None,
+            creator_linked=record.get("creator_linked") or record.get("creator_overlap") or record.get("dev_linked"),
+        )
+
+    creator_funder = str(payload.get("creator_funder") or payload.get("creator_funding_source") or "").strip() or None
+    if creator_wallet and (creator_funder or creator_wallet in participants):
+        merge(creator_wallet, funder=creator_funder, creator_linked=True)
+
+    return sorted(participants.values(), key=lambda item: str(item.get("wallet") or "")), sorted(participant_wallets), creator_wallet
 
 COMPOSITION_UNKNOWN = "unknown"
 COMPOSITION_BUY_ONLY = "buy-only"
