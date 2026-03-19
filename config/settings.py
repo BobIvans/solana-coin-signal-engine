@@ -56,6 +56,7 @@ class Settings:
     BUNDLE_ENRICHMENT_ENABLED: bool
     BUNDLE_ENRICHMENT_WINDOW_SEC: int
 
+    # Wallet graph clustering foundation (PR-CL-2)
     WALLET_GRAPH_ENABLED: bool
     WALLET_GRAPH_MAX_WALLETS: int
     WALLET_GRAPH_LOOKBACK_HOURS: int
@@ -389,6 +390,7 @@ def load_settings() -> Settings:
             _get_env(merged, "BUNDLE_ENRICHMENT_WINDOW_SEC", "60"),
             key="BUNDLE_ENRICHMENT_WINDOW_SEC",
         ),
+        # Wallet graph clustering foundation (PR-CL-2)
         WALLET_GRAPH_ENABLED=_as_bool(
             _get_env(merged, "WALLET_GRAPH_ENABLED", "true"),
             key="WALLET_GRAPH_ENABLED",

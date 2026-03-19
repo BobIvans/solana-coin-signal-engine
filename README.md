@@ -149,6 +149,7 @@ python scripts/wallet_graph_smoke.py
 Behavior notes:
 
 - graph evidence is used first when coverage is meaningful
-- heuristic clustering remains active as a fallback
+- the legacy heuristic clustering path is still preserved as the safe fallback
 - cluster provenance fields are additive and backward-compatible
 - missing or malformed graph evidence does not hard-fail discovery/scoring
+- implementation details and caveats live in `docs/wallet_graph_clustering.md`

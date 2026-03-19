@@ -22,3 +22,4 @@ def test_wallet_graph_smoke_script_runs_and_writes_outputs():
     assert Path(payload["graph_path"]).exists()
     assert Path(payload["cluster_path"]).exists()
     assert Path(payload["event_path"]).exists()
+    assert Path(payload["status_path"]).exists()

@@ -7,8 +7,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from analytics.cluster_store import persist_wallet_cluster_artifacts
+from analytics.cluster_store import append_wallet_graph_event, persist_wallet_cluster_artifacts
 from analytics.wallet_graph_builder import build_wallet_graph, derive_wallet_clusters
+from utils.io import write_json
 
 
 FIXTURE = [
@@ -30,21 +31,27 @@ def main() -> int:
         clusters=clusters,
         graph_path=out_dir / "wallet_graph.smoke.json",
         cluster_path=out_dir / "wallet_clusters.smoke.json",
-        event_path=out_dir / "wallet_graph_status.json",
-        events=[
-            {"event": "wallet_graph_build_started", "fixture": "organic_multi_cluster", "status": "ok"},
-            {"event": "wallet_graph_completed", "fixture": "organic_multi_cluster", "status": "ok", "cluster_count": clusters["summary"]["cluster_count"]},
-        ],
     )
-    summary = {
-        "status": "ok",
-        "graph_nodes": graph["summary"]["node_count"],
-        "graph_edges": graph["summary"]["edge_count"],
-        "cluster_count": clusters["summary"]["cluster_count"],
-        "graph_path": str(paths["graph_path"]),
-        "cluster_path": str(paths["cluster_path"]),
-        "event_path": str(paths["event_path"]),
-    }
+    event_path = out_dir / "wallet_graph_events.smoke.jsonl"
+    append_wallet_graph_event({"event": "wallet_graph_build_started", "fixture": "organic_multi_cluster", "status": "ok"}, event_path)
+    append_wallet_graph_event(
+        {"event": "wallet_graph_completed", "fixture": "organic_multi_cluster", "status": "ok", "cluster_count": clusters["summary"]["cluster_count"]},
+        event_path,
+    )
+    status_path = write_json(
+        out_dir / "wallet_graph_status.json",
+        {
+            "status": "ok",
+            "graph_nodes": graph["summary"]["node_count"],
+            "graph_edges": graph["summary"]["edge_count"],
+            "cluster_count": clusters["summary"]["cluster_count"],
+            "graph_path": str(paths["graph_path"]),
+            "cluster_path": str(paths["cluster_path"]),
+            "event_path": str(event_path.resolve()),
+        },
+    )
+    summary = json.loads(status_path.read_text(encoding="utf-8"))
+    summary["status_path"] = str(status_path)
     print(json.dumps(summary, sort_keys=True))
     return 0
 

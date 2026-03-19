@@ -138,6 +138,13 @@ def _extract_success(tx: dict[str, Any]) -> bool | None:
     return False
 
 
+def _clustering_artifact_scope(pair: dict[str, Any]) -> dict[str, str]:
+    return {
+        "token_address": str(pair.get("token_address") or "").strip(),
+        "pair_address": str(pair.get("pair_address") or "").strip(),
+    }
+
+
 def _load_bundle_transactions(pair: dict[str, Any], settings: Any) -> tuple[list[dict[str, Any]], str | None]:
     inline = pair.get("bundle_transactions")
     if isinstance(inline, list):
@@ -229,10 +236,7 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
             participant_wallets=participant_wallets,
             settings=settings,
             persist_artifacts=True,
-            artifact_scope={
-                "token_address": str(pair.get("token_address") or ""),
-                "pair_address": str(pair.get("pair_address") or ""),
-            },
+            artifact_scope=_clustering_artifact_scope(pair),
         )
 
         for bundle in inferred_bundles:
