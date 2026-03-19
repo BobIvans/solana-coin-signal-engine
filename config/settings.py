@@ -55,6 +55,10 @@ class Settings:
 
     BUNDLE_ENRICHMENT_ENABLED: bool
     BUNDLE_ENRICHMENT_WINDOW_SEC: int
+    BUNDLE_EVIDENCE_ENABLED: bool
+    BUNDLE_EVIDENCE_MAX_RECORDS: int
+    BUNDLE_EVIDENCE_WINDOW_SEC: int
+    BUNDLE_EVIDENCE_SOURCE_ORDER: str
 
     GLOBAL_RATE_LIMIT_ENABLED: bool
     SMART_WALLETS_PATH: Path
@@ -380,6 +384,21 @@ def load_settings() -> Settings:
         BUNDLE_ENRICHMENT_WINDOW_SEC=_as_positive_int(
             _get_env(merged, "BUNDLE_ENRICHMENT_WINDOW_SEC", "60"),
             key="BUNDLE_ENRICHMENT_WINDOW_SEC",
+        ),
+        BUNDLE_EVIDENCE_ENABLED=_as_bool(
+            _get_env(merged, "BUNDLE_EVIDENCE_ENABLED", "true"),
+            key="BUNDLE_EVIDENCE_ENABLED",
+        ),
+        BUNDLE_EVIDENCE_MAX_RECORDS=_as_positive_int(
+            _get_env(merged, "BUNDLE_EVIDENCE_MAX_RECORDS", "200"),
+            key="BUNDLE_EVIDENCE_MAX_RECORDS",
+        ),
+        BUNDLE_EVIDENCE_WINDOW_SEC=_as_positive_int(
+            _get_env(merged, "BUNDLE_EVIDENCE_WINDOW_SEC", "60"),
+            key="BUNDLE_EVIDENCE_WINDOW_SEC",
+        ),
+        BUNDLE_EVIDENCE_SOURCE_ORDER=str(
+            _get_env(merged, "BUNDLE_EVIDENCE_SOURCE_ORDER", "inline,activity,events,flows,attempts")
         ),
         GLOBAL_RATE_LIMIT_ENABLED=_as_bool(
             _get_env(merged, "GLOBAL_RATE_LIMIT_ENABLED", "true"),

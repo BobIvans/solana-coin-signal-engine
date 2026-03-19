@@ -20,6 +20,14 @@ BUNDLE_CONTRACT_FIELDS = [
     "creator_in_cluster_flag",
 ]
 
+BUNDLE_PROVENANCE_FIELDS = [
+    "bundle_evidence_status",
+    "bundle_evidence_source",
+    "bundle_evidence_warning",
+    "bundle_evidence_confidence",
+    "bundle_metric_origin",
+]
+
 
 def copy_bundle_contract_fields(
     source: dict[str, Any],
@@ -30,7 +38,7 @@ def copy_bundle_contract_fields(
 
     output: dict[str, Any] = {}
     fallback = fallback or {}
-    for field in BUNDLE_CONTRACT_FIELDS:
+    for field in BUNDLE_CONTRACT_FIELDS + BUNDLE_PROVENANCE_FIELDS:
         if field in source:
             output[field] = source.get(field)
         else:
