@@ -39,7 +39,9 @@ def test_settings_load_and_validate(monkeypatch):
     assert settings.UNIFIED_SCORING_FAILOPEN is False
     assert settings.UNIFIED_SCORING_REQUIRE_X is False
     assert settings.UNIFIED_SCORE_HEURISTIC_CONFIDENCE_FLOOR > 0
-    assert settings.UNIFIED_SCORE_ENTRY_THRESHOLD > settings.UNIFIED_SCORE_WATCH_THRESHOLD
+    assert (
+        settings.UNIFIED_SCORE_ENTRY_THRESHOLD > settings.UNIFIED_SCORE_WATCH_THRESHOLD
+    )
     assert settings.ENTRY_SELECTOR_ENABLED is True
     assert settings.ENTRY_SCALP_SCORE_MIN > 0
 
@@ -109,3 +111,17 @@ def test_exit_and_paper_settings_coexist(monkeypatch):
     settings = load_settings()
     assert settings.EXIT_ENGINE_ENABLED is True
     assert settings.PAPER_TRADER_ENABLED is True
+
+
+def test_bundle_cluster_unified_score_settings_exist_and_are_bounded():
+    settings = load_settings()
+    assert settings.UNIFIED_SCORE_BUNDLE_AGGRESSION_MAX > 0
+    assert settings.UNIFIED_SCORE_MULTI_CLUSTER_BONUS_MAX > 0
+    assert settings.UNIFIED_SCORE_SINGLE_CLUSTER_PENALTY_MAX > 0
+    assert settings.UNIFIED_SCORE_CREATOR_CLUSTER_PENALTY > 0
+    assert settings.UNIFIED_SCORE_BUNDLE_SELL_HEAVY_PENALTY_MAX > 0
+    assert settings.UNIFIED_SCORE_RETRY_MANIPULATION_PENALTY_MAX > 0
+    assert (
+        settings.UNIFIED_SCORE_BUNDLE_AGGRESSION_MAX
+        < settings.UNIFIED_SCORE_ENTRY_THRESHOLD
+    )
