@@ -39,8 +39,24 @@ def build_exit_snapshot(position_ctx: dict, current_ctx: dict) -> dict:
         elif field in entry_snapshot:
             snapshot[field] = entry_snapshot.get(field)
 
-    for optional_field in ("holder_growth_now", "smart_wallet_hits_now", "market_cap_now"):
+    for optional_field in (
+        "holder_growth_now",
+        "smart_wallet_hits_now",
+        "market_cap_now",
+        "cluster_concentration_ratio_now",
+        "cluster_sell_concentration_120s",
+        "bundle_failure_retry_pattern_now",
+        "bundle_failure_retry_delta",
+        "creator_in_cluster_flag_now",
+        "creator_cluster_activity_now",
+        "bundle_composition_dominant_now",
+        "cross_block_bundle_correlation_now",
+    ):
         if optional_field in current_ctx and current_ctx.get(optional_field) is not None:
             snapshot[optional_field] = current_ctx.get(optional_field)
+
+    wallet_features = current_ctx.get("wallet_features") or {}
+    if wallet_features.get("smart_wallet_netflow_bias") is not None:
+        snapshot["smart_wallet_netflow_bias"] = wallet_features.get("smart_wallet_netflow_bias")
 
     return snapshot
