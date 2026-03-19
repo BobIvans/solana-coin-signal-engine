@@ -227,6 +227,12 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
             clustering_participants,
             creator_wallet=creator_wallet,
             participant_wallets=participant_wallets,
+            settings=settings,
+            persist_artifacts=True,
+            artifact_scope={
+                "token_address": str(pair.get("token_address") or ""),
+                "pair_address": str(pair.get("pair_address") or ""),
+            },
         )
 
         for bundle in inferred_bundles:

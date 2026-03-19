@@ -1,10 +1,14 @@
-"""Deterministic, explainable wallet clustering heuristics for early launch activity."""
+"""Deterministic, explainable wallet clustering heuristics with graph-backed fallback safety."""
 
 from __future__ import annotations
 
 from collections import defaultdict
 from math import ceil
 from typing import Any
+
+from analytics.cluster_store import load_wallet_clusters, persist_wallet_cluster_artifacts
+from analytics.wallet_graph_builder import build_wallet_graph, derive_wallet_clusters
+from utils.logger import log_info, log_warning
 
 _CLUSTER_SCORE_MAX_UNIQUE = 5
 _FUNDING_KEYS = (
@@ -297,17 +301,229 @@ def compute_bundle_wallet_clustering_score(
     return round(max(0.0, min(1.0, score)), 6)
 
 
+def _metric_defaults() -> dict[str, Any]:
+    return {
+        "bundle_wallet_clustering_score": None,
+        "cluster_concentration_ratio": None,
+        "num_unique_clusters_first_60s": None,
+        "creator_in_cluster_flag": None,
+        "cluster_evidence_status": "missing",
+        "cluster_evidence_source": "missing",
+        "cluster_evidence_confidence": None,
+        "cluster_metric_origin": "missing",
+        "graph_cluster_id_count": 0,
+        "graph_cluster_coverage_ratio": 0.0,
+        "creator_cluster_id": None,
+        "dominant_cluster_id": None,
+    }
+
+
+def _graph_coverage_is_meaningful(mapped_wallets: dict[str, str], participant_wallets: list[str]) -> bool:
+    if not participant_wallets:
+        return False
+    normalized = sorted({_as_wallet(wallet) for wallet in participant_wallets if _as_wallet(wallet)})
+    if len(normalized) < 2:
+        return False
+    covered = sum(1 for wallet in normalized if wallet in mapped_wallets)
+    return covered >= _evidence_coverage_threshold(len(normalized)) and (covered / len(normalized)) > 0.5
+
+
+def _dominant_cluster_id(cluster_ids_by_wallet: dict[str, str], wallets: list[str]) -> str | None:
+    counts: dict[str, int] = defaultdict(int)
+    for wallet in wallets:
+        cluster_id = cluster_ids_by_wallet.get(wallet)
+        if cluster_id:
+            counts[cluster_id] += 1
+    if not counts:
+        return None
+    return sorted(counts.items(), key=lambda item: (-item[1], item[0]))[0][0]
+
+
+def resolve_wallet_cluster_assignments(
+    participants: list[dict[str, Any]],
+    *,
+    creator_wallet: str | None = None,
+    participant_wallets: list[str] | None = None,
+    settings: Any | None = None,
+    graph_artifact: dict[str, Any] | None = None,
+    clusters_artifact: dict[str, Any] | None = None,
+    persist_artifacts: bool = False,
+    artifact_scope: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Resolve wallet cluster assignments using graph evidence first, heuristic fallback second."""
+
+    wallets = sorted({_as_wallet(wallet) for wallet in (participant_wallets or []) if _as_wallet(wallet)})
+    if not wallets:
+        wallets = sorted({_participant_wallet(item) for item in participants if _participant_wallet(item)})
+
+    defaults = {
+        "cluster_ids_by_wallet": {},
+        "graph": graph_artifact or {},
+        "clusters": clusters_artifact or {},
+        "evidence_status": "missing",
+        "evidence_source": "missing",
+        "metric_origin": "missing",
+        "evidence_confidence": None,
+        "coverage_ratio": 0.0,
+        "graph_cluster_id_count": 0,
+        "creator_cluster_id": None,
+        "dominant_cluster_id": None,
+        "warnings": [],
+    }
+    if len(wallets) < 2:
+        return defaults
+
+    graph_enabled = True if settings is None else bool(getattr(settings, "WALLET_GRAPH_ENABLED", True))
+    existing_clusters = clusters_artifact or {}
+    if not existing_clusters and settings is not None and artifact_scope:
+        loaded = load_wallet_clusters(settings=settings)
+        if isinstance(loaded, dict) and loaded.get("wallet_to_cluster"):
+            existing_clusters = loaded
+
+    wallet_to_cluster = existing_clusters.get("wallet_to_cluster") if isinstance(existing_clusters, dict) else {}
+    if isinstance(wallet_to_cluster, dict):
+        mapped = {wallet: str(cluster_id) for wallet, cluster_id in wallet_to_cluster.items() if _as_wallet(wallet)}
+        if _graph_coverage_is_meaningful(mapped, wallets):
+            confidence_values = []
+            summaries = {item.get("cluster_id"): item for item in existing_clusters.get("clusters", []) if isinstance(item, dict)}
+            for cluster_id in set(mapped.values()):
+                summary = summaries.get(cluster_id) or {}
+                try:
+                    confidence_values.append(float(summary.get("cluster_confidence") or 0.0))
+                except (TypeError, ValueError):
+                    continue
+            confidence = round(sum(confidence_values) / len(confidence_values), 6) if confidence_values else None
+            return {
+                "cluster_ids_by_wallet": mapped,
+                "graph": graph_artifact or {},
+                "clusters": existing_clusters,
+                "evidence_status": "graph_backed",
+                "evidence_source": "persistent_artifact",
+                "metric_origin": "graph_evidence",
+                "evidence_confidence": confidence,
+                "coverage_ratio": round(sum(1 for wallet in wallets if wallet in mapped) / len(wallets), 6),
+                "graph_cluster_id_count": len(set(mapped.values())),
+                "creator_cluster_id": mapped.get(_as_wallet(creator_wallet) or ""),
+                "dominant_cluster_id": _dominant_cluster_id(mapped, wallets),
+                "warnings": list(existing_clusters.get("warnings", [])),
+            }
+
+    if graph_enabled:
+        scope = {key: value for key, value in (artifact_scope or {}).items() if value not in (None, "", [], {})}
+        graph = build_wallet_graph(participants, creator_wallet=creator_wallet, metadata=scope)
+        clusters = derive_wallet_clusters(graph, min_weight=float(getattr(settings, "WALLET_GRAPH_EDGE_MIN_WEIGHT", 0.5) or 0.5))
+        graph_wallet_map = clusters.get("wallet_to_cluster") if isinstance(clusters, dict) else {}
+        if isinstance(graph_wallet_map, dict):
+            mapped = {wallet: str(cluster_id) for wallet, cluster_id in graph_wallet_map.items() if _as_wallet(wallet)}
+            if _graph_coverage_is_meaningful(mapped, wallets):
+                cluster_summaries = {item.get("cluster_id"): item for item in clusters.get("clusters", []) if isinstance(item, dict)}
+                cluster_confidences = []
+                for cluster_id in set(mapped.values()):
+                    summary = cluster_summaries.get(cluster_id) or {}
+                    try:
+                        cluster_confidences.append(float(summary.get("cluster_confidence") or 0.0))
+                    except (TypeError, ValueError):
+                        continue
+                confidence = round(sum(cluster_confidences) / len(cluster_confidences), 6) if cluster_confidences else None
+                if persist_artifacts and settings is not None:
+                    events = [
+                        {"event": "wallet_graph_build_started", **scope},
+                        {"event": "wallet_graph_edges_derived", "node_count": graph.get("summary", {}).get("node_count", 0), "edge_count": graph.get("summary", {}).get("edge_count", 0), **scope},
+                        {"event": "wallet_graph_normalized", "status": "ok", **scope},
+                        {"event": "wallet_clusters_derived", "cluster_count": clusters.get("summary", {}).get("cluster_count", 0), "status": "ok", **scope},
+                        {"event": "wallet_cluster_store_written", "status": "ok", **scope},
+                        {"event": "wallet_graph_completed", "status": "ok", **scope},
+                    ]
+                    persist_wallet_cluster_artifacts(graph=graph, clusters=clusters, settings=settings, events=events)
+                log_info(
+                    "wallet_graph_completed",
+                    status="ok",
+                    node_count=graph.get("summary", {}).get("node_count", 0),
+                    edge_count=graph.get("summary", {}).get("edge_count", 0),
+                    cluster_count=clusters.get("summary", {}).get("cluster_count", 0),
+                    provenance_mode="graph_evidence",
+                    **scope,
+                )
+                return {
+                    "cluster_ids_by_wallet": mapped,
+                    "graph": graph,
+                    "clusters": clusters,
+                    "evidence_status": "graph_backed",
+                    "evidence_source": "inline_graph_builder",
+                    "metric_origin": "graph_evidence",
+                    "evidence_confidence": confidence,
+                    "coverage_ratio": round(sum(1 for wallet in wallets if wallet in mapped) / len(wallets), 6),
+                    "graph_cluster_id_count": len(set(mapped.values())),
+                    "creator_cluster_id": mapped.get(_as_wallet(creator_wallet) or ""),
+                    "dominant_cluster_id": _dominant_cluster_id(mapped, wallets),
+                    "warnings": list(graph.get("warnings", [])) + list(clusters.get("warnings", [])),
+                }
+            reason = "insufficient_graph_coverage"
+            log_warning(
+                "wallet_graph_partial",
+                status=reason,
+                node_count=graph.get("summary", {}).get("node_count", 0),
+                edge_count=graph.get("summary", {}).get("edge_count", 0),
+                cluster_count=clusters.get("summary", {}).get("cluster_count", 0),
+                provenance_mode="graph_partial",
+                **scope,
+            )
+
+    cluster_keys = infer_wallet_cluster_keys(participants, creator_wallet=creator_wallet)
+    heuristic_cluster_ids = assign_wallet_cluster_ids(cluster_keys)
+    if heuristic_cluster_ids:
+        log_info(
+            "wallet_graph_fallback_heuristic",
+            reason="graph_missing_or_insufficient",
+            wallet_count=len(wallets),
+            clustered_wallet_count=len(heuristic_cluster_ids),
+            provenance_mode="heuristic_fallback",
+            **{key: value for key, value in (artifact_scope or {}).items() if value not in (None, "", [], {})},
+        )
+        return {
+            "cluster_ids_by_wallet": heuristic_cluster_ids,
+            "graph": {},
+            "clusters": {},
+            "evidence_status": "heuristic_fallback",
+            "evidence_source": "heuristic_keys",
+            "metric_origin": "heuristic_fallback",
+            "evidence_confidence": 0.35,
+            "coverage_ratio": round(len(heuristic_cluster_ids) / len(wallets), 6),
+            "graph_cluster_id_count": 0,
+            "creator_cluster_id": heuristic_cluster_ids.get(_as_wallet(creator_wallet) or ""),
+            "dominant_cluster_id": _dominant_cluster_id(heuristic_cluster_ids, wallets),
+            "warnings": [],
+        }
+
+    return defaults
+
+
 def compute_wallet_clustering_metrics(
     participants: list[dict[str, Any]],
     *,
     creator_wallet: str | None = None,
     participant_wallets: list[str] | None = None,
+    settings: Any | None = None,
+    graph_artifact: dict[str, Any] | None = None,
+    clusters_artifact: dict[str, Any] | None = None,
+    persist_artifacts: bool = False,
+    artifact_scope: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Convenience wrapper returning all wallet clustering contract fields."""
+    """Convenience wrapper returning bundle cluster fields plus provenance metadata."""
 
-    cluster_keys = infer_wallet_cluster_keys(participants, creator_wallet=creator_wallet)
-    cluster_ids = assign_wallet_cluster_ids(cluster_keys)
+    out = _metric_defaults()
     wallets = participant_wallets or [wallet for wallet in (_participant_wallet(item) for item in participants) if wallet]
+    resolved = resolve_wallet_cluster_assignments(
+        participants,
+        creator_wallet=creator_wallet,
+        participant_wallets=wallets,
+        settings=settings,
+        graph_artifact=graph_artifact,
+        clusters_artifact=clusters_artifact,
+        persist_artifacts=persist_artifacts,
+        artifact_scope=artifact_scope,
+    )
+    cluster_ids = resolved["cluster_ids_by_wallet"]
     concentration_ratio = compute_cluster_concentration_ratio(cluster_ids, wallets)
     unique_clusters = compute_num_unique_clusters_first_60s(cluster_ids, wallets)
     creator_flag = detect_creator_in_cluster(cluster_ids, wallets, creator_wallet)
@@ -316,9 +532,20 @@ def compute_wallet_clustering_metrics(
         num_unique_clusters_first_60s=unique_clusters,
         creator_in_cluster_flag=creator_flag,
     )
-    return {
-        "bundle_wallet_clustering_score": clustering_score,
-        "cluster_concentration_ratio": concentration_ratio,
-        "num_unique_clusters_first_60s": unique_clusters,
-        "creator_in_cluster_flag": creator_flag,
-    }
+    out.update(
+        {
+            "bundle_wallet_clustering_score": clustering_score,
+            "cluster_concentration_ratio": concentration_ratio,
+            "num_unique_clusters_first_60s": unique_clusters,
+            "creator_in_cluster_flag": creator_flag,
+            "cluster_evidence_status": resolved["evidence_status"],
+            "cluster_evidence_source": resolved["evidence_source"],
+            "cluster_evidence_confidence": resolved["evidence_confidence"],
+            "cluster_metric_origin": resolved["metric_origin"],
+            "graph_cluster_id_count": resolved["graph_cluster_id_count"],
+            "graph_cluster_coverage_ratio": resolved["coverage_ratio"],
+            "creator_cluster_id": resolved["creator_cluster_id"],
+            "dominant_cluster_id": resolved["dominant_cluster_id"],
+        }
+    )
+    return out

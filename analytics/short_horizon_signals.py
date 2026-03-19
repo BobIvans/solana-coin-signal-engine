@@ -7,7 +7,7 @@ from datetime import datetime
 from math import log
 from typing import Any
 
-from analytics.wallet_clustering import assign_wallet_cluster_ids, infer_wallet_cluster_keys
+from analytics.wallet_clustering import resolve_wallet_cluster_assignments
 
 _SHORT_WINDOW_60S = 60
 _SHORT_WINDOW_120S = 120
@@ -187,9 +187,11 @@ def compute_cluster_sell_concentration_120s(
     if not participants:
         return None
 
-    cluster_ids_by_wallet = assign_wallet_cluster_ids(
-        infer_wallet_cluster_keys(participants, creator_wallet=creator_wallet)
+    resolved = resolve_wallet_cluster_assignments(
+        participants,
+        creator_wallet=creator_wallet,
     )
+    cluster_ids_by_wallet = resolved["cluster_ids_by_wallet"]
     if not cluster_ids_by_wallet:
         return None
 

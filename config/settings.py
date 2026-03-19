@@ -56,6 +56,14 @@ class Settings:
     BUNDLE_ENRICHMENT_ENABLED: bool
     BUNDLE_ENRICHMENT_WINDOW_SEC: int
 
+    WALLET_GRAPH_ENABLED: bool
+    WALLET_GRAPH_MAX_WALLETS: int
+    WALLET_GRAPH_LOOKBACK_HOURS: int
+    WALLET_GRAPH_EDGE_MIN_WEIGHT: float
+    WALLET_GRAPH_OUTPUT_PATH: Path
+    WALLET_CLUSTER_OUTPUT_PATH: Path
+    WALLET_GRAPH_EVENTS_PATH: Path
+
     GLOBAL_RATE_LIMIT_ENABLED: bool
     SMART_WALLETS_PATH: Path
 
@@ -380,6 +388,31 @@ def load_settings() -> Settings:
         BUNDLE_ENRICHMENT_WINDOW_SEC=_as_positive_int(
             _get_env(merged, "BUNDLE_ENRICHMENT_WINDOW_SEC", "60"),
             key="BUNDLE_ENRICHMENT_WINDOW_SEC",
+        ),
+        WALLET_GRAPH_ENABLED=_as_bool(
+            _get_env(merged, "WALLET_GRAPH_ENABLED", "true"),
+            key="WALLET_GRAPH_ENABLED",
+        ),
+        WALLET_GRAPH_MAX_WALLETS=_as_positive_int(
+            _get_env(merged, "WALLET_GRAPH_MAX_WALLETS", "500"),
+            key="WALLET_GRAPH_MAX_WALLETS",
+        ),
+        WALLET_GRAPH_LOOKBACK_HOURS=_as_positive_int(
+            _get_env(merged, "WALLET_GRAPH_LOOKBACK_HOURS", "24"),
+            key="WALLET_GRAPH_LOOKBACK_HOURS",
+        ),
+        WALLET_GRAPH_EDGE_MIN_WEIGHT=_as_unit_float(
+            _get_env(merged, "WALLET_GRAPH_EDGE_MIN_WEIGHT", "0.5"),
+            key="WALLET_GRAPH_EDGE_MIN_WEIGHT",
+        ),
+        WALLET_GRAPH_OUTPUT_PATH=_as_abs_path(
+            _get_env(merged, "WALLET_GRAPH_OUTPUT_PATH", "./data/processed/wallet_graph.json")
+        ),
+        WALLET_CLUSTER_OUTPUT_PATH=_as_abs_path(
+            _get_env(merged, "WALLET_CLUSTER_OUTPUT_PATH", "./data/processed/wallet_clusters.json")
+        ),
+        WALLET_GRAPH_EVENTS_PATH=_as_abs_path(
+            _get_env(merged, "WALLET_GRAPH_EVENTS_PATH", "./data/processed/wallet_graph_events.jsonl")
         ),
         GLOBAL_RATE_LIMIT_ENABLED=_as_bool(
             _get_env(merged, "GLOBAL_RATE_LIMIT_ENABLED", "true"),
