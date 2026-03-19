@@ -92,6 +92,7 @@ def test_missing_required_under_failclosed_ignored():
     result = decide_entry(token, DummySettings())
     assert result["entry_decision"] == "IGNORE"
     assert result["entry_reason"] == "partial_data_failclosed"
+    assert "entry_failclosed_missing_fields" in result["entry_flags"]
     assert result["regime_blockers"] == ["entry_failclosed_missing_fields"]
 
 

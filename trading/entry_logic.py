@@ -25,6 +25,8 @@ def _dedupe(items: list[str]) -> list[str]:
 
 def decide_entry(token_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
     regime = decide_regime(token_ctx, settings)
+    regime_reason_flags = _dedupe(regime.get("regime_reason_flags", []))
+    regime_blockers = _dedupe(regime.get("regime_blockers", []))
 
     result: dict[str, Any] = {
         "token_address": token_ctx.get("token_address"),
@@ -33,11 +35,11 @@ def decide_entry(token_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
         **copy_bundle_contract_fields(token_ctx),
         "entry_decision": regime["regime_decision"],
         "entry_reason": regime["reason"],
-        "entry_flags": _dedupe(regime.get("regime_reason_flags", [])),
+        "entry_flags": _dedupe([*regime_reason_flags, *regime_blockers]),
         "entry_warnings": _dedupe(regime.get("warnings", [])),
         "regime_confidence": float(regime.get("regime_confidence") or 0.0),
-        "regime_reason_flags": _dedupe(regime.get("regime_reason_flags", [])),
-        "regime_blockers": _dedupe(regime.get("regime_blockers", [])),
+        "regime_reason_flags": regime_reason_flags,
+        "regime_blockers": regime_blockers,
         "expected_hold_class": regime.get("expected_hold_class") or "none",
         "entry_status": "ok",
         "decided_at": utc_now_iso(),
