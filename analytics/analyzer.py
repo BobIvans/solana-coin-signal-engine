@@ -18,6 +18,7 @@ from analytics.analyzer_metrics import (
 from analytics.analyzer_recommendations import generate_recommendations
 from analytics.analyzer_report_writer import write_markdown_report
 from analytics.analyzer_slices import bucketize_metric, slice_positions
+from analytics.config_suggestions import write_config_suggestions
 from config.settings import Settings
 from utils.io import append_jsonl, read_json, write_json
 
@@ -285,9 +286,17 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
     summary_path = settings.PROCESSED_DATA_DIR / "post_run_summary.json"
     recommendations_path = settings.PROCESSED_DATA_DIR / "post_run_recommendations.json"
     report_path = settings.PROCESSED_DATA_DIR / "post_run_report.md"
+    config_suggestions_path = settings.PROCESSED_DATA_DIR / "config_suggestions.json"
 
     write_json(summary_path, summary)
     write_json(recommendations_path, recommendations_payload)
+    write_config_suggestions(
+        settings=settings,
+        summary=summary,
+        recommendations_payload=recommendations_payload,
+        matrix_rows=matrix_analysis_rows,
+        output_path=config_suggestions_path,
+    )
     write_markdown_report(summary, recommendations_payload, str(report_path))
 
     append_jsonl(events_path, {"ts": datetime.now(timezone.utc).isoformat(), "event": "analysis_completed", "summary_path": str(summary_path)})
@@ -295,6 +304,7 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
     return {
         "summary_path": str(summary_path),
         "recommendations_path": str(recommendations_path),
+        "config_suggestions_path": str(config_suggestions_path),
         "report_path": str(report_path),
         "closed_positions": len(closed_positions),
     }

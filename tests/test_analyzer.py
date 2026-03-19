@@ -67,6 +67,7 @@ def test_run_post_run_analysis_outputs(tmp_path):
     result = run_post_run_analysis(settings)
     assert Path(result["summary_path"]).exists()
     assert Path(result["recommendations_path"]).exists()
+    assert Path(result["config_suggestions_path"]).exists()
     assert Path(result["report_path"]).exists()
 
     summary = json.loads(Path(result["summary_path"]).read_text(encoding="utf-8"))

@@ -170,6 +170,10 @@ class Settings:
     POST_RUN_OUTLIER_CLIP_PCT: float
     POST_RUN_RECOMMENDATION_CONFIDENCE_MIN: float
     POST_RUN_CONTRACT_VERSION: str
+    CONFIG_SUGGESTIONS_ENABLED: bool
+    CONFIG_SUGGESTIONS_MIN_SAMPLE: int
+    CONFIG_SUGGESTIONS_TRAINING_WHEELS_MODE: bool
+    CONFIG_SUGGESTIONS_CONTRACT_VERSION: str
 
 
 def _read_dotenv(dotenv_path: str = ".env") -> dict[str, str]:
@@ -734,5 +738,28 @@ def load_settings() -> Settings:
         ),
         POST_RUN_CONTRACT_VERSION=str(
             _get_env(merged, "POST_RUN_CONTRACT_VERSION", "post_run_analyzer_v1")
+        ),
+        CONFIG_SUGGESTIONS_ENABLED=_as_bool(
+            _get_env(merged, "CONFIG_SUGGESTIONS_ENABLED", "true"),
+            key="CONFIG_SUGGESTIONS_ENABLED",
+        ),
+        CONFIG_SUGGESTIONS_MIN_SAMPLE=_as_positive_int(
+            _get_env(
+                merged,
+                "CONFIG_SUGGESTIONS_MIN_SAMPLE",
+                str(_get_env(merged, "POST_RUN_MIN_SAMPLE_FOR_RECOMMENDATION", "15")),
+            ),
+            key="CONFIG_SUGGESTIONS_MIN_SAMPLE",
+        ),
+        CONFIG_SUGGESTIONS_TRAINING_WHEELS_MODE=_as_bool(
+            _get_env(merged, "CONFIG_SUGGESTIONS_TRAINING_WHEELS_MODE", "true"),
+            key="CONFIG_SUGGESTIONS_TRAINING_WHEELS_MODE",
+        ),
+        CONFIG_SUGGESTIONS_CONTRACT_VERSION=str(
+            _get_env(
+                merged,
+                "CONFIG_SUGGESTIONS_CONTRACT_VERSION",
+                "config_suggestions_v1",
+            )
         ),
     )
