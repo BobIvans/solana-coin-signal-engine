@@ -33,6 +33,11 @@ _MATRIX_NUMERIC_FIELDS = [
     "net_pnl_pct",
     "mfe_pct",
     "mae_pct",
+    "time_to_first_profit_sec",
+    "mfe_pct_240s",
+    "mae_pct_240s",
+    "trend_survival_15m",
+    "trend_survival_60m",
     "x_validation_score_entry",
     "x_validation_delta_entry",
     "net_unique_buyers_60s",
@@ -158,13 +163,76 @@ def merge_closed_positions_with_matrix(closed_positions: list[dict[str, Any]], m
         position_id = _safe_str(row.get("position_id"))
         linked_position = closed_by_position_id.get(position_id or "")
         if linked_position:
-            merged.append({**linked_position, **row, "position_id": position_id or linked_position.get("position_id")})
+            merged_row = dict(linked_position)
+            for key, value in row.items():
+                if value is not None:
+                    merged_row[key] = value
+            merged_row["position_id"] = position_id or linked_position.get("position_id")
+            merged.append(merged_row)
             continue
 
         if _net_pnl_pct(row) is None:
             continue
         merged.append(dict(row))
     return merged
+
+
+def _summary_from_numeric_values(values: list[float]) -> dict[str, Any]:
+    if not values:
+        return {"count": 0, "avg": None, "median": None, "min": None, "max": None}
+    return {
+        "count": len(values),
+        "avg": statistics.fmean(values),
+        "median": statistics.median(values),
+        "min": min(values),
+        "max": max(values),
+    }
+
+
+def _metric_values(rows: list[dict[str, Any]], field: str) -> list[float]:
+    return [value for row in rows if (value := _safe_float(row.get(field))) is not None]
+
+
+def compute_time_to_first_profit_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    values = _metric_values(rows, "time_to_first_profit_sec")
+    scalp_values = _metric_values([row for row in rows if _safe_str(row.get("regime_decision") or row.get("regime")) == "SCALP"], "time_to_first_profit_sec")
+    trend_values = _metric_values([row for row in rows if _safe_str(row.get("regime_decision") or row.get("regime")) == "TREND"], "time_to_first_profit_sec")
+    return {
+        "overall": _summary_from_numeric_values(values),
+        "by_regime": {
+            "SCALP": _summary_from_numeric_values(scalp_values),
+            "TREND": _summary_from_numeric_values(trend_values),
+        },
+    }
+
+
+def compute_mfe_mae_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "mfe_pct_240s": _summary_from_numeric_values(_metric_values(rows, "mfe_pct_240s")),
+        "mae_pct_240s": _summary_from_numeric_values(_metric_values(rows, "mae_pct_240s")),
+    }
+
+
+def compute_trend_survival_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "trend_survival_15m": _summary_from_numeric_values(_metric_values(rows, "trend_survival_15m")),
+        "trend_survival_60m": _summary_from_numeric_values(_metric_values(rows, "trend_survival_60m")),
+    }
+
+
+def compute_scalp_vs_trend_outcome_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    output: dict[str, Any] = {}
+    for regime in ("SCALP", "TREND"):
+        regime_rows = [row for row in rows if _safe_str(row.get("regime_decision") or row.get("regime")) == regime]
+        output[regime] = {
+            "count": len(regime_rows),
+            "time_to_first_profit_sec": _summary_from_numeric_values(_metric_values(regime_rows, "time_to_first_profit_sec")),
+            "mfe_pct_240s": _summary_from_numeric_values(_metric_values(regime_rows, "mfe_pct_240s")),
+            "mae_pct_240s": _summary_from_numeric_values(_metric_values(regime_rows, "mae_pct_240s")),
+            "trend_survival_15m": _summary_from_numeric_values(_metric_values(regime_rows, "trend_survival_15m")),
+            "trend_survival_60m": _summary_from_numeric_values(_metric_values(regime_rows, "trend_survival_60m")),
+        }
+    return output
 
 
 def _available_numeric_fields(rows: list[dict[str, Any]]) -> list[str]:
@@ -268,13 +336,10 @@ def compute_trend_failure_slices(rows: list[dict[str, Any]]) -> dict[str, Any]:
         and (_net_pnl_pct(row) is not None and _net_pnl_pct(row) <= _TREND_FAIL_PNL_THRESHOLD)
         and ((_safe_float(row.get("hold_sec")) or 0.0) <= _SHORT_HOLD_THRESHOLD_SEC)
     ]
+    regime_confidence_values = [value for row in matching_rows if (value := _safe_float(row.get("regime_confidence"))) is not None]
     return {
         **trend_failed_fast,
-        "avg_regime_confidence": statistics.fmean(
-            [value for row in matching_rows if (value := _safe_float(row.get("regime_confidence"))) is not None]
-        )
-        if matching_rows
-        else 0.0,
+        "avg_regime_confidence": statistics.fmean(regime_confidence_values) if regime_confidence_values else 0.0,
     }
 
 
@@ -324,6 +389,10 @@ def compute_matrix_analysis(matrix_rows: list[dict[str, Any]], settings: Setting
             "regime_confusion_summary": {},
             "trend_failure_summary": {},
             "scalp_missed_trend_summary": {},
+            "scalp_vs_trend_outcome_summary": {},
+            "time_to_first_profit_summary": {},
+            "mfe_mae_summary": {},
+            "trend_survival_summary": {},
             "pattern_expectancy_slices": {},
             "top_positive_feature_slices": [],
             "top_negative_feature_slices": [],
@@ -367,6 +436,10 @@ def compute_matrix_analysis(matrix_rows: list[dict[str, Any]], settings: Setting
         "regime_confusion_summary": compute_regime_confusion_slices(matrix_rows),
         "trend_failure_summary": compute_trend_failure_slices(matrix_rows),
         "scalp_missed_trend_summary": compute_scalp_missed_trend_slices(matrix_rows),
+        "scalp_vs_trend_outcome_summary": compute_scalp_vs_trend_outcome_summary(matrix_rows),
+        "time_to_first_profit_summary": compute_time_to_first_profit_summary(matrix_rows),
+        "mfe_mae_summary": compute_mfe_mae_summary(matrix_rows),
+        "trend_survival_summary": compute_trend_survival_summary(matrix_rows),
         "pattern_expectancy_slices": pattern_slices,
         "top_positive_feature_slices": positive_slices,
         "top_negative_feature_slices": negative_slices,

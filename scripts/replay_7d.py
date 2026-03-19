@@ -14,6 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.append(str(REPO_ROOT))
 
+from src.replay.calibration_metrics import derive_outcome_metrics
 from utils.io import ensure_dir, read_json, write_json
 from utils.bundle_contract_fields import copy_bundle_contract_fields
 from utils.short_horizon_contract_fields import SHORT_HORIZON_SIGNAL_FIELDS, copy_short_horizon_contract_fields
@@ -98,6 +99,11 @@ _TRADE_FEATURE_MATRIX_FIELDS = [
     "net_pnl_pct",
     "mfe_pct",
     "mae_pct",
+    "time_to_first_profit_sec",
+    "mfe_pct_240s",
+    "mae_pct_240s",
+    "trend_survival_15m",
+    "trend_survival_60m",
     "wallet_weighting",
     "dry_run",
     "synthetic_trade_flag",
@@ -189,6 +195,8 @@ def build_trade_feature_row(
         wallet_features,
         short_horizon_fields,
     ]
+    calibration_metrics = derive_outcome_metrics(item, signal, trade, entry_snapshot, features)
+
     row = {field: None for field in _TRADE_FEATURE_MATRIX_FIELDS}
     row.update(
         {
@@ -266,6 +274,7 @@ def build_trade_feature_row(
             "net_pnl_pct": _first_present(sources, "net_pnl_pct"),
             "mfe_pct": _first_present(sources, "mfe_pct"),
             "mae_pct": _first_present(sources, "mae_pct"),
+            **calibration_metrics,
             "wallet_weighting": args.wallet_weighting,
             "dry_run": args.dry_run,
             "synthetic_trade_flag": _normalize_synthetic_trade_flag(trade, signal, item),
