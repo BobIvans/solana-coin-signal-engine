@@ -29,6 +29,15 @@
       "type": "string",
       "minLength": 1
     },
+    "symbol": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "fast_prescore": {
+      "type": "number"
+    },
     "bundle_count_first_60s": {
       "type": [
         "integer",
@@ -167,6 +176,12 @@
       "type": "number",
       "minimum": -25,
       "maximum": 5
+    },
+    "wallet_adjustment": {
+      "type": [
+        "object",
+        "null"
+      ]
     },
     "final_score": {
       "type": "number",
