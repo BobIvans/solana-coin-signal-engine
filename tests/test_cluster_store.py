@@ -21,7 +21,7 @@ PARTICIPANTS = [
 
 
 def test_cluster_store_save_and_load_round_trip(tmp_path: Path):
-    graph = build_wallet_graph(PARTICIPANTS)
+    graph = build_wallet_graph(PARTICIPANTS, metadata={"token_address": "tok-1", "pair_address": "pair-1"})
     clusters = derive_wallet_clusters(graph)
 
     paths = persist_wallet_cluster_artifacts(
@@ -33,8 +33,13 @@ def test_cluster_store_save_and_load_round_trip(tmp_path: Path):
         events=[{"event": "wallet_cluster_store_written", "status": "ok"}],
     )
 
-    assert load_wallet_graph(paths["graph_path"])["summary"]["edge_count"] == 1
-    assert load_wallet_clusters(paths["cluster_path"])["summary"]["cluster_count"] == 1
+    loaded_graph = load_wallet_graph(paths["graph_path"])
+    loaded_clusters = load_wallet_clusters(paths["cluster_path"])
+    assert loaded_graph["summary"]["edge_count"] == 1
+    assert loaded_graph["metadata"]["token_address"] == "tok-1"
+    assert loaded_clusters["summary"]["cluster_count"] == 1
+    assert loaded_clusters["metadata"]["token_address"] == "tok-1"
+    assert loaded_clusters["metadata"]["pair_address"] == "pair-1"
     assert paths["event_path"].read_text(encoding="utf-8").strip()
 
 

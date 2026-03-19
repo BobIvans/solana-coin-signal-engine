@@ -339,6 +339,30 @@ def _dominant_cluster_id(cluster_ids_by_wallet: dict[str, str], wallets: list[st
     return sorted(counts.items(), key=lambda item: (-item[1], item[0]))[0][0]
 
 
+def _normalize_artifact_scope(scope: dict[str, Any] | None) -> dict[str, str]:
+    if not isinstance(scope, dict):
+        return {}
+    normalized: dict[str, str] = {}
+    for key, value in scope.items():
+        if key in {"generated_at", "contract_version", "source_contract_version", "derivation_mode"}:
+            continue
+        if value in (None, "", [], {}):
+            continue
+        normalized[str(key)] = str(value)
+    return normalized
+
+
+def _artifact_scope_matches(artifact: dict[str, Any] | None, requested_scope: dict[str, Any] | None) -> bool:
+    expected = _normalize_artifact_scope(requested_scope)
+    if not expected:
+        return True
+    if not isinstance(artifact, dict):
+        return False
+    metadata = artifact.get("metadata") if isinstance(artifact.get("metadata"), dict) else {}
+    actual = _normalize_artifact_scope(metadata)
+    return all(actual.get(key) == value for key, value in expected.items())
+
+
 def resolve_wallet_cluster_assignments(
     participants: list[dict[str, Any]],
     *,
@@ -374,9 +398,10 @@ def resolve_wallet_cluster_assignments(
         return defaults
 
     graph_enabled = True if settings is None else bool(getattr(settings, "WALLET_GRAPH_ENABLED", True))
+    scope = {key: value for key, value in (artifact_scope or {}).items() if value not in (None, "", [], {})}
     existing_clusters = clusters_artifact or {}
     wallet_to_cluster = existing_clusters.get("wallet_to_cluster") if isinstance(existing_clusters, dict) else {}
-    if isinstance(wallet_to_cluster, dict):
+    if isinstance(wallet_to_cluster, dict) and _artifact_scope_matches(existing_clusters, scope):
         mapped = {wallet: str(cluster_id) for wallet, cluster_id in wallet_to_cluster.items() if _as_wallet(wallet)}
         if _graph_coverage_is_meaningful(mapped, wallets):
             confidence_values = []
@@ -404,7 +429,6 @@ def resolve_wallet_cluster_assignments(
             }
 
     if graph_enabled:
-        scope = {key: value for key, value in (artifact_scope or {}).items() if value not in (None, "", [], {})}
         graph = build_wallet_graph(participants, creator_wallet=creator_wallet, metadata=scope)
         clusters = derive_wallet_clusters(graph, min_weight=float(getattr(settings, "WALLET_GRAPH_EDGE_MIN_WEIGHT", 0.5) or 0.5))
         graph_wallet_map = clusters.get("wallet_to_cluster") if isinstance(clusters, dict) else {}

@@ -124,3 +124,63 @@ def test_explicit_artifact_input_is_required_to_use_persisted_clusters(tmp_path:
 
     assert metrics["cluster_metric_origin"] == "graph_evidence"
     assert metrics["dominant_cluster_id"] != "cluster_stale"
+
+
+def test_explicit_scoped_artifact_is_used_when_scope_matches():
+    scoped_clusters = {
+        "metadata": {"token_address": "tok-1", "pair_address": "pair-1"},
+        "wallet_to_cluster": {
+            "wallet_a": "cluster_scoped",
+            "wallet_b": "cluster_scoped",
+            "wallet_c": "cluster_other",
+            "wallet_d": "cluster_other",
+            "wallet_e": "cluster_third",
+            "wallet_f": "cluster_third",
+        },
+        "clusters": [
+            {"cluster_id": "cluster_scoped", "cluster_confidence": 0.91},
+            {"cluster_id": "cluster_other", "cluster_confidence": 0.82},
+            {"cluster_id": "cluster_third", "cluster_confidence": 0.79},
+        ],
+        "summary": {"cluster_count": 3},
+    }
+
+    metrics = compute_wallet_clustering_metrics(
+        ORGANIC,
+        participant_wallets=[item["wallet"] for item in ORGANIC],
+        settings=DummySettings(),
+        clusters_artifact=scoped_clusters,
+        artifact_scope={"token_address": "tok-1", "pair_address": "pair-1"},
+    )
+
+    assert metrics["cluster_metric_origin"] == "graph_evidence"
+    assert metrics["cluster_evidence_source"] == "persistent_artifact"
+    assert metrics["dominant_cluster_id"] == "cluster_other"
+
+
+def test_explicit_scoped_artifact_is_ignored_when_scope_mismatches():
+    mismatched_clusters = {
+        "metadata": {"token_address": "tok-other", "pair_address": "pair-other"},
+        "wallet_to_cluster": {
+            "wallet_a": "cluster_stale",
+            "wallet_b": "cluster_stale",
+            "wallet_c": "cluster_stale",
+            "wallet_d": "cluster_stale",
+            "wallet_e": "cluster_stale",
+            "wallet_f": "cluster_stale",
+        },
+        "clusters": [{"cluster_id": "cluster_stale", "cluster_confidence": 0.99}],
+        "summary": {"cluster_count": 1},
+    }
+
+    metrics = compute_wallet_clustering_metrics(
+        ORGANIC,
+        participant_wallets=[item["wallet"] for item in ORGANIC],
+        settings=DummySettings(),
+        clusters_artifact=mismatched_clusters,
+        artifact_scope={"token_address": "tok-1", "pair_address": "pair-1"},
+    )
+
+    assert metrics["cluster_metric_origin"] == "graph_evidence"
+    assert metrics["cluster_evidence_source"] == "inline_graph_builder"
+    assert metrics["dominant_cluster_id"] != "cluster_stale"

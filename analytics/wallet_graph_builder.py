@@ -303,6 +303,12 @@ def derive_graph_edges(
     }
 
 
+def _sanitize_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(metadata, dict):
+        return {}
+    return {key: value for key, value in metadata.items() if value not in (None, "", [], {})}
+
+
 def normalize_wallet_graph(
     graph: dict[str, Any] | None,
     *,
@@ -387,10 +393,13 @@ def normalize_wallet_graph(
     if len(nodes) > 1:
         density = round((2.0 * len(edges)) / (len(nodes) * (len(nodes) - 1)), 6)
 
+    raw_metadata = _sanitize_metadata(raw.get("metadata") if isinstance(raw.get("metadata"), dict) else None)
+    explicit_metadata = _sanitize_metadata(metadata)
     artifact_metadata = {
-        "generated_at": _utc_now_iso(),
-        "contract_version": GRAPH_CONTRACT_VERSION,
-        **{key: value for key, value in (metadata or {}).items() if value not in (None, "", [], {})},
+        **raw_metadata,
+        **explicit_metadata,
+        "generated_at": str(explicit_metadata.get("generated_at") or raw_metadata.get("generated_at") or _utc_now_iso()),
+        "contract_version": str(explicit_metadata.get("contract_version") or raw_metadata.get("contract_version") or GRAPH_CONTRACT_VERSION),
     }
     return {
         "metadata": artifact_metadata,
@@ -503,13 +512,21 @@ def derive_wallet_clusters(
 
     clusters.sort(key=lambda item: item["cluster_id"])
     mapped_cluster_ids = sorted({cluster_id for cluster_id in wallet_to_cluster.values()})
-    return {
-        "metadata": {
+    cluster_metadata = {
+        key: value
+        for key, value in normalized["metadata"].items()
+        if key not in {"generated_at", "contract_version"} and value not in (None, "", [], {})
+    }
+    cluster_metadata.update(
+        {
             "generated_at": normalized["metadata"]["generated_at"],
             "contract_version": CLUSTER_CONTRACT_VERSION,
             "derivation_mode": "graph_connected_components",
             "source_contract_version": normalized["metadata"].get("contract_version", GRAPH_CONTRACT_VERSION),
-        },
+        }
+    )
+    return {
+        "metadata": cluster_metadata,
         "clusters": clusters,
         "wallet_to_cluster": {wallet: wallet_to_cluster[wallet] for wallet in sorted(wallet_to_cluster)},
         "summary": {
