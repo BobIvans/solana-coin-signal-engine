@@ -20,6 +20,10 @@ _REQUIRED_KEYS = {
     "entry_confidence",
     "recommended_position_pct",
     "entry_reason",
+    "regime_confidence",
+    "regime_reason_flags",
+    "regime_blockers",
+    "expected_hold_class",
     "entry_snapshot",
 }
 

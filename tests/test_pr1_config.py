@@ -109,3 +109,60 @@ def test_exit_and_paper_settings_coexist(monkeypatch):
     settings = load_settings()
     assert settings.EXIT_ENGINE_ENABLED is True
     assert settings.PAPER_TRADER_ENABLED is True
+
+
+def test_regime_v2_settings_defaults_are_available():
+    settings = load_settings()
+    assert settings.ENTRY_TREND_MULTI_CLUSTER_MIN >= 1
+    assert 0 <= settings.ENTRY_TREND_CLUSTER_CONCENTRATION_MAX <= 1
+    assert 0 <= settings.ENTRY_TREND_DEV_SELL_MAX <= 1
+    assert settings.ENTRY_SCALP_BUNDLE_COUNT_MIN >= 1
+    assert 0 <= settings.ENTRY_REGIME_CONFIDENCE_FLOOR_SCALP <= 1
+    assert 0 <= settings.ENTRY_REGIME_CONFIDENCE_FLOOR_TREND <= 1
+    assert settings.ENTRY_REGIME_CONFIDENCE_FLOOR_TREND >= settings.ENTRY_REGIME_CONFIDENCE_FLOOR_SCALP
+
+
+def test_invalid_regime_v2_settings_raise(monkeypatch):
+    monkeypatch.setenv("ENTRY_REGIME_CONFIDENCE_FLOOR_TREND", "1.2")
+    try:
+        load_settings()
+    except ValueError as exc:
+        assert "ENTRY_REGIME_CONFIDENCE_FLOOR_TREND" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for ENTRY_REGIME_CONFIDENCE_FLOOR_TREND")
+
+
+def test_bundle_cluster_unified_score_settings_exist_and_are_bounded():
+    settings = load_settings()
+    required_fields = [
+        "UNIFIED_SCORE_BUNDLE_AGGRESSION_MAX",
+        "UNIFIED_SCORE_MULTI_CLUSTER_BONUS_MAX",
+        "UNIFIED_SCORE_SINGLE_CLUSTER_PENALTY_MAX",
+        "UNIFIED_SCORE_CREATOR_CLUSTER_PENALTY",
+        "UNIFIED_SCORE_BUNDLE_SELL_HEAVY_PENALTY_MAX",
+        "UNIFIED_SCORE_RETRY_MANIPULATION_PENALTY_MAX",
+        "UNIFIED_SCORE_ORGANIC_BUYER_FLOW_MAX",
+        "EXIT_CLUSTER_DUMP_HARD",
+        "EXIT_CONTRACT_VERSION",
+        "PAPER_CONTRACT_VERSION",
+    ]
+    missing = [field for field in required_fields if not hasattr(settings, field)]
+    assert not missing
+
+    assert settings.UNIFIED_SCORE_BUNDLE_AGGRESSION_MAX > 0
+    assert settings.UNIFIED_SCORE_MULTI_CLUSTER_BONUS_MAX > 0
+    assert settings.UNIFIED_SCORE_SINGLE_CLUSTER_PENALTY_MAX > 0
+    assert settings.UNIFIED_SCORE_CREATOR_CLUSTER_PENALTY > 0
+    assert settings.UNIFIED_SCORE_BUNDLE_SELL_HEAVY_PENALTY_MAX > 0
+    assert settings.UNIFIED_SCORE_RETRY_MANIPULATION_PENALTY_MAX > 0
+    assert settings.UNIFIED_SCORE_ORGANIC_BUYER_FLOW_MAX > 0
+    assert isinstance(settings.EXIT_CLUSTER_DUMP_HARD, bool)
+    assert settings.UNIFIED_SCORE_BUNDLE_AGGRESSION_MAX < settings.UNIFIED_SCORE_ENTRY_THRESHOLD
+
+
+def test_load_settings_exposes_runtime_config_contract_fields():
+    settings = load_settings()
+
+    assert settings.ENTRY_TREND_MULTI_CLUSTER_MIN >= 1
+    assert settings.UNIFIED_SCORE_ORGANIC_BUYER_FLOW_MAX > 0
+    assert isinstance(settings.EXIT_CLUSTER_DUMP_HARD, bool)
