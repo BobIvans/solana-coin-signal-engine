@@ -32,6 +32,7 @@ def test_detect_bundle_metrics_uses_first_window_fixture_transactions():
                 "feePayer": "wallet_a",
                 "bundle_value": 100.0,
                 "success": True,
+                "funder": "funder_alpha",
             },
             {
                 "timestamp": 1_002,
@@ -39,6 +40,7 @@ def test_detect_bundle_metrics_uses_first_window_fixture_transactions():
                 "feePayer": "wallet_b",
                 "bundle_value": 50.0,
                 "success": False,
+                "funder": "funder_alpha",
             },
             {
                 "timestamp": 1_030,
@@ -46,6 +48,7 @@ def test_detect_bundle_metrics_uses_first_window_fixture_transactions():
                 "feePayer": "wallet_c",
                 "bundle_value": 25.0,
                 "success": True,
+                "funder": "funder_beta",
             },
             {
                 "timestamp": 1_030,
@@ -53,6 +56,7 @@ def test_detect_bundle_metrics_uses_first_window_fixture_transactions():
                 "feePayer": "wallet_d",
                 "bundle_value": 75.0,
                 "success": True,
+                "funder": "funder_beta",
             },
             {
                 "timestamp": 1_075,
@@ -72,6 +76,10 @@ def test_detect_bundle_metrics_uses_first_window_fixture_transactions():
     assert result["unique_wallets_per_bundle_avg"] == 2.0
     assert result["bundle_timing_from_liquidity_add_min"] == round(2 / 60, 6)
     assert result["bundle_success_rate"] == 0.75
+    assert result["cluster_concentration_ratio"] == 0.5
+    assert result["num_unique_clusters_first_60s"] == 2
+    assert result["bundle_wallet_clustering_score"] == 0.45
+    assert result["creator_in_cluster_flag"] is None
 
 
 def test_detect_bundle_metrics_is_honest_when_anchor_missing():

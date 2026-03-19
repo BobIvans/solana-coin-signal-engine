@@ -116,7 +116,10 @@ def run_discovery_once() -> dict[str, Any]:
 
         bundle_payload = safe_null_bundle_metrics(status="unavailable", warning="bundle enrichment skipped")
         try:
-            bundle_payload = detect_bundle_metrics_for_pair({**normalized, **({"bundle_transactions": raw_pair.get("bundle_transactions")} if isinstance(raw_pair.get("bundle_transactions"), list) else {})}, now_ts, settings)
+            bundle_input = {**raw_pair, **normalized}
+            if isinstance(raw_pair.get("bundle_transactions"), list):
+                bundle_input["bundle_transactions"] = raw_pair.get("bundle_transactions")
+            bundle_payload = detect_bundle_metrics_for_pair(bundle_input, now_ts, settings)
         except Exception as exc:  # pragma: no cover - defensive fail-open
             log_warning(
                 "bundle_enrichment_failed",
