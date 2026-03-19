@@ -28,6 +28,7 @@ def _run(run_id: str):
         json.loads((base / "manifest.json").read_text())["config_hash"],
         (base / "signals.jsonl").read_text(),
         (base / "trades.jsonl").read_text(),
+        (base / "trade_feature_matrix.jsonl").read_text(),
         (base / "replay_summary.json").read_text(),
     )
 

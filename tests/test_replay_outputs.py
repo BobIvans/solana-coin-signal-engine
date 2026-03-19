@@ -29,6 +29,7 @@ def test_replay_writes_required_artifacts_and_fields():
         "backfill.jsonl",
         "signals.jsonl",
         "trades.jsonl",
+        "trade_feature_matrix.jsonl",
         "positions.json",
         "replay_summary.json",
         "replay_summary.md",
@@ -39,3 +40,7 @@ def test_replay_writes_required_artifacts_and_fields():
     signal = json.loads((base / "signals.jsonl").read_text().splitlines()[0])
     for key in ["run_id", "ts", "token_address", "pair_address", "decision", "x_status", "x_validation_score", "features"]:
         assert key in signal
+
+    matrix_row = json.loads((base / "trade_feature_matrix.jsonl").read_text().splitlines()[0])
+    for key in ["run_id", "ts", "token_address", "pair_address", "config_hash", "decision", "schema_version"]:
+        assert key in matrix_row
