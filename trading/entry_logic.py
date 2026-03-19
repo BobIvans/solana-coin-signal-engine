@@ -6,7 +6,7 @@ from typing import Any
 
 from trading.entry_sizing import compute_entry_confidence, compute_recommended_position_pct
 from trading.entry_snapshot import build_entry_snapshot
-from trading.regime_rules import is_scalp_candidate, is_trend_candidate, should_ignore
+from trading.regime_rules import decide_regime
 from utils.bundle_contract_fields import copy_bundle_contract_fields
 from utils.clock import utc_now_iso
 from utils.short_horizon_contract_fields import copy_short_horizon_contract_fields
@@ -25,32 +25,9 @@ def _dedupe(items: list[str]) -> list[str]:
 
 
 def decide_entry(token_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
-    ignore = should_ignore(token_ctx, settings)
-    flags = list(ignore.get("flags", []))
-    warnings = list(ignore.get("warnings", []))
-
-    decision = "IGNORE"
-    reason = ignore.get("reason") or "insufficient_momentum"
-
-    trend = is_trend_candidate(token_ctx, settings)
-    scalp = is_scalp_candidate(token_ctx, settings)
-
-    if not ignore.get("ignore"):
-        if trend["eligible"]:
-            decision = "TREND"
-            reason = trend["reason"]
-            flags.extend(trend.get("flags", []))
-            warnings.extend(trend.get("warnings", []))
-        elif scalp["eligible"]:
-            decision = "SCALP"
-            reason = scalp["reason"]
-            flags.extend(scalp.get("flags", []))
-            warnings.extend(scalp.get("warnings", []))
-        else:
-            decision = "IGNORE"
-            reason = "insufficient_social_confirmation" if "smart_wallet_hits_too_low" in trend.get("failures", []) else "insufficient_momentum"
-            if str(token_ctx.get("x_status") or "").lower() == "degraded":
-                warnings.append("x_status_degraded")
+    regime = decide_regime(token_ctx, settings)
+    regime_reason_flags = _dedupe(regime.get("regime_reason_flags", []))
+    regime_blockers = _dedupe(regime.get("regime_blockers", []))
 
     result: dict[str, Any] = {
         "token_address": token_ctx.get("token_address"),
@@ -58,10 +35,14 @@ def decide_entry(token_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
         "name": token_ctx.get("name"),
         **copy_bundle_contract_fields(token_ctx),
         **copy_short_horizon_contract_fields(token_ctx),
-        "entry_decision": decision,
-        "entry_reason": reason,
-        "entry_flags": _dedupe(flags),
-        "entry_warnings": _dedupe(warnings),
+        "entry_decision": regime["regime_decision"],
+        "entry_reason": regime["reason"],
+        "entry_flags": _dedupe([*regime_reason_flags, *regime_blockers]),
+        "entry_warnings": _dedupe(regime.get("warnings", [])),
+        "regime_confidence": float(regime.get("regime_confidence") or 0.0),
+        "regime_reason_flags": regime_reason_flags,
+        "regime_blockers": regime_blockers,
+        "expected_hold_class": regime.get("expected_hold_class") or "none",
         "entry_status": "ok",
         "decided_at": utc_now_iso(),
         "contract_version": settings.ENTRY_CONTRACT_VERSION,

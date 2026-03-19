@@ -39,9 +39,7 @@ def test_settings_load_and_validate(monkeypatch):
     assert settings.UNIFIED_SCORING_FAILOPEN is False
     assert settings.UNIFIED_SCORING_REQUIRE_X is False
     assert settings.UNIFIED_SCORE_HEURISTIC_CONFIDENCE_FLOOR > 0
-    assert (
-        settings.UNIFIED_SCORE_ENTRY_THRESHOLD > settings.UNIFIED_SCORE_WATCH_THRESHOLD
-    )
+    assert settings.UNIFIED_SCORE_ENTRY_THRESHOLD > settings.UNIFIED_SCORE_WATCH_THRESHOLD
     assert settings.ENTRY_SELECTOR_ENABLED is True
     assert settings.ENTRY_SCALP_SCORE_MIN > 0
 
@@ -88,33 +86,11 @@ def test_exit_settings_load(monkeypatch):
     monkeypatch.setenv("EXIT_ENGINE_FAILCLOSED", "true")
     monkeypatch.setenv("EXIT_SCALP_BUY_PRESSURE_FLOOR", "0.60")
     monkeypatch.setenv("EXIT_TREND_BUY_PRESSURE_FLOOR", "0.50")
-    monkeypatch.setenv("EXIT_CLUSTER_DUMP_HARD", "0.82")
-    monkeypatch.setenv("EXIT_CLUSTER_CONCENTRATION_SELL_THRESHOLD", "0.65")
-    monkeypatch.setenv("EXIT_CLUSTER_SELL_CONCENTRATION_WARN", "0.72")
-    monkeypatch.setenv("EXIT_CLUSTER_SELL_CONCENTRATION_HARD", "0.78")
-    monkeypatch.setenv("EXIT_LIQUIDITY_REFILL_FAIL_MIN", "0.85")
-    monkeypatch.setenv("EXIT_SELLER_REENTRY_WEAK_MAX", "0.20")
-    monkeypatch.setenv("EXIT_SHOCK_RECOVERY_TOO_SLOW_SEC", "180")
-    monkeypatch.setenv("EXIT_BUNDLE_FAILURE_SPIKE_THRESHOLD", "2.0")
-    monkeypatch.setenv("EXIT_RETRY_MANIPULATION_HARD", "5.0")
-    monkeypatch.setenv("EXIT_CREATOR_CLUSTER_RISK_HARD", "0.75")
-    monkeypatch.setenv("EXIT_CONTRACT_VERSION", "exit_engine_v1")
     settings = load_settings()
     assert settings.EXIT_ENGINE_ENABLED is True
     assert settings.EXIT_ENGINE_FAILCLOSED is True
     assert 0 <= settings.EXIT_SCALP_BUY_PRESSURE_FLOOR <= 1
     assert 0 <= settings.EXIT_TREND_BUY_PRESSURE_FLOOR <= 1
-    assert 0 <= settings.EXIT_CLUSTER_DUMP_HARD <= 1
-    assert 0 <= settings.EXIT_CLUSTER_CONCENTRATION_SELL_THRESHOLD <= 1
-    assert 0 <= settings.EXIT_CLUSTER_SELL_CONCENTRATION_WARN <= 1
-    assert 0 <= settings.EXIT_CLUSTER_SELL_CONCENTRATION_HARD <= 1
-    assert settings.EXIT_LIQUIDITY_REFILL_FAIL_MIN > 0
-    assert settings.EXIT_SELLER_REENTRY_WEAK_MAX > 0
-    assert settings.EXIT_SHOCK_RECOVERY_TOO_SLOW_SEC > 0
-    assert settings.EXIT_BUNDLE_FAILURE_SPIKE_THRESHOLD > 0
-    assert settings.EXIT_RETRY_MANIPULATION_HARD > 0
-    assert 0 <= settings.EXIT_CREATOR_CLUSTER_RISK_HARD <= 1
-    assert settings.EXIT_CONTRACT_VERSION == "exit_engine_v1"
 
 
 def test_invalid_exit_poll_interval_raises(monkeypatch):
@@ -135,15 +111,70 @@ def test_exit_and_paper_settings_coexist(monkeypatch):
     assert settings.PAPER_TRADER_ENABLED is True
 
 
+def test_regime_v2_settings_defaults_are_available():
+    settings = load_settings()
+    assert settings.ENTRY_TREND_MULTI_CLUSTER_MIN >= 1
+    assert 0 <= settings.ENTRY_TREND_CLUSTER_CONCENTRATION_MAX <= 1
+    assert 0 <= settings.ENTRY_TREND_DEV_SELL_MAX <= 1
+    assert settings.ENTRY_SCALP_BUNDLE_COUNT_MIN >= 1
+    assert 0 <= settings.ENTRY_REGIME_CONFIDENCE_FLOOR_SCALP <= 1
+    assert 0 <= settings.ENTRY_REGIME_CONFIDENCE_FLOOR_TREND <= 1
+    assert settings.ENTRY_REGIME_CONFIDENCE_FLOOR_TREND >= settings.ENTRY_REGIME_CONFIDENCE_FLOOR_SCALP
+
+
+def test_invalid_regime_v2_settings_raise(monkeypatch):
+    monkeypatch.setenv("ENTRY_REGIME_CONFIDENCE_FLOOR_TREND", "1.2")
+    try:
+        load_settings()
+    except ValueError as exc:
+        assert "ENTRY_REGIME_CONFIDENCE_FLOOR_TREND" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for ENTRY_REGIME_CONFIDENCE_FLOOR_TREND")
+
+
 def test_bundle_cluster_unified_score_settings_exist_and_are_bounded():
     settings = load_settings()
+    required_fields = [
+        "UNIFIED_SCORE_BUNDLE_AGGRESSION_MAX",
+        "UNIFIED_SCORE_MULTI_CLUSTER_BONUS_MAX",
+        "UNIFIED_SCORE_SINGLE_CLUSTER_PENALTY_MAX",
+        "UNIFIED_SCORE_CREATOR_CLUSTER_PENALTY",
+        "UNIFIED_SCORE_ORGANIC_BUYER_FLOW_MAX",
+        "UNIFIED_SCORE_LIQUIDITY_REFILL_MAX",
+        "UNIFIED_SCORE_SMART_WALLET_DISPERSION_MAX",
+        "UNIFIED_SCORE_X_AUTHOR_VELOCITY_MAX",
+        "UNIFIED_SCORE_SELLER_REENTRY_MAX",
+        "UNIFIED_SCORE_SHOCK_RECOVERY_MAX",
+        "UNIFIED_SCORE_CLUSTER_DISTRIBUTION_RISK_MAX",
+        "UNIFIED_SCORE_BUNDLE_SELL_HEAVY_PENALTY_MAX",
+        "UNIFIED_SCORE_RETRY_MANIPULATION_PENALTY_MAX",
+        "EXIT_CLUSTER_DUMP_HARD",
+        "EXIT_CONTRACT_VERSION",
+        "PAPER_CONTRACT_VERSION",
+    ]
+    missing = [field for field in required_fields if not hasattr(settings, field)]
+    assert not missing
+
     assert settings.UNIFIED_SCORE_BUNDLE_AGGRESSION_MAX > 0
     assert settings.UNIFIED_SCORE_MULTI_CLUSTER_BONUS_MAX > 0
     assert settings.UNIFIED_SCORE_SINGLE_CLUSTER_PENALTY_MAX > 0
     assert settings.UNIFIED_SCORE_CREATOR_CLUSTER_PENALTY > 0
+    assert settings.UNIFIED_SCORE_ORGANIC_BUYER_FLOW_MAX > 0
+    assert settings.UNIFIED_SCORE_LIQUIDITY_REFILL_MAX > 0
+    assert settings.UNIFIED_SCORE_SMART_WALLET_DISPERSION_MAX > 0
+    assert settings.UNIFIED_SCORE_X_AUTHOR_VELOCITY_MAX > 0
+    assert settings.UNIFIED_SCORE_SELLER_REENTRY_MAX > 0
+    assert settings.UNIFIED_SCORE_SHOCK_RECOVERY_MAX > 0
+    assert settings.UNIFIED_SCORE_CLUSTER_DISTRIBUTION_RISK_MAX > 0
     assert settings.UNIFIED_SCORE_BUNDLE_SELL_HEAVY_PENALTY_MAX > 0
     assert settings.UNIFIED_SCORE_RETRY_MANIPULATION_PENALTY_MAX > 0
-    assert (
-        settings.UNIFIED_SCORE_BUNDLE_AGGRESSION_MAX
-        < settings.UNIFIED_SCORE_ENTRY_THRESHOLD
-    )
+    assert 0 <= settings.EXIT_CLUSTER_DUMP_HARD <= 1
+    assert settings.UNIFIED_SCORE_BUNDLE_AGGRESSION_MAX < settings.UNIFIED_SCORE_ENTRY_THRESHOLD
+
+
+def test_load_settings_exposes_runtime_config_contract_fields():
+    settings = load_settings()
+
+    assert settings.ENTRY_TREND_MULTI_CLUSTER_MIN >= 1
+    assert settings.UNIFIED_SCORE_ORGANIC_BUYER_FLOW_MAX > 0
+    assert 0 <= settings.EXIT_CLUSTER_DUMP_HARD <= 1

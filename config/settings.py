@@ -129,6 +129,12 @@ class Settings:
     ENTRY_BUNDLE_CLUSTER_MIN: float
     ENTRY_SMART_WALLET_HITS_MIN_TREND: int
     ENTRY_HOLDER_GROWTH_MIN_TREND: int
+    ENTRY_TREND_MULTI_CLUSTER_MIN: int
+    ENTRY_TREND_CLUSTER_CONCENTRATION_MAX: float
+    ENTRY_TREND_DEV_SELL_MAX: float
+    ENTRY_SCALP_BUNDLE_COUNT_MIN: int
+    ENTRY_REGIME_CONFIDENCE_FLOOR_TREND: float
+    ENTRY_REGIME_CONFIDENCE_FLOOR_SCALP: float
     ENTRY_DEGRADED_X_SIZE_MULTIPLIER: float
     ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER: float
     ENTRY_MAX_BASE_POSITION_PCT: float
@@ -166,8 +172,18 @@ class Settings:
 
     PAPER_TRADER_ENABLED: bool
     PAPER_STARTING_CAPITAL_SOL: float
+    PAPER_MAX_CONCURRENT_POSITIONS: int
+    PAPER_DEFAULT_SLIPPAGE_BPS: int
     PAPER_MAX_SLIPPAGE_BPS: int
+    PAPER_SLIPPAGE_LIQUIDITY_SENSITIVITY: float
+    PAPER_PRIORITY_FEE_BASE_SOL: float
     PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER: float
+    PAPER_FAILED_TX_BASE_PROB: float
+    PAPER_FAILED_TX_LOW_LIQUIDITY_ADDON: float
+    PAPER_FAILED_TX_HIGH_VOLATILITY_ADDON: float
+    PAPER_PARTIAL_FILL_ALLOWED: bool
+    PAPER_PARTIAL_FILL_MIN_RATIO: float
+    PAPER_CONTRACT_VERSION: str
 
     # Post-run analyzer (PR-10)
     POST_RUN_ANALYZER_ENABLED: bool
@@ -613,6 +629,30 @@ def load_settings() -> Settings:
             _get_env(merged, "ENTRY_HOLDER_GROWTH_MIN_TREND", "20"),
             key="ENTRY_HOLDER_GROWTH_MIN_TREND",
         ),
+        ENTRY_TREND_MULTI_CLUSTER_MIN=_as_positive_int(
+            _get_env(merged, "ENTRY_TREND_MULTI_CLUSTER_MIN", "3"),
+            key="ENTRY_TREND_MULTI_CLUSTER_MIN",
+        ),
+        ENTRY_TREND_CLUSTER_CONCENTRATION_MAX=_as_unit_float(
+            _get_env(merged, "ENTRY_TREND_CLUSTER_CONCENTRATION_MAX", "0.55"),
+            key="ENTRY_TREND_CLUSTER_CONCENTRATION_MAX",
+        ),
+        ENTRY_TREND_DEV_SELL_MAX=_as_unit_float(
+            _get_env(merged, "ENTRY_TREND_DEV_SELL_MAX", "0.02"),
+            key="ENTRY_TREND_DEV_SELL_MAX",
+        ),
+        ENTRY_SCALP_BUNDLE_COUNT_MIN=_as_positive_int(
+            _get_env(merged, "ENTRY_SCALP_BUNDLE_COUNT_MIN", "2"),
+            key="ENTRY_SCALP_BUNDLE_COUNT_MIN",
+        ),
+        ENTRY_REGIME_CONFIDENCE_FLOOR_TREND=_as_unit_float(
+            _get_env(merged, "ENTRY_REGIME_CONFIDENCE_FLOOR_TREND", "0.55"),
+            key="ENTRY_REGIME_CONFIDENCE_FLOOR_TREND",
+        ),
+        ENTRY_REGIME_CONFIDENCE_FLOOR_SCALP=_as_unit_float(
+            _get_env(merged, "ENTRY_REGIME_CONFIDENCE_FLOOR_SCALP", "0.40"),
+            key="ENTRY_REGIME_CONFIDENCE_FLOOR_SCALP",
+        ),
         ENTRY_DEGRADED_X_SIZE_MULTIPLIER=_as_unit_float(
             _get_env(merged, "ENTRY_DEGRADED_X_SIZE_MULTIPLIER", "0.50"),
             key="ENTRY_DEGRADED_X_SIZE_MULTIPLIER",
@@ -745,13 +785,52 @@ def load_settings() -> Settings:
             _get_env(merged, "PAPER_STARTING_CAPITAL_SOL", "0.1"),
             key="PAPER_STARTING_CAPITAL_SOL",
         ),
+        PAPER_MAX_CONCURRENT_POSITIONS=_as_positive_int(
+            _get_env(merged, "PAPER_MAX_CONCURRENT_POSITIONS", "3"),
+            key="PAPER_MAX_CONCURRENT_POSITIONS",
+        ),
+        PAPER_DEFAULT_SLIPPAGE_BPS=_as_positive_int(
+            _get_env(merged, "PAPER_DEFAULT_SLIPPAGE_BPS", "150"),
+            key="PAPER_DEFAULT_SLIPPAGE_BPS",
+        ),
         PAPER_MAX_SLIPPAGE_BPS=_as_positive_int(
             _get_env(merged, "PAPER_MAX_SLIPPAGE_BPS", "1200"),
             key="PAPER_MAX_SLIPPAGE_BPS",
         ),
+        PAPER_SLIPPAGE_LIQUIDITY_SENSITIVITY=_as_positive_float(
+            _get_env(merged, "PAPER_SLIPPAGE_LIQUIDITY_SENSITIVITY", "1.0"),
+            key="PAPER_SLIPPAGE_LIQUIDITY_SENSITIVITY",
+        ),
+        PAPER_PRIORITY_FEE_BASE_SOL=_as_positive_float(
+            _get_env(merged, "PAPER_PRIORITY_FEE_BASE_SOL", "0.00002"),
+            key="PAPER_PRIORITY_FEE_BASE_SOL",
+        ),
         PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER=_as_positive_float(
             _get_env(merged, "PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER", "1.75"),
             key="PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER",
+        ),
+        PAPER_FAILED_TX_BASE_PROB=_as_unit_float(
+            _get_env(merged, "PAPER_FAILED_TX_BASE_PROB", "0.03"),
+            key="PAPER_FAILED_TX_BASE_PROB",
+        ),
+        PAPER_FAILED_TX_LOW_LIQUIDITY_ADDON=_as_unit_float(
+            _get_env(merged, "PAPER_FAILED_TX_LOW_LIQUIDITY_ADDON", "0.05"),
+            key="PAPER_FAILED_TX_LOW_LIQUIDITY_ADDON",
+        ),
+        PAPER_FAILED_TX_HIGH_VOLATILITY_ADDON=_as_unit_float(
+            _get_env(merged, "PAPER_FAILED_TX_HIGH_VOLATILITY_ADDON", "0.04"),
+            key="PAPER_FAILED_TX_HIGH_VOLATILITY_ADDON",
+        ),
+        PAPER_PARTIAL_FILL_ALLOWED=_as_bool(
+            _get_env(merged, "PAPER_PARTIAL_FILL_ALLOWED", "true"),
+            key="PAPER_PARTIAL_FILL_ALLOWED",
+        ),
+        PAPER_PARTIAL_FILL_MIN_RATIO=_as_unit_float(
+            _get_env(merged, "PAPER_PARTIAL_FILL_MIN_RATIO", "0.50"),
+            key="PAPER_PARTIAL_FILL_MIN_RATIO",
+        ),
+        PAPER_CONTRACT_VERSION=str(
+            _get_env(merged, "PAPER_CONTRACT_VERSION", "paper_trader_v1")
         ),
         POST_RUN_ANALYZER_ENABLED=_as_bool(
             _get_env(merged, "POST_RUN_ANALYZER_ENABLED", "true"),
