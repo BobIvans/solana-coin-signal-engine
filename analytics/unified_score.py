@@ -8,6 +8,7 @@ from analytics.score_components import (
     compute_bundle_aggression_bonus,
     compute_bundle_risk_penalties,
     compute_cluster_quality_adjustment,
+    compute_continuation_quality_adjustment,
     compute_confidence_adjustment,
     compute_early_signal_bonus,
     compute_onchain_core,
@@ -47,6 +48,9 @@ def score_token(token_ctx: dict, settings: Any) -> dict:
     early = compute_early_signal_bonus(token_ctx, settings)
     bundle_bonus = compute_bundle_aggression_bonus(token_ctx, settings)
     cluster_adjustment = compute_cluster_quality_adjustment(token_ctx, settings)
+    continuation_quality = compute_continuation_quality_adjustment(
+        token_ctx, settings
+    )
     bundle_risk = compute_bundle_risk_penalties(token_ctx, settings)
     x_bonus = compute_x_validation_bonus(token_ctx, settings)
     rug = compute_rug_penalty(token_ctx, settings)
@@ -62,9 +66,16 @@ def score_token(token_ctx: dict, settings: Any) -> dict:
         + float(early["early_signal_bonus"])
         + float(bundle_bonus["bundle_aggression_bonus"])
         + float(cluster_adjustment["organic_multi_cluster_bonus"])
+        + float(continuation_quality["organic_buyer_flow_bonus"])
+        + float(continuation_quality["liquidity_refill_bonus"])
+        + float(continuation_quality["smart_wallet_dispersion_bonus"])
+        + float(continuation_quality["x_author_velocity_bonus"])
+        + float(continuation_quality["seller_reentry_bonus"])
+        + float(continuation_quality["shock_recovery_bonus"])
         + float(x_bonus["x_validation_bonus"])
         - float(cluster_adjustment["single_cluster_penalty"])
         - float(cluster_adjustment["creator_cluster_penalty"])
+        - float(continuation_quality["cluster_distribution_risk_penalty"])
         - float(bundle_risk["bundle_sell_heavy_penalty"])
         - float(bundle_risk["retry_manipulation_penalty"])
         - float(rug["rug_penalty"])
@@ -109,6 +120,7 @@ def score_token(token_ctx: dict, settings: Any) -> dict:
         early,
         bundle_bonus,
         cluster_adjustment,
+        continuation_quality,
         bundle_risk,
         x_bonus,
         rug,
@@ -139,6 +151,27 @@ def score_token(token_ctx: dict, settings: Any) -> dict:
         ),
         "creator_cluster_penalty": round(
             float(cluster_adjustment["creator_cluster_penalty"]), 4
+        ),
+        "organic_buyer_flow_bonus": round(
+            float(continuation_quality["organic_buyer_flow_bonus"]), 4
+        ),
+        "liquidity_refill_bonus": round(
+            float(continuation_quality["liquidity_refill_bonus"]), 4
+        ),
+        "smart_wallet_dispersion_bonus": round(
+            float(continuation_quality["smart_wallet_dispersion_bonus"]), 4
+        ),
+        "x_author_velocity_bonus": round(
+            float(continuation_quality["x_author_velocity_bonus"]), 4
+        ),
+        "seller_reentry_bonus": round(
+            float(continuation_quality["seller_reentry_bonus"]), 4
+        ),
+        "shock_recovery_bonus": round(
+            float(continuation_quality["shock_recovery_bonus"]), 4
+        ),
+        "cluster_distribution_risk_penalty": round(
+            float(continuation_quality["cluster_distribution_risk_penalty"]), 4
         ),
         "bundle_sell_heavy_penalty": round(
             float(bundle_risk["bundle_sell_heavy_penalty"]), 4
