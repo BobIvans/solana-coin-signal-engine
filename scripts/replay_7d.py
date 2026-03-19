@@ -16,6 +16,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from utils.io import ensure_dir, read_json, write_json
 from utils.bundle_contract_fields import copy_bundle_contract_fields
+from utils.short_horizon_contract_fields import SHORT_HORIZON_SIGNAL_FIELDS, copy_short_horizon_contract_fields
 
 _DEFAULT_WALLET_FEATURES = {
     "smart_wallet_hits": 0,
@@ -65,6 +66,7 @@ _TRADE_FEATURE_MATRIX_FIELDS = [
     "volume_velocity_entry",
     "holder_growth_5m_entry",
     "smart_wallet_hits_entry",
+    *SHORT_HORIZON_SIGNAL_FIELDS,
     "x_status",
     "x_validation_score_entry",
     "x_validation_delta_entry",
@@ -114,6 +116,12 @@ def _safe_bundle_fields(item: dict[str, Any]) -> dict[str, Any]:
     return copy_bundle_contract_fields(item, fallback=entry_snapshot)
 
 
+def _safe_short_horizon_fields(item: dict[str, Any]) -> dict[str, Any]:
+    entry_snapshot = item.get("entry_snapshot") if isinstance(item.get("entry_snapshot"), dict) else {}
+    features = item.get("features") if isinstance(item.get("features"), dict) else {}
+    return copy_short_horizon_contract_fields(item, fallback={**entry_snapshot, **features})
+
+
 def _safe_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
@@ -157,6 +165,7 @@ def build_trade_feature_row(
     features = _safe_dict(item.get("features"))
     entry_snapshot = _safe_dict(item.get("entry_snapshot"))
     wallet_features = _safe_wallet_features(item)
+    short_horizon_fields = _safe_short_horizon_fields(item)
     wallet_adjustment = _normalize_wallet_adjustment(
         _first_present(
             [_safe_dict(trade.get("wallet_adjustment")), _safe_dict(signal.get("wallet_adjustment")), _safe_dict(item.get("wallet_adjustment"))],
@@ -178,6 +187,7 @@ def build_trade_feature_row(
         features,
         entry_snapshot,
         wallet_features,
+        short_horizon_fields,
     ]
     row = {field: None for field in _TRADE_FEATURE_MATRIX_FIELDS}
     row.update(
@@ -218,6 +228,13 @@ def build_trade_feature_row(
             "volume_velocity_entry": _first_present(sources, "volume_velocity_entry", "volume_velocity"),
             "holder_growth_5m_entry": _first_present(sources, "holder_growth_5m_entry", "holder_growth_5m"),
             "smart_wallet_hits_entry": _first_present(sources, "smart_wallet_hits_entry", "smart_wallet_hits"),
+            "net_unique_buyers_60s": _first_present(sources, "net_unique_buyers_60s"),
+            "liquidity_refill_ratio_120s": _first_present(sources, "liquidity_refill_ratio_120s"),
+            "cluster_sell_concentration_120s": _first_present(sources, "cluster_sell_concentration_120s"),
+            "smart_wallet_dispersion_score": _first_present(sources, "smart_wallet_dispersion_score"),
+            "x_author_velocity_5m": _first_present(sources, "x_author_velocity_5m"),
+            "seller_reentry_ratio": _first_present(sources, "seller_reentry_ratio"),
+            "liquidity_shock_recovery_sec": _first_present(sources, "liquidity_shock_recovery_sec"),
             "x_status": _first_present(sources, "x_status"),
             "x_validation_score_entry": _first_present(sources, "x_validation_score_entry", "x_validation_score"),
             "x_validation_delta_entry": _first_present(sources, "x_validation_delta_entry", "x_validation_delta"),
@@ -331,6 +348,7 @@ def main() -> int:
         token_address = str(item.get("token_address") or f"token_{idx}")
         pair_address = str(item.get("pair_address") or f"pair_{idx}")
         wallet_features = _safe_wallet_features(item)
+        short_horizon_fields = _safe_short_horizon_fields(item)
         ts = args.start_ts or args.end_ts or _DEFAULT_TS
         signal = {
             "run_id": args.run_id,
@@ -344,6 +362,7 @@ def main() -> int:
             "wallet_features": wallet_features,
             "wallet_weighting": args.wallet_weighting,
             **_safe_bundle_fields(item),
+            **short_horizon_fields,
         }
         trade = {
             "run_id": args.run_id,
@@ -355,6 +374,7 @@ def main() -> int:
             "price": 1.0,
             "wallet_features": wallet_features,
             **_safe_bundle_fields(item),
+            **short_horizon_fields,
         }
         universe.append({"run_id": args.run_id, "token_address": token_address, "pair_address": pair_address})
         backfill.append({"run_id": args.run_id, "token_address": token_address, "status": "synthetic"})

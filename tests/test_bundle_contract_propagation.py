@@ -15,6 +15,7 @@ from collectors.discovery_engine import build_shortlist
 from config.settings import load_settings
 from trading.entry_logic import decide_entry
 from utils.bundle_contract_fields import BUNDLE_CONTRACT_FIELDS
+from utils.short_horizon_contract_fields import SHORT_HORIZON_SIGNAL_FIELDS
 
 
 class DummyEntrySettings:
@@ -54,6 +55,18 @@ def _bundle_values() -> dict[str, object]:
         "cluster_concentration_ratio": 0.61,
         "num_unique_clusters_first_60s": 2,
         "creator_in_cluster_flag": True,
+    }
+
+
+def _short_horizon_values() -> dict[str, object]:
+    return {
+        "net_unique_buyers_60s": 7,
+        "liquidity_refill_ratio_120s": 0.85,
+        "cluster_sell_concentration_120s": 0.58,
+        "smart_wallet_dispersion_score": 0.44,
+        "x_author_velocity_5m": 0.6,
+        "seller_reentry_ratio": 0.33,
+        "liquidity_shock_recovery_sec": 55,
     }
 
 
@@ -110,6 +123,7 @@ def test_bundle_fields_propagate_from_shortlist_to_scored_token_to_entry_snapsho
         "freeze_revoked": True,
         "lp_burn_confirmed": True,
         **_bundle_values(),
+        **_short_horizon_values(),
     }
 
     shortlist = build_shortlist([candidate], top_k=1)
@@ -121,9 +135,14 @@ def test_bundle_fields_propagate_from_shortlist_to_scored_token_to_entry_snapsho
     scored = score_token(candidate, settings)
     for field, value in _bundle_values().items():
         assert scored[field] == value
+    for field, value in _short_horizon_values().items():
+        assert scored[field] == value
 
-    entry = decide_entry({**_base_scored_token(), **_bundle_values()}, DummyEntrySettings())
+    entry = decide_entry({**_base_scored_token(), **_bundle_values(), **_short_horizon_values()}, DummyEntrySettings())
     for field, value in _bundle_values().items():
+        assert entry[field] == value
+        assert entry["entry_snapshot"][field] == value
+    for field, value in _short_horizon_values().items():
         assert entry[field] == value
         assert entry["entry_snapshot"][field] == value
 
@@ -147,6 +166,11 @@ def test_bundle_fields_are_none_safe_when_missing():
 
     entry = decide_entry(_base_scored_token(), DummyEntrySettings())
     for field in BUNDLE_CONTRACT_FIELDS:
+        assert field in entry
+        assert entry[field] is None
+        assert field in entry["entry_snapshot"]
+        assert entry["entry_snapshot"][field] is None
+    for field in SHORT_HORIZON_SIGNAL_FIELDS:
         assert field in entry
         assert entry[field] is None
         assert field in entry["entry_snapshot"]
@@ -182,6 +206,11 @@ def test_replay_preserves_bundle_fields_when_missing_or_present():
         assert field in missing_trade
         assert missing_signal[field] is None
         assert missing_trade[field] is None
+    for field in SHORT_HORIZON_SIGNAL_FIELDS:
+        assert field in missing_signal
+        assert field in missing_trade
+        assert missing_signal[field] is None
+        assert missing_trade[field] is None
 
     run_id_present = "bundle_contract_present"
     present_payload = [
@@ -190,7 +219,7 @@ def test_replay_preserves_bundle_fields_when_missing_or_present():
             "pair_address": "pair_present",
             "decision": "paper_enter",
             "wallet_features": {},
-            "entry_snapshot": _bundle_values(),
+            "entry_snapshot": {**_bundle_values(), **_short_horizon_values()},
         }
     ]
     (processed / "entry_candidates.json").write_text(json.dumps(present_payload), encoding="utf-8")
@@ -203,5 +232,8 @@ def test_replay_preserves_bundle_fields_when_missing_or_present():
     present_signal = json.loads((ROOT / "runs" / run_id_present / "signals.jsonl").read_text(encoding="utf-8").splitlines()[0])
     present_trade = json.loads((ROOT / "runs" / run_id_present / "trades.jsonl").read_text(encoding="utf-8").splitlines()[0])
     for field, value in _bundle_values().items():
+        assert present_signal[field] == value
+        assert present_trade[field] == value
+    for field, value in _short_horizon_values().items():
         assert present_signal[field] == value
         assert present_trade[field] == value

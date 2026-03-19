@@ -36,7 +36,18 @@ def test_aggregate_dedupes_repeated_cards_and_duplicate_ratio():
     ]
     agg = aggregate_token_snapshots(token, snapshots)
     assert agg["x_posts_visible"] == 2
+    assert agg["x_author_velocity_5m"] is None
     assert 0 <= agg["x_duplicate_text_ratio"] <= 1
+
+
+def test_aggregate_computes_author_velocity_when_card_timestamps_are_available():
+    token = {"token_address": "So11111111111111111111111111111111111111112"}
+    agg = aggregate_token_snapshots(token, [{"x_status": "ok", "cards": [
+        {"author_handle": "@a", "text": "hello", "created_at": "1970-01-01T00:00:00Z"},
+        {"author_handle": "@b", "text": "world", "created_at": "1970-01-01T00:04:00Z"},
+        {"author_handle": "@c", "text": "later", "created_at": "1970-01-01T00:05:30Z"},
+    ]}])
+    assert agg["x_author_velocity_5m"] == 0.4
 
 
 def test_aggregate_handles_empty_cards():
@@ -44,3 +55,4 @@ def test_aggregate_handles_empty_cards():
     agg = aggregate_token_snapshots(token, [{"x_status": "empty", "cards": []}])
     assert agg["x_posts_visible"] == 0
     assert agg["x_unique_authors_visible"] == 0
+    assert agg["x_author_velocity_5m"] is None

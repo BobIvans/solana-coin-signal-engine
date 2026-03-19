@@ -9,6 +9,7 @@ from trading.entry_snapshot import build_entry_snapshot
 from trading.regime_rules import is_scalp_candidate, is_trend_candidate, should_ignore
 from utils.bundle_contract_fields import copy_bundle_contract_fields
 from utils.clock import utc_now_iso
+from utils.short_horizon_contract_fields import copy_short_horizon_contract_fields
 
 _ALLOWED_DECISIONS = {"SCALP", "TREND", "IGNORE"}
 
@@ -56,6 +57,7 @@ def decide_entry(token_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
         "symbol": token_ctx.get("symbol"),
         "name": token_ctx.get("name"),
         **copy_bundle_contract_fields(token_ctx),
+        **copy_short_horizon_contract_fields(token_ctx),
         "entry_decision": decision,
         "entry_reason": reason,
         "entry_flags": _dedupe(flags),

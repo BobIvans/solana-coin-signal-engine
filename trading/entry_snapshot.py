@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from utils.bundle_contract_fields import BUNDLE_CONTRACT_FIELDS
+from utils.short_horizon_contract_fields import SHORT_HORIZON_SIGNAL_FIELDS
 
 _ENTRY_SNAPSHOT_FIELDS = [
     "final_score",
@@ -24,6 +25,7 @@ _ENTRY_SNAPSHOT_FIELDS = [
     "dev_sell_pressure_5m",
     "rug_score",
     *BUNDLE_CONTRACT_FIELDS,
+    *SHORT_HORIZON_SIGNAL_FIELDS,
 ]
 
 
