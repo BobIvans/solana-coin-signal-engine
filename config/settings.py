@@ -122,6 +122,12 @@ class Settings:
     ENTRY_BUNDLE_CLUSTER_MIN: float
     ENTRY_SMART_WALLET_HITS_MIN_TREND: int
     ENTRY_HOLDER_GROWTH_MIN_TREND: int
+    ENTRY_TREND_MULTI_CLUSTER_MIN: int
+    ENTRY_TREND_CLUSTER_CONCENTRATION_MAX: float
+    ENTRY_TREND_DEV_SELL_MAX: float
+    ENTRY_SCALP_BUNDLE_COUNT_MIN: int
+    ENTRY_REGIME_CONFIDENCE_FLOOR_TREND: float
+    ENTRY_REGIME_CONFIDENCE_FLOOR_SCALP: float
     ENTRY_DEGRADED_X_SIZE_MULTIPLIER: float
     ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER: float
     ENTRY_MAX_BASE_POSITION_PCT: float
@@ -223,420 +229,128 @@ def load_settings() -> Settings:
         LOG_LEVEL=log_level,
         DATA_DIR=_as_abs_path(_get_env(merged, "DATA_DIR", "./data")),
         RAW_DATA_DIR=_as_abs_path(_get_env(merged, "RAW_DATA_DIR", "./data/raw")),
-        PROCESSED_DATA_DIR=_as_abs_path(
-            _get_env(merged, "PROCESSED_DATA_DIR", "./data/processed")
-        ),
+        PROCESSED_DATA_DIR=_as_abs_path(_get_env(merged, "PROCESSED_DATA_DIR", "./data/processed")),
         SIGNALS_DIR=_as_abs_path(_get_env(merged, "SIGNALS_DIR", "./data/signals")),
         TRADES_DIR=_as_abs_path(_get_env(merged, "TRADES_DIR", "./data/trades")),
-        POSITIONS_DIR=_as_abs_path(
-            _get_env(merged, "POSITIONS_DIR", "./data/positions")
-        ),
+        POSITIONS_DIR=_as_abs_path(_get_env(merged, "POSITIONS_DIR", "./data/positions")),
         SMOKE_DIR=_as_abs_path(_get_env(merged, "SMOKE_DIR", "./data/smoke")),
-        OPENCLAW_ENABLED=_as_bool(
-            _get_env(merged, "OPENCLAW_ENABLED", "true"), key="OPENCLAW_ENABLED"
-        ),
-        OPENCLAW_LOCAL_ONLY=_as_bool(
-            _get_env(merged, "OPENCLAW_LOCAL_ONLY", "true"), key="OPENCLAW_LOCAL_ONLY"
-        ),
-        OPENCLAW_PROFILE_PATH=_as_abs_path(
-            _get_env(merged, "OPENCLAW_PROFILE_PATH", "~/.openclaw/x-profile")
-        ),
-        OPENCLAW_SNAPSHOTS_DIR=_as_abs_path(
-            _get_env(merged, "OPENCLAW_SNAPSHOTS_DIR", "./data/smoke")
-        ),
-        X_VALIDATION_ENABLED=_as_bool(
-            _get_env(merged, "X_VALIDATION_ENABLED", "true"), key="X_VALIDATION_ENABLED"
-        ),
-        X_DEGRADED_MODE_ALLOWED=_as_bool(
-            _get_env(merged, "X_DEGRADED_MODE_ALLOWED", "true"),
-            key="X_DEGRADED_MODE_ALLOWED",
-        ),
-        X_SEARCH_TEST_QUERY=str(
-            _get_env(merged, "X_SEARCH_TEST_QUERY", "solana memecoin")
-        ),
-        X_MAX_TOKENS_PER_CYCLE=_as_positive_int(
-            _get_env(merged, "X_MAX_TOKENS_PER_CYCLE", "5"),
-            key="X_MAX_TOKENS_PER_CYCLE",
-        ),
-        X_MAX_CONCURRENCY=_as_positive_int(
-            _get_env(merged, "X_MAX_CONCURRENCY", "2"), key="X_MAX_CONCURRENCY"
-        ),
-        X_CACHE_TTL_SEC=_as_positive_int(
-            _get_env(merged, "X_CACHE_TTL_SEC", "600"), key="X_CACHE_TTL_SEC"
-        ),
-        LOCAL_OPENCLAW_ONLY=_as_bool(
-            _get_env(merged, "LOCAL_OPENCLAW_ONLY", "true"), key="LOCAL_OPENCLAW_ONLY"
-        ),
-        OPENCLAW_BROWSER_PROFILE=str(
-            _get_env(merged, "OPENCLAW_BROWSER_PROFILE", "openclaw")
-        ),
-        OPENCLAW_BROWSER_TARGET=str(
-            _get_env(merged, "OPENCLAW_BROWSER_TARGET", "host")
-        ),
-        OPENCLAW_X_QUERY_MAX=_as_positive_int(
-            _get_env(merged, "OPENCLAW_X_QUERY_MAX", "4"), key="OPENCLAW_X_QUERY_MAX"
-        ),
-        OPENCLAW_X_TOKEN_MAX_CONCURRENCY=_as_positive_int(
-            _get_env(merged, "OPENCLAW_X_TOKEN_MAX_CONCURRENCY", "2"),
-            key="OPENCLAW_X_TOKEN_MAX_CONCURRENCY",
-        ),
-        OPENCLAW_X_CACHE_TTL_SEC=_as_positive_int(
-            _get_env(merged, "OPENCLAW_X_CACHE_TTL_SEC", "600"),
-            key="OPENCLAW_X_CACHE_TTL_SEC",
-        ),
-        OPENCLAW_X_PAGE_TIMEOUT_MS=_as_positive_int(
-            _get_env(merged, "OPENCLAW_X_PAGE_TIMEOUT_MS", "12000"),
-            key="OPENCLAW_X_PAGE_TIMEOUT_MS",
-        ),
-        OPENCLAW_X_NAV_TIMEOUT_MS=_as_positive_int(
-            _get_env(merged, "OPENCLAW_X_NAV_TIMEOUT_MS", "15000"),
-            key="OPENCLAW_X_NAV_TIMEOUT_MS",
-        ),
-        OPENCLAW_X_MAX_SCROLLS=_as_positive_int(
-            _get_env(merged, "OPENCLAW_X_MAX_SCROLLS", "2"),
-            key="OPENCLAW_X_MAX_SCROLLS",
-        ),
-        OPENCLAW_X_MAX_POSTS_PER_QUERY=_as_positive_int(
-            _get_env(merged, "OPENCLAW_X_MAX_POSTS_PER_QUERY", "15"),
-            key="OPENCLAW_X_MAX_POSTS_PER_QUERY",
-        ),
-        OPENCLAW_X_DEGRADED_SCORE=_as_positive_int(
-            _get_env(merged, "OPENCLAW_X_DEGRADED_SCORE", "45"),
-            key="OPENCLAW_X_DEGRADED_SCORE",
-        ),
-        OPENCLAW_X_FAILOPEN=_as_bool(
-            _get_env(merged, "OPENCLAW_X_FAILOPEN", "true"), key="OPENCLAW_X_FAILOPEN"
-        ),
-        X_VALIDATION_CONTRACT_VERSION=str(
-            _get_env(merged, "X_VALIDATION_CONTRACT_VERSION", "x_validation_v1")
-        ),
-        DEX_CACHE_TTL_SEC=_as_positive_int(
-            _get_env(merged, "DEX_CACHE_TTL_SEC", "60"), key="DEX_CACHE_TTL_SEC"
-        ),
-        HELIUS_CACHE_TTL_SEC=_as_positive_int(
-            _get_env(merged, "HELIUS_CACHE_TTL_SEC", "120"), key="HELIUS_CACHE_TTL_SEC"
-        ),
-        BUNDLE_ENRICHMENT_ENABLED=_as_bool(
-            _get_env(merged, "BUNDLE_ENRICHMENT_ENABLED", "true"),
-            key="BUNDLE_ENRICHMENT_ENABLED",
-        ),
-        BUNDLE_ENRICHMENT_WINDOW_SEC=_as_positive_int(
-            _get_env(merged, "BUNDLE_ENRICHMENT_WINDOW_SEC", "60"),
-            key="BUNDLE_ENRICHMENT_WINDOW_SEC",
-        ),
-        GLOBAL_RATE_LIMIT_ENABLED=_as_bool(
-            _get_env(merged, "GLOBAL_RATE_LIMIT_ENABLED", "true"),
-            key="GLOBAL_RATE_LIMIT_ENABLED",
-        ),
-        SMART_WALLETS_PATH=_as_abs_path(
-            _get_env(
-                merged, "SMART_WALLETS_PATH", "./data/processed/smart_wallets.json"
-            )
-        ),
-        ONCHAIN_ENRICHMENT_ENABLED=_as_bool(
-            _get_env(merged, "ONCHAIN_ENRICHMENT_ENABLED", "true"),
-            key="ONCHAIN_ENRICHMENT_ENABLED",
-        ),
-        ONCHAIN_ENRICHMENT_MAX_TOKENS=_as_positive_int(
-            _get_env(merged, "ONCHAIN_ENRICHMENT_MAX_TOKENS", "5"),
-            key="ONCHAIN_ENRICHMENT_MAX_TOKENS",
-        ),
-        ONCHAIN_ENRICHMENT_FAILOPEN=_as_bool(
-            _get_env(merged, "ONCHAIN_ENRICHMENT_FAILOPEN", "true"),
-            key="ONCHAIN_ENRICHMENT_FAILOPEN",
-        ),
+        OPENCLAW_ENABLED=_as_bool(_get_env(merged, "OPENCLAW_ENABLED", "true"), key="OPENCLAW_ENABLED"),
+        OPENCLAW_LOCAL_ONLY=_as_bool(_get_env(merged, "OPENCLAW_LOCAL_ONLY", "true"), key="OPENCLAW_LOCAL_ONLY"),
+        OPENCLAW_PROFILE_PATH=_as_abs_path(_get_env(merged, "OPENCLAW_PROFILE_PATH", "~/.openclaw/x-profile")),
+        OPENCLAW_SNAPSHOTS_DIR=_as_abs_path(_get_env(merged, "OPENCLAW_SNAPSHOTS_DIR", "./data/smoke")),
+        X_VALIDATION_ENABLED=_as_bool(_get_env(merged, "X_VALIDATION_ENABLED", "true"), key="X_VALIDATION_ENABLED"),
+        X_DEGRADED_MODE_ALLOWED=_as_bool(_get_env(merged, "X_DEGRADED_MODE_ALLOWED", "true"), key="X_DEGRADED_MODE_ALLOWED"),
+        X_SEARCH_TEST_QUERY=str(_get_env(merged, "X_SEARCH_TEST_QUERY", "solana memecoin")),
+        X_MAX_TOKENS_PER_CYCLE=_as_positive_int(_get_env(merged, "X_MAX_TOKENS_PER_CYCLE", "5"), key="X_MAX_TOKENS_PER_CYCLE"),
+        X_MAX_CONCURRENCY=_as_positive_int(_get_env(merged, "X_MAX_CONCURRENCY", "2"), key="X_MAX_CONCURRENCY"),
+        X_CACHE_TTL_SEC=_as_positive_int(_get_env(merged, "X_CACHE_TTL_SEC", "600"), key="X_CACHE_TTL_SEC"),
+        LOCAL_OPENCLAW_ONLY=_as_bool(_get_env(merged, "LOCAL_OPENCLAW_ONLY", "true"), key="LOCAL_OPENCLAW_ONLY"),
+        OPENCLAW_BROWSER_PROFILE=str(_get_env(merged, "OPENCLAW_BROWSER_PROFILE", "openclaw")),
+        OPENCLAW_BROWSER_TARGET=str(_get_env(merged, "OPENCLAW_BROWSER_TARGET", "host")),
+        OPENCLAW_X_QUERY_MAX=_as_positive_int(_get_env(merged, "OPENCLAW_X_QUERY_MAX", "4"), key="OPENCLAW_X_QUERY_MAX"),
+        OPENCLAW_X_TOKEN_MAX_CONCURRENCY=_as_positive_int(_get_env(merged, "OPENCLAW_X_TOKEN_MAX_CONCURRENCY", "2"), key="OPENCLAW_X_TOKEN_MAX_CONCURRENCY"),
+        OPENCLAW_X_CACHE_TTL_SEC=_as_positive_int(_get_env(merged, "OPENCLAW_X_CACHE_TTL_SEC", "600"), key="OPENCLAW_X_CACHE_TTL_SEC"),
+        OPENCLAW_X_PAGE_TIMEOUT_MS=_as_positive_int(_get_env(merged, "OPENCLAW_X_PAGE_TIMEOUT_MS", "12000"), key="OPENCLAW_X_PAGE_TIMEOUT_MS"),
+        OPENCLAW_X_NAV_TIMEOUT_MS=_as_positive_int(_get_env(merged, "OPENCLAW_X_NAV_TIMEOUT_MS", "15000"), key="OPENCLAW_X_NAV_TIMEOUT_MS"),
+        OPENCLAW_X_MAX_SCROLLS=_as_positive_int(_get_env(merged, "OPENCLAW_X_MAX_SCROLLS", "2"), key="OPENCLAW_X_MAX_SCROLLS"),
+        OPENCLAW_X_MAX_POSTS_PER_QUERY=_as_positive_int(_get_env(merged, "OPENCLAW_X_MAX_POSTS_PER_QUERY", "15"), key="OPENCLAW_X_MAX_POSTS_PER_QUERY"),
+        OPENCLAW_X_DEGRADED_SCORE=_as_positive_int(_get_env(merged, "OPENCLAW_X_DEGRADED_SCORE", "45"), key="OPENCLAW_X_DEGRADED_SCORE"),
+        OPENCLAW_X_FAILOPEN=_as_bool(_get_env(merged, "OPENCLAW_X_FAILOPEN", "true"), key="OPENCLAW_X_FAILOPEN"),
+        X_VALIDATION_CONTRACT_VERSION=str(_get_env(merged, "X_VALIDATION_CONTRACT_VERSION", "x_validation_v1")),
+        DEX_CACHE_TTL_SEC=_as_positive_int(_get_env(merged, "DEX_CACHE_TTL_SEC", "60"), key="DEX_CACHE_TTL_SEC"),
+        HELIUS_CACHE_TTL_SEC=_as_positive_int(_get_env(merged, "HELIUS_CACHE_TTL_SEC", "120"), key="HELIUS_CACHE_TTL_SEC"),
+        BUNDLE_ENRICHMENT_ENABLED=_as_bool(_get_env(merged, "BUNDLE_ENRICHMENT_ENABLED", "true"), key="BUNDLE_ENRICHMENT_ENABLED"),
+        BUNDLE_ENRICHMENT_WINDOW_SEC=_as_positive_int(_get_env(merged, "BUNDLE_ENRICHMENT_WINDOW_SEC", "60"), key="BUNDLE_ENRICHMENT_WINDOW_SEC"),
+        GLOBAL_RATE_LIMIT_ENABLED=_as_bool(_get_env(merged, "GLOBAL_RATE_LIMIT_ENABLED", "true"), key="GLOBAL_RATE_LIMIT_ENABLED"),
+        SMART_WALLETS_PATH=_as_abs_path(_get_env(merged, "SMART_WALLETS_PATH", "./data/processed/smart_wallets.json")),
+        ONCHAIN_ENRICHMENT_ENABLED=_as_bool(_get_env(merged, "ONCHAIN_ENRICHMENT_ENABLED", "true"), key="ONCHAIN_ENRICHMENT_ENABLED"),
+        ONCHAIN_ENRICHMENT_MAX_TOKENS=_as_positive_int(_get_env(merged, "ONCHAIN_ENRICHMENT_MAX_TOKENS", "5"), key="ONCHAIN_ENRICHMENT_MAX_TOKENS"),
+        ONCHAIN_ENRICHMENT_FAILOPEN=_as_bool(_get_env(merged, "ONCHAIN_ENRICHMENT_FAILOPEN", "true"), key="ONCHAIN_ENRICHMENT_FAILOPEN"),
         HELIUS_API_KEY=str(_get_env(merged, "HELIUS_API_KEY", "")),
-        HELIUS_TX_ADDR_LIMIT=_as_positive_int(
-            _get_env(merged, "HELIUS_TX_ADDR_LIMIT", "40"), key="HELIUS_TX_ADDR_LIMIT"
-        ),
-        HELIUS_TX_SIG_BATCH=_as_positive_int(
-            _get_env(merged, "HELIUS_TX_SIG_BATCH", "25"), key="HELIUS_TX_SIG_BATCH"
-        ),
-        HELIUS_ENRICH_CACHE_TTL_SEC=_as_positive_int(
-            _get_env(merged, "HELIUS_ENRICH_CACHE_TTL_SEC", "300"),
-            key="HELIUS_ENRICH_CACHE_TTL_SEC",
-        ),
-        SOLANA_RPC_URL=str(
-            _get_env(merged, "SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")
-        ),
-        SOLANA_RPC_COMMITMENT=str(
-            _get_env(merged, "SOLANA_RPC_COMMITMENT", "confirmed")
-        ),
-        SMART_WALLET_SEED_PATH=_as_abs_path(
-            _get_env(merged, "SMART_WALLET_SEED_PATH", "data/seeds/smart_wallets.json")
-        ),
-        SMART_WALLET_HIT_WINDOW_SEC=_as_positive_int(
-            _get_env(merged, "SMART_WALLET_HIT_WINDOW_SEC", "300"),
-            key="SMART_WALLET_HIT_WINDOW_SEC",
-        ),
-        PROGRAM_ID_MAP_PATH=_as_abs_path(
-            _get_env(merged, "PROGRAM_ID_MAP_PATH", "config/program_ids.json")
-        ),
-        ALLOW_LAUNCH_PATH_HEURISTICS_ONLY=_as_bool(
-            _get_env(merged, "ALLOW_LAUNCH_PATH_HEURISTICS_ONLY", "true"),
-            key="ALLOW_LAUNCH_PATH_HEURISTICS_ONLY",
-        ),
-        RUG_ENGINE_ENABLED=_as_bool(
-            _get_env(merged, "RUG_ENGINE_ENABLED", "true"), key="RUG_ENGINE_ENABLED"
-        ),
-        RUG_ENGINE_FAILCLOSED=_as_bool(
-            _get_env(merged, "RUG_ENGINE_FAILCLOSED", "true"),
-            key="RUG_ENGINE_FAILCLOSED",
-        ),
-        RUG_ENGINE_PARTIAL_ALLOWED=_as_bool(
-            _get_env(merged, "RUG_ENGINE_PARTIAL_ALLOWED", "true"),
-            key="RUG_ENGINE_PARTIAL_ALLOWED",
-        ),
-        RUG_IGNORE_THRESHOLD=_as_unit_float(
-            _get_env(merged, "RUG_IGNORE_THRESHOLD", "0.55"), key="RUG_IGNORE_THRESHOLD"
-        ),
-        RUG_WATCH_THRESHOLD=_as_unit_float(
-            _get_env(merged, "RUG_WATCH_THRESHOLD", "0.35"), key="RUG_WATCH_THRESHOLD"
-        ),
-        RUG_TOP1_HOLDER_HARD_MAX=_as_unit_float(
-            _get_env(merged, "RUG_TOP1_HOLDER_HARD_MAX", "0.20"),
-            key="RUG_TOP1_HOLDER_HARD_MAX",
-        ),
-        RUG_TOP20_HOLDER_HARD_MAX=_as_unit_float(
-            _get_env(merged, "RUG_TOP20_HOLDER_HARD_MAX", "0.65"),
-            key="RUG_TOP20_HOLDER_HARD_MAX",
-        ),
-        RUG_DEV_SELL_PRESSURE_WARN=_as_unit_float(
-            _get_env(merged, "RUG_DEV_SELL_PRESSURE_WARN", "0.10"),
-            key="RUG_DEV_SELL_PRESSURE_WARN",
-        ),
-        RUG_DEV_SELL_PRESSURE_HARD=_as_unit_float(
-            _get_env(merged, "RUG_DEV_SELL_PRESSURE_HARD", "0.25"),
-            key="RUG_DEV_SELL_PRESSURE_HARD",
-        ),
-        RUG_REQUIRE_DISTINCT_BURN_AND_LOCK=_as_bool(
-            _get_env(merged, "RUG_REQUIRE_DISTINCT_BURN_AND_LOCK", "true"),
-            key="RUG_REQUIRE_DISTINCT_BURN_AND_LOCK",
-        ),
-        RUG_LP_BURN_OWNER_ALLOWLIST=str(
-            _get_env(
-                merged,
-                "RUG_LP_BURN_OWNER_ALLOWLIST",
-                "11111111111111111111111111111111",
-            )
-        ),
-        RUG_LP_LOCK_PROGRAM_ALLOWLIST_PATH=_as_abs_path(
-            _get_env(
-                merged,
-                "RUG_LP_LOCK_PROGRAM_ALLOWLIST_PATH",
-                "config/lock_programs.json",
-            )
-        ),
-        RUG_EVENT_CACHE_TTL_SEC=_as_positive_int(
-            _get_env(merged, "RUG_EVENT_CACHE_TTL_SEC", "300"),
-            key="RUG_EVENT_CACHE_TTL_SEC",
-        ),
-        UNIFIED_SCORING_ENABLED=_as_bool(
-            _get_env(merged, "UNIFIED_SCORING_ENABLED", "true"),
-            key="UNIFIED_SCORING_ENABLED",
-        ),
-        UNIFIED_SCORING_FAILOPEN=_as_bool(
-            _get_env(merged, "UNIFIED_SCORING_FAILOPEN", "false"),
-            key="UNIFIED_SCORING_FAILOPEN",
-        ),
-        UNIFIED_SCORING_REQUIRE_X=_as_bool(
-            _get_env(merged, "UNIFIED_SCORING_REQUIRE_X", "false"),
-            key="UNIFIED_SCORING_REQUIRE_X",
-        ),
-        UNIFIED_SCORE_ENTRY_THRESHOLD=float(
-            _get_env(merged, "UNIFIED_SCORE_ENTRY_THRESHOLD", "82")
-        ),
-        UNIFIED_SCORE_WATCH_THRESHOLD=float(
-            _get_env(merged, "UNIFIED_SCORE_WATCH_THRESHOLD", "68")
-        ),
-        UNIFIED_SCORE_IGNORE_RUG_THRESHOLD=_as_unit_float(
-            _get_env(merged, "UNIFIED_SCORE_IGNORE_RUG_THRESHOLD", "0.55"),
-            key="UNIFIED_SCORE_IGNORE_RUG_THRESHOLD",
-        ),
-        UNIFIED_SCORE_X_DEGRADED_PENALTY=float(
-            _get_env(merged, "UNIFIED_SCORE_X_DEGRADED_PENALTY", "8")
-        ),
-        UNIFIED_SCORE_PARTIAL_DATA_PENALTY=float(
-            _get_env(merged, "UNIFIED_SCORE_PARTIAL_DATA_PENALTY", "5")
-        ),
-        UNIFIED_SCORE_HEURISTIC_CONFIDENCE_FLOOR=_as_unit_float(
-            _get_env(merged, "UNIFIED_SCORE_HEURISTIC_CONFIDENCE_FLOOR", "0.50"),
-            key="UNIFIED_SCORE_HEURISTIC_CONFIDENCE_FLOOR",
-        ),
-        UNIFIED_SCORE_BUNDLE_AGGRESSION_MAX=_as_positive_float(
-            _get_env(merged, "UNIFIED_SCORE_BUNDLE_AGGRESSION_MAX", "6.0"),
-            key="UNIFIED_SCORE_BUNDLE_AGGRESSION_MAX",
-        ),
-        UNIFIED_SCORE_MULTI_CLUSTER_BONUS_MAX=_as_positive_float(
-            _get_env(merged, "UNIFIED_SCORE_MULTI_CLUSTER_BONUS_MAX", "4.0"),
-            key="UNIFIED_SCORE_MULTI_CLUSTER_BONUS_MAX",
-        ),
-        UNIFIED_SCORE_SINGLE_CLUSTER_PENALTY_MAX=_as_positive_float(
-            _get_env(merged, "UNIFIED_SCORE_SINGLE_CLUSTER_PENALTY_MAX", "6.0"),
-            key="UNIFIED_SCORE_SINGLE_CLUSTER_PENALTY_MAX",
-        ),
-        UNIFIED_SCORE_CREATOR_CLUSTER_PENALTY=_as_positive_float(
-            _get_env(merged, "UNIFIED_SCORE_CREATOR_CLUSTER_PENALTY", "4.0"),
-            key="UNIFIED_SCORE_CREATOR_CLUSTER_PENALTY",
-        ),
-        UNIFIED_SCORE_BUNDLE_SELL_HEAVY_PENALTY_MAX=_as_positive_float(
-            _get_env(merged, "UNIFIED_SCORE_BUNDLE_SELL_HEAVY_PENALTY_MAX", "5.0"),
-            key="UNIFIED_SCORE_BUNDLE_SELL_HEAVY_PENALTY_MAX",
-        ),
-        UNIFIED_SCORE_RETRY_MANIPULATION_PENALTY_MAX=_as_positive_float(
-            _get_env(merged, "UNIFIED_SCORE_RETRY_MANIPULATION_PENALTY_MAX", "4.0"),
-            key="UNIFIED_SCORE_RETRY_MANIPULATION_PENALTY_MAX",
-        ),
-        UNIFIED_SCORE_CONTRACT_VERSION=str(
-            _get_env(merged, "UNIFIED_SCORE_CONTRACT_VERSION", "unified_score_v1")
-        ),
-        ENTRY_SELECTOR_ENABLED=_as_bool(
-            _get_env(merged, "ENTRY_SELECTOR_ENABLED", "true"),
-            key="ENTRY_SELECTOR_ENABLED",
-        ),
-        ENTRY_SELECTOR_FAILCLOSED=_as_bool(
-            _get_env(merged, "ENTRY_SELECTOR_FAILCLOSED", "true"),
-            key="ENTRY_SELECTOR_FAILCLOSED",
-        ),
+        HELIUS_TX_ADDR_LIMIT=_as_positive_int(_get_env(merged, "HELIUS_TX_ADDR_LIMIT", "40"), key="HELIUS_TX_ADDR_LIMIT"),
+        HELIUS_TX_SIG_BATCH=_as_positive_int(_get_env(merged, "HELIUS_TX_SIG_BATCH", "25"), key="HELIUS_TX_SIG_BATCH"),
+        HELIUS_ENRICH_CACHE_TTL_SEC=_as_positive_int(_get_env(merged, "HELIUS_ENRICH_CACHE_TTL_SEC", "300"), key="HELIUS_ENRICH_CACHE_TTL_SEC"),
+        SOLANA_RPC_URL=str(_get_env(merged, "SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")),
+        SOLANA_RPC_COMMITMENT=str(_get_env(merged, "SOLANA_RPC_COMMITMENT", "confirmed")),
+        SMART_WALLET_SEED_PATH=_as_abs_path(_get_env(merged, "SMART_WALLET_SEED_PATH", "data/seeds/smart_wallets.json")),
+        SMART_WALLET_HIT_WINDOW_SEC=_as_positive_int(_get_env(merged, "SMART_WALLET_HIT_WINDOW_SEC", "300"), key="SMART_WALLET_HIT_WINDOW_SEC"),
+        PROGRAM_ID_MAP_PATH=_as_abs_path(_get_env(merged, "PROGRAM_ID_MAP_PATH", "config/program_ids.json")),
+        ALLOW_LAUNCH_PATH_HEURISTICS_ONLY=_as_bool(_get_env(merged, "ALLOW_LAUNCH_PATH_HEURISTICS_ONLY", "true"), key="ALLOW_LAUNCH_PATH_HEURISTICS_ONLY"),
+        RUG_ENGINE_ENABLED=_as_bool(_get_env(merged, "RUG_ENGINE_ENABLED", "true"), key="RUG_ENGINE_ENABLED"),
+        RUG_ENGINE_FAILCLOSED=_as_bool(_get_env(merged, "RUG_ENGINE_FAILCLOSED", "true"), key="RUG_ENGINE_FAILCLOSED"),
+        RUG_ENGINE_PARTIAL_ALLOWED=_as_bool(_get_env(merged, "RUG_ENGINE_PARTIAL_ALLOWED", "true"), key="RUG_ENGINE_PARTIAL_ALLOWED"),
+        RUG_IGNORE_THRESHOLD=_as_unit_float(_get_env(merged, "RUG_IGNORE_THRESHOLD", "0.55"), key="RUG_IGNORE_THRESHOLD"),
+        RUG_WATCH_THRESHOLD=_as_unit_float(_get_env(merged, "RUG_WATCH_THRESHOLD", "0.35"), key="RUG_WATCH_THRESHOLD"),
+        RUG_TOP1_HOLDER_HARD_MAX=_as_unit_float(_get_env(merged, "RUG_TOP1_HOLDER_HARD_MAX", "0.20"), key="RUG_TOP1_HOLDER_HARD_MAX"),
+        RUG_TOP20_HOLDER_HARD_MAX=_as_unit_float(_get_env(merged, "RUG_TOP20_HOLDER_HARD_MAX", "0.65"), key="RUG_TOP20_HOLDER_HARD_MAX"),
+        RUG_DEV_SELL_PRESSURE_WARN=_as_unit_float(_get_env(merged, "RUG_DEV_SELL_PRESSURE_WARN", "0.10"), key="RUG_DEV_SELL_PRESSURE_WARN"),
+        RUG_DEV_SELL_PRESSURE_HARD=_as_unit_float(_get_env(merged, "RUG_DEV_SELL_PRESSURE_HARD", "0.25"), key="RUG_DEV_SELL_PRESSURE_HARD"),
+        RUG_REQUIRE_DISTINCT_BURN_AND_LOCK=_as_bool(_get_env(merged, "RUG_REQUIRE_DISTINCT_BURN_AND_LOCK", "true"), key="RUG_REQUIRE_DISTINCT_BURN_AND_LOCK"),
+        RUG_LP_BURN_OWNER_ALLOWLIST=str(_get_env(merged, "RUG_LP_BURN_OWNER_ALLOWLIST", "11111111111111111111111111111111")),
+        RUG_LP_LOCK_PROGRAM_ALLOWLIST_PATH=_as_abs_path(_get_env(merged, "RUG_LP_LOCK_PROGRAM_ALLOWLIST_PATH", "config/lock_programs.json")),
+        RUG_EVENT_CACHE_TTL_SEC=_as_positive_int(_get_env(merged, "RUG_EVENT_CACHE_TTL_SEC", "300"), key="RUG_EVENT_CACHE_TTL_SEC"),
+
+        UNIFIED_SCORING_ENABLED=_as_bool(_get_env(merged, "UNIFIED_SCORING_ENABLED", "true"), key="UNIFIED_SCORING_ENABLED"),
+        UNIFIED_SCORING_FAILOPEN=_as_bool(_get_env(merged, "UNIFIED_SCORING_FAILOPEN", "false"), key="UNIFIED_SCORING_FAILOPEN"),
+        UNIFIED_SCORING_REQUIRE_X=_as_bool(_get_env(merged, "UNIFIED_SCORING_REQUIRE_X", "false"), key="UNIFIED_SCORING_REQUIRE_X"),
+        UNIFIED_SCORE_ENTRY_THRESHOLD=float(_get_env(merged, "UNIFIED_SCORE_ENTRY_THRESHOLD", "82")),
+        UNIFIED_SCORE_WATCH_THRESHOLD=float(_get_env(merged, "UNIFIED_SCORE_WATCH_THRESHOLD", "68")),
+        UNIFIED_SCORE_IGNORE_RUG_THRESHOLD=_as_unit_float(_get_env(merged, "UNIFIED_SCORE_IGNORE_RUG_THRESHOLD", "0.55"), key="UNIFIED_SCORE_IGNORE_RUG_THRESHOLD"),
+        UNIFIED_SCORE_X_DEGRADED_PENALTY=float(_get_env(merged, "UNIFIED_SCORE_X_DEGRADED_PENALTY", "8")),
+        UNIFIED_SCORE_PARTIAL_DATA_PENALTY=float(_get_env(merged, "UNIFIED_SCORE_PARTIAL_DATA_PENALTY", "5")),
+        UNIFIED_SCORE_HEURISTIC_CONFIDENCE_FLOOR=_as_unit_float(_get_env(merged, "UNIFIED_SCORE_HEURISTIC_CONFIDENCE_FLOOR", "0.50"), key="UNIFIED_SCORE_HEURISTIC_CONFIDENCE_FLOOR"),
+        UNIFIED_SCORE_BUNDLE_AGGRESSION_MAX=_as_positive_float(_get_env(merged, "UNIFIED_SCORE_BUNDLE_AGGRESSION_MAX", "6.0"), key="UNIFIED_SCORE_BUNDLE_AGGRESSION_MAX"),
+        UNIFIED_SCORE_MULTI_CLUSTER_BONUS_MAX=_as_positive_float(_get_env(merged, "UNIFIED_SCORE_MULTI_CLUSTER_BONUS_MAX", "4.0"), key="UNIFIED_SCORE_MULTI_CLUSTER_BONUS_MAX"),
+        UNIFIED_SCORE_SINGLE_CLUSTER_PENALTY_MAX=_as_positive_float(_get_env(merged, "UNIFIED_SCORE_SINGLE_CLUSTER_PENALTY_MAX", "4.0"), key="UNIFIED_SCORE_SINGLE_CLUSTER_PENALTY_MAX"),
+        UNIFIED_SCORE_CREATOR_CLUSTER_PENALTY=_as_positive_float(_get_env(merged, "UNIFIED_SCORE_CREATOR_CLUSTER_PENALTY", "6.0"), key="UNIFIED_SCORE_CREATOR_CLUSTER_PENALTY"),
+        UNIFIED_SCORE_BUNDLE_SELL_HEAVY_PENALTY_MAX=_as_positive_float(_get_env(merged, "UNIFIED_SCORE_BUNDLE_SELL_HEAVY_PENALTY_MAX", "6.0"), key="UNIFIED_SCORE_BUNDLE_SELL_HEAVY_PENALTY_MAX"),
+        UNIFIED_SCORE_RETRY_MANIPULATION_PENALTY_MAX=_as_positive_float(_get_env(merged, "UNIFIED_SCORE_RETRY_MANIPULATION_PENALTY_MAX", "5.0"), key="UNIFIED_SCORE_RETRY_MANIPULATION_PENALTY_MAX"),
+        UNIFIED_SCORE_CONTRACT_VERSION=str(_get_env(merged, "UNIFIED_SCORE_CONTRACT_VERSION", "unified_score_v1")),
+        ENTRY_SELECTOR_ENABLED=_as_bool(_get_env(merged, "ENTRY_SELECTOR_ENABLED", "true"), key="ENTRY_SELECTOR_ENABLED"),
+        ENTRY_SELECTOR_FAILCLOSED=_as_bool(_get_env(merged, "ENTRY_SELECTOR_FAILCLOSED", "true"), key="ENTRY_SELECTOR_FAILCLOSED"),
         ENTRY_SCALP_SCORE_MIN=float(_get_env(merged, "ENTRY_SCALP_SCORE_MIN", "82")),
         ENTRY_TREND_SCORE_MIN=float(_get_env(merged, "ENTRY_TREND_SCORE_MIN", "86")),
-        ENTRY_SCALP_MAX_AGE_SEC=_as_positive_int(
-            _get_env(merged, "ENTRY_SCALP_MAX_AGE_SEC", "480"),
-            key="ENTRY_SCALP_MAX_AGE_SEC",
-        ),
-        ENTRY_SCALP_MAX_HOLD_SEC=_as_positive_int(
-            _get_env(merged, "ENTRY_SCALP_MAX_HOLD_SEC", "120"),
-            key="ENTRY_SCALP_MAX_HOLD_SEC",
-        ),
-        ENTRY_TREND_MIN_X_SCORE=float(
-            _get_env(merged, "ENTRY_TREND_MIN_X_SCORE", "65")
-        ),
-        ENTRY_SCALP_MIN_X_SCORE=float(
-            _get_env(merged, "ENTRY_SCALP_MIN_X_SCORE", "50")
-        ),
-        ENTRY_RUG_MAX_SCALP=_as_unit_float(
-            _get_env(merged, "ENTRY_RUG_MAX_SCALP", "0.30"), key="ENTRY_RUG_MAX_SCALP"
-        ),
-        ENTRY_RUG_MAX_TREND=_as_unit_float(
-            _get_env(merged, "ENTRY_RUG_MAX_TREND", "0.20"), key="ENTRY_RUG_MAX_TREND"
-        ),
-        ENTRY_BUY_PRESSURE_MIN_SCALP=_as_unit_float(
-            _get_env(merged, "ENTRY_BUY_PRESSURE_MIN_SCALP", "0.75"),
-            key="ENTRY_BUY_PRESSURE_MIN_SCALP",
-        ),
-        ENTRY_BUY_PRESSURE_MIN_TREND=_as_unit_float(
-            _get_env(merged, "ENTRY_BUY_PRESSURE_MIN_TREND", "0.65"),
-            key="ENTRY_BUY_PRESSURE_MIN_TREND",
-        ),
-        ENTRY_FIRST30S_BUY_RATIO_MIN=_as_unit_float(
-            _get_env(merged, "ENTRY_FIRST30S_BUY_RATIO_MIN", "0.65"),
-            key="ENTRY_FIRST30S_BUY_RATIO_MIN",
-        ),
-        ENTRY_BUNDLE_CLUSTER_MIN=_as_unit_float(
-            _get_env(merged, "ENTRY_BUNDLE_CLUSTER_MIN", "0.55"),
-            key="ENTRY_BUNDLE_CLUSTER_MIN",
-        ),
-        ENTRY_SMART_WALLET_HITS_MIN_TREND=_as_positive_int(
-            _get_env(merged, "ENTRY_SMART_WALLET_HITS_MIN_TREND", "2"),
-            key="ENTRY_SMART_WALLET_HITS_MIN_TREND",
-        ),
-        ENTRY_HOLDER_GROWTH_MIN_TREND=_as_positive_int(
-            _get_env(merged, "ENTRY_HOLDER_GROWTH_MIN_TREND", "20"),
-            key="ENTRY_HOLDER_GROWTH_MIN_TREND",
-        ),
-        ENTRY_DEGRADED_X_SIZE_MULTIPLIER=_as_unit_float(
-            _get_env(merged, "ENTRY_DEGRADED_X_SIZE_MULTIPLIER", "0.50"),
-            key="ENTRY_DEGRADED_X_SIZE_MULTIPLIER",
-        ),
-        ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER=_as_unit_float(
-            _get_env(merged, "ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER", "0.60"),
-            key="ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER",
-        ),
-        ENTRY_MAX_BASE_POSITION_PCT=_as_unit_float(
-            _get_env(merged, "ENTRY_MAX_BASE_POSITION_PCT", "1.00"),
-            key="ENTRY_MAX_BASE_POSITION_PCT",
-        ),
-        ENTRY_CONTRACT_VERSION=str(
-            _get_env(merged, "ENTRY_CONTRACT_VERSION", "entry_selector_v1")
-        ),
-        EXIT_ENGINE_ENABLED=_as_bool(
-            _get_env(merged, "EXIT_ENGINE_ENABLED", "true"), key="EXIT_ENGINE_ENABLED"
-        ),
-        EXIT_ENGINE_FAILCLOSED=_as_bool(
-            _get_env(merged, "EXIT_ENGINE_FAILCLOSED", "true"),
-            key="EXIT_ENGINE_FAILCLOSED",
-        ),
-        EXIT_SCALP_BUY_PRESSURE_FLOOR=_as_unit_float(
-            _get_env(merged, "EXIT_SCALP_BUY_PRESSURE_FLOOR", "0.60"),
-            key="EXIT_SCALP_BUY_PRESSURE_FLOOR",
-        ),
-        EXIT_TREND_BUY_PRESSURE_FLOOR=_as_unit_float(
-            _get_env(merged, "EXIT_TREND_BUY_PRESSURE_FLOOR", "0.50"),
-            key="EXIT_TREND_BUY_PRESSURE_FLOOR",
-        ),
-        EXIT_POLL_INTERVAL_SEC=_as_positive_int(
-            _get_env(merged, "EXIT_POLL_INTERVAL_SEC", "3"),
-            key="EXIT_POLL_INTERVAL_SEC",
-        ),
-        PAPER_TRADER_ENABLED=_as_bool(
-            _get_env(merged, "PAPER_TRADER_ENABLED", "true"), key="PAPER_TRADER_ENABLED"
-        ),
-        PAPER_STARTING_CAPITAL_SOL=_as_positive_float(
-            _get_env(merged, "PAPER_STARTING_CAPITAL_SOL", "0.1"),
-            key="PAPER_STARTING_CAPITAL_SOL",
-        ),
-        PAPER_MAX_SLIPPAGE_BPS=_as_positive_int(
-            _get_env(merged, "PAPER_MAX_SLIPPAGE_BPS", "1200"),
-            key="PAPER_MAX_SLIPPAGE_BPS",
-        ),
-        PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER=_as_positive_float(
-            _get_env(merged, "PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER", "1.75"),
-            key="PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER",
-        ),
-        POST_RUN_ANALYZER_ENABLED=_as_bool(
-            _get_env(merged, "POST_RUN_ANALYZER_ENABLED", "true"),
-            key="POST_RUN_ANALYZER_ENABLED",
-        ),
-        POST_RUN_ANALYZER_FAILCLOSED=_as_bool(
-            _get_env(merged, "POST_RUN_ANALYZER_FAILCLOSED", "true"),
-            key="POST_RUN_ANALYZER_FAILCLOSED",
-        ),
-        POST_RUN_MIN_TRADES_FOR_CORRELATION=_as_positive_int(
-            _get_env(merged, "POST_RUN_MIN_TRADES_FOR_CORRELATION", "20"),
-            key="POST_RUN_MIN_TRADES_FOR_CORRELATION",
-        ),
-        POST_RUN_MIN_TRADES_FOR_REGIME_COMPARISON=_as_positive_int(
-            _get_env(merged, "POST_RUN_MIN_TRADES_FOR_REGIME_COMPARISON", "10"),
-            key="POST_RUN_MIN_TRADES_FOR_REGIME_COMPARISON",
-        ),
-        POST_RUN_MIN_SAMPLE_FOR_RECOMMENDATION=_as_positive_int(
-            _get_env(merged, "POST_RUN_MIN_SAMPLE_FOR_RECOMMENDATION", "15"),
-            key="POST_RUN_MIN_SAMPLE_FOR_RECOMMENDATION",
-        ),
-        POST_RUN_INCLUDE_DEGRADED_X_ANALYSIS=_as_bool(
-            _get_env(merged, "POST_RUN_INCLUDE_DEGRADED_X_ANALYSIS", "true"),
-            key="POST_RUN_INCLUDE_DEGRADED_X_ANALYSIS",
-        ),
-        POST_RUN_INCLUDE_FRICTION_ANALYSIS=_as_bool(
-            _get_env(merged, "POST_RUN_INCLUDE_FRICTION_ANALYSIS", "true"),
-            key="POST_RUN_INCLUDE_FRICTION_ANALYSIS",
-        ),
-        POST_RUN_INCLUDE_PARTIAL_FILL_ANALYSIS=_as_bool(
-            _get_env(merged, "POST_RUN_INCLUDE_PARTIAL_FILL_ANALYSIS", "true"),
-            key="POST_RUN_INCLUDE_PARTIAL_FILL_ANALYSIS",
-        ),
-        POST_RUN_CORRELATION_METHOD=str(
-            _get_env(merged, "POST_RUN_CORRELATION_METHOD", "pearson_spearman")
-        ),
-        POST_RUN_OUTLIER_CLIP_PCT=_as_unit_float(
-            _get_env(merged, "POST_RUN_OUTLIER_CLIP_PCT", "0.01"),
-            key="POST_RUN_OUTLIER_CLIP_PCT",
-        ),
-        POST_RUN_RECOMMENDATION_CONFIDENCE_MIN=_as_unit_float(
-            _get_env(merged, "POST_RUN_RECOMMENDATION_CONFIDENCE_MIN", "0.55"),
-            key="POST_RUN_RECOMMENDATION_CONFIDENCE_MIN",
-        ),
-        POST_RUN_CONTRACT_VERSION=str(
-            _get_env(merged, "POST_RUN_CONTRACT_VERSION", "post_run_analyzer_v1")
-        ),
+        ENTRY_SCALP_MAX_AGE_SEC=_as_positive_int(_get_env(merged, "ENTRY_SCALP_MAX_AGE_SEC", "480"), key="ENTRY_SCALP_MAX_AGE_SEC"),
+        ENTRY_SCALP_MAX_HOLD_SEC=_as_positive_int(_get_env(merged, "ENTRY_SCALP_MAX_HOLD_SEC", "120"), key="ENTRY_SCALP_MAX_HOLD_SEC"),
+        ENTRY_TREND_MIN_X_SCORE=float(_get_env(merged, "ENTRY_TREND_MIN_X_SCORE", "65")),
+        ENTRY_SCALP_MIN_X_SCORE=float(_get_env(merged, "ENTRY_SCALP_MIN_X_SCORE", "50")),
+        ENTRY_RUG_MAX_SCALP=_as_unit_float(_get_env(merged, "ENTRY_RUG_MAX_SCALP", "0.30"), key="ENTRY_RUG_MAX_SCALP"),
+        ENTRY_RUG_MAX_TREND=_as_unit_float(_get_env(merged, "ENTRY_RUG_MAX_TREND", "0.20"), key="ENTRY_RUG_MAX_TREND"),
+        ENTRY_BUY_PRESSURE_MIN_SCALP=_as_unit_float(_get_env(merged, "ENTRY_BUY_PRESSURE_MIN_SCALP", "0.75"), key="ENTRY_BUY_PRESSURE_MIN_SCALP"),
+        ENTRY_BUY_PRESSURE_MIN_TREND=_as_unit_float(_get_env(merged, "ENTRY_BUY_PRESSURE_MIN_TREND", "0.65"), key="ENTRY_BUY_PRESSURE_MIN_TREND"),
+        ENTRY_FIRST30S_BUY_RATIO_MIN=_as_unit_float(_get_env(merged, "ENTRY_FIRST30S_BUY_RATIO_MIN", "0.65"), key="ENTRY_FIRST30S_BUY_RATIO_MIN"),
+        ENTRY_BUNDLE_CLUSTER_MIN=_as_unit_float(_get_env(merged, "ENTRY_BUNDLE_CLUSTER_MIN", "0.55"), key="ENTRY_BUNDLE_CLUSTER_MIN"),
+        ENTRY_SMART_WALLET_HITS_MIN_TREND=_as_positive_int(_get_env(merged, "ENTRY_SMART_WALLET_HITS_MIN_TREND", "2"), key="ENTRY_SMART_WALLET_HITS_MIN_TREND"),
+        ENTRY_HOLDER_GROWTH_MIN_TREND=_as_positive_int(_get_env(merged, "ENTRY_HOLDER_GROWTH_MIN_TREND", "20"), key="ENTRY_HOLDER_GROWTH_MIN_TREND"),
+        ENTRY_TREND_MULTI_CLUSTER_MIN=_as_positive_int(_get_env(merged, "ENTRY_TREND_MULTI_CLUSTER_MIN", "3"), key="ENTRY_TREND_MULTI_CLUSTER_MIN"),
+        ENTRY_TREND_CLUSTER_CONCENTRATION_MAX=_as_unit_float(_get_env(merged, "ENTRY_TREND_CLUSTER_CONCENTRATION_MAX", "0.55"), key="ENTRY_TREND_CLUSTER_CONCENTRATION_MAX"),
+        ENTRY_TREND_DEV_SELL_MAX=_as_unit_float(_get_env(merged, "ENTRY_TREND_DEV_SELL_MAX", "0.02"), key="ENTRY_TREND_DEV_SELL_MAX"),
+        ENTRY_SCALP_BUNDLE_COUNT_MIN=_as_positive_int(_get_env(merged, "ENTRY_SCALP_BUNDLE_COUNT_MIN", "2"), key="ENTRY_SCALP_BUNDLE_COUNT_MIN"),
+        ENTRY_REGIME_CONFIDENCE_FLOOR_TREND=_as_unit_float(_get_env(merged, "ENTRY_REGIME_CONFIDENCE_FLOOR_TREND", "0.55"), key="ENTRY_REGIME_CONFIDENCE_FLOOR_TREND"),
+        ENTRY_REGIME_CONFIDENCE_FLOOR_SCALP=_as_unit_float(_get_env(merged, "ENTRY_REGIME_CONFIDENCE_FLOOR_SCALP", "0.40"), key="ENTRY_REGIME_CONFIDENCE_FLOOR_SCALP"),
+        ENTRY_DEGRADED_X_SIZE_MULTIPLIER=_as_unit_float(_get_env(merged, "ENTRY_DEGRADED_X_SIZE_MULTIPLIER", "0.50"), key="ENTRY_DEGRADED_X_SIZE_MULTIPLIER"),
+        ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER=_as_unit_float(_get_env(merged, "ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER", "0.60"), key="ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER"),
+        ENTRY_MAX_BASE_POSITION_PCT=_as_unit_float(_get_env(merged, "ENTRY_MAX_BASE_POSITION_PCT", "1.00"), key="ENTRY_MAX_BASE_POSITION_PCT"),
+        ENTRY_CONTRACT_VERSION=str(_get_env(merged, "ENTRY_CONTRACT_VERSION", "entry_selector_v1")),
+        EXIT_ENGINE_ENABLED=_as_bool(_get_env(merged, "EXIT_ENGINE_ENABLED", "true"), key="EXIT_ENGINE_ENABLED"),
+        EXIT_ENGINE_FAILCLOSED=_as_bool(_get_env(merged, "EXIT_ENGINE_FAILCLOSED", "true"), key="EXIT_ENGINE_FAILCLOSED"),
+        EXIT_SCALP_BUY_PRESSURE_FLOOR=_as_unit_float(_get_env(merged, "EXIT_SCALP_BUY_PRESSURE_FLOOR", "0.60"), key="EXIT_SCALP_BUY_PRESSURE_FLOOR"),
+        EXIT_TREND_BUY_PRESSURE_FLOOR=_as_unit_float(_get_env(merged, "EXIT_TREND_BUY_PRESSURE_FLOOR", "0.50"), key="EXIT_TREND_BUY_PRESSURE_FLOOR"),
+        EXIT_POLL_INTERVAL_SEC=_as_positive_int(_get_env(merged, "EXIT_POLL_INTERVAL_SEC", "3"), key="EXIT_POLL_INTERVAL_SEC"),
+        PAPER_TRADER_ENABLED=_as_bool(_get_env(merged, "PAPER_TRADER_ENABLED", "true"), key="PAPER_TRADER_ENABLED"),
+        PAPER_STARTING_CAPITAL_SOL=_as_positive_float(_get_env(merged, "PAPER_STARTING_CAPITAL_SOL", "0.1"), key="PAPER_STARTING_CAPITAL_SOL"),
+        PAPER_MAX_SLIPPAGE_BPS=_as_positive_int(_get_env(merged, "PAPER_MAX_SLIPPAGE_BPS", "1200"), key="PAPER_MAX_SLIPPAGE_BPS"),
+        PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER=_as_positive_float(_get_env(merged, "PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER", "1.75"), key="PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER"),
+        POST_RUN_ANALYZER_ENABLED=_as_bool(_get_env(merged, "POST_RUN_ANALYZER_ENABLED", "true"), key="POST_RUN_ANALYZER_ENABLED"),
+        POST_RUN_ANALYZER_FAILCLOSED=_as_bool(_get_env(merged, "POST_RUN_ANALYZER_FAILCLOSED", "true"), key="POST_RUN_ANALYZER_FAILCLOSED"),
+        POST_RUN_MIN_TRADES_FOR_CORRELATION=_as_positive_int(_get_env(merged, "POST_RUN_MIN_TRADES_FOR_CORRELATION", "20"), key="POST_RUN_MIN_TRADES_FOR_CORRELATION"),
+        POST_RUN_MIN_TRADES_FOR_REGIME_COMPARISON=_as_positive_int(_get_env(merged, "POST_RUN_MIN_TRADES_FOR_REGIME_COMPARISON", "10"), key="POST_RUN_MIN_TRADES_FOR_REGIME_COMPARISON"),
+        POST_RUN_MIN_SAMPLE_FOR_RECOMMENDATION=_as_positive_int(_get_env(merged, "POST_RUN_MIN_SAMPLE_FOR_RECOMMENDATION", "15"), key="POST_RUN_MIN_SAMPLE_FOR_RECOMMENDATION"),
+        POST_RUN_INCLUDE_DEGRADED_X_ANALYSIS=_as_bool(_get_env(merged, "POST_RUN_INCLUDE_DEGRADED_X_ANALYSIS", "true"), key="POST_RUN_INCLUDE_DEGRADED_X_ANALYSIS"),
+        POST_RUN_INCLUDE_FRICTION_ANALYSIS=_as_bool(_get_env(merged, "POST_RUN_INCLUDE_FRICTION_ANALYSIS", "true"), key="POST_RUN_INCLUDE_FRICTION_ANALYSIS"),
+        POST_RUN_INCLUDE_PARTIAL_FILL_ANALYSIS=_as_bool(_get_env(merged, "POST_RUN_INCLUDE_PARTIAL_FILL_ANALYSIS", "true"), key="POST_RUN_INCLUDE_PARTIAL_FILL_ANALYSIS"),
+        POST_RUN_CORRELATION_METHOD=str(_get_env(merged, "POST_RUN_CORRELATION_METHOD", "pearson_spearman")),
+        POST_RUN_OUTLIER_CLIP_PCT=_as_unit_float(_get_env(merged, "POST_RUN_OUTLIER_CLIP_PCT", "0.01"), key="POST_RUN_OUTLIER_CLIP_PCT"),
+        POST_RUN_RECOMMENDATION_CONFIDENCE_MIN=_as_unit_float(_get_env(merged, "POST_RUN_RECOMMENDATION_CONFIDENCE_MIN", "0.55"), key="POST_RUN_RECOMMENDATION_CONFIDENCE_MIN"),
+        POST_RUN_CONTRACT_VERSION=str(_get_env(merged, "POST_RUN_CONTRACT_VERSION", "post_run_analyzer_v1")),
     )
