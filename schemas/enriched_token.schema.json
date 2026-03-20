@@ -50,6 +50,13 @@
           "top1_holder_share",
           "smart_wallet_hit_tiers",
           "continuation_warnings",
+          "tx_batch_freshness",
+          "tx_batch_origin",
+          "tx_batch_record_count",
+          "tx_batch_status",
+          "tx_batch_warning",
+          "tx_fetch_mode",
+          "tx_lookup_source",
           "smart_wallet_netflow_bias",
           "smart_wallet_dispersion_score",
           "token_address",
@@ -280,6 +287,48 @@
               "low",
               "medium",
               "high"
+            ]
+          },
+          "tx_batch_status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tx_batch_warning": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tx_batch_freshness": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tx_batch_origin": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tx_fetch_mode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tx_batch_record_count": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "tx_lookup_source": {
+            "type": [
+              "string",
+              "null"
             ]
           },
           "enrichment_status": {

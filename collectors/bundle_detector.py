@@ -160,27 +160,116 @@ def _clustering_artifact_scope(pair: dict[str, Any]) -> dict[str, str]:
     }
 
 
-def _load_bundle_transactions(pair: dict[str, Any], settings: Any) -> tuple[list[dict[str, Any]], str | None]:
+def _bundle_tx_warning_reasons(tx_payload: dict[str, Any]) -> list[str]:
+    reasons: list[str] = []
+    fetch_mode = str(tx_payload.get("tx_fetch_mode") or "").strip()
+    batch_status = str(tx_payload.get("tx_batch_status") or "").strip()
+    freshness = str(tx_payload.get("tx_batch_freshness") or "").strip()
+    batch_warning = str(tx_payload.get("tx_batch_warning") or tx_payload.get("warning") or "").strip()
+
+    if batch_warning:
+        reasons.append(batch_warning)
+    if fetch_mode in {"stale_cache_allowed", "upstream_failed_use_stale", "missing"}:
+        reasons.append(fetch_mode)
+    if batch_status in {"partial", "malformed", "missing"}:
+        reasons.append(f"tx batch {batch_status}")
+    if freshness in {"stale_cache_allowed", "unknown", "missing"}:
+        reasons.append(f"tx batch freshness {freshness}")
+    return sorted(set(reasons))
+
+
+def _bundle_tx_is_degraded(tx_payload: dict[str, Any]) -> bool:
+    return bool(_bundle_tx_warning_reasons(tx_payload))
+
+
+def _bundle_tx_warning_text(tx_payload: dict[str, Any]) -> str | None:
+    reasons = _bundle_tx_warning_reasons(tx_payload)
+    if not reasons:
+        return None
+    return "; ".join(reasons)
+
+
+def _merge_bundle_warning(*parts: str | None) -> str | None:
+    merged: list[str] = []
+    for part in parts:
+        value = str(part or "").strip()
+        if value and value not in merged:
+            merged.append(value)
+    return "; ".join(merged) if merged else None
+
+
+def _load_bundle_transactions(pair: dict[str, Any], settings: Any) -> dict[str, Any]:
     inline = pair.get("bundle_transactions")
     if isinstance(inline, list):
-        return [item for item in inline if isinstance(item, dict)], None
+        return {
+            "records": [item for item in inline if isinstance(item, dict)],
+            "warning": None,
+            "tx_batch_status": "usable",
+            "tx_batch_warning": None,
+            "tx_batch_freshness": "inline_fixture",
+            "tx_fetch_mode": "inline_fixture",
+            "tx_lookup_source": "inline_fixture",
+        }
 
     if not getattr(settings, "BUNDLE_ENRICHMENT_ENABLED", True):
-        return [], "bundle enrichment disabled"
+        return {
+            "records": [],
+            "warning": "bundle enrichment disabled",
+            "tx_batch_status": None,
+            "tx_batch_warning": "bundle enrichment disabled",
+            "tx_batch_freshness": None,
+            "tx_fetch_mode": None,
+            "tx_lookup_source": None,
+        }
 
     if not getattr(settings, "HELIUS_API_KEY", ""):
-        return [], "helius api key missing"
+        return {
+            "records": [],
+            "warning": "helius api key missing",
+            "tx_batch_status": None,
+            "tx_batch_warning": "helius api key missing",
+            "tx_batch_freshness": None,
+            "tx_fetch_mode": None,
+            "tx_lookup_source": None,
+        }
 
     source_addr = str(pair.get("pair_address") or pair.get("token_address") or "").strip()
     if not source_addr:
-        return [], "missing pair/token address for bundle lookup"
+        return {
+            "records": [],
+            "warning": "missing pair/token address for bundle lookup",
+            "tx_batch_status": None,
+            "tx_batch_warning": "missing pair/token address for bundle lookup",
+            "tx_batch_freshness": None,
+            "tx_fetch_mode": None,
+            "tx_lookup_source": None,
+        }
 
     acquire("helius")
     helius = HeliusClient(settings.HELIUS_API_KEY)
-    txs = helius.get_transactions_by_address(source_addr, getattr(settings, "HELIUS_TX_ADDR_LIMIT", 40))
-    if not txs and pair.get("pair_address"):
-        txs = helius.get_transactions_by_address(str(pair.get("token_address") or ""), getattr(settings, "HELIUS_TX_ADDR_LIMIT", 40))
-    return txs, None if txs else "no bundle transactions available"
+    address_fetch = helius.get_transactions_by_address_with_status(source_addr, getattr(settings, "HELIUS_TX_ADDR_LIMIT", 40))
+    if address_fetch.get("records") or not pair.get("pair_address"):
+        return {
+            **address_fetch,
+            "warning": _bundle_tx_warning_text(address_fetch) or ("no bundle transactions available" if not address_fetch.get("records") else None),
+            "tx_lookup_source": "pair_or_token_address",
+        }
+
+    token_address = str(pair.get("token_address") or "").strip()
+    if not token_address:
+        return {
+            **address_fetch,
+            "warning": _bundle_tx_warning_text(address_fetch) or "no bundle transactions available",
+            "tx_lookup_source": "pair_address",
+        }
+
+    token_fetch = helius.get_transactions_by_address_with_status(token_address, getattr(settings, "HELIUS_TX_ADDR_LIMIT", 40))
+    selected = token_fetch if token_fetch.get("records") else address_fetch
+    return {
+        **selected,
+        "warning": _bundle_tx_warning_text(selected) or ("no bundle transactions available" if not selected.get("records") else None),
+        "tx_lookup_source": "token_address" if selected is token_fetch else "pair_address",
+    }
 
 
 def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: Any) -> dict[str, Any]:
@@ -222,14 +311,17 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
         if evidence_metrics.get("bundle_metric_origin") == "real_evidence":
             return evidence_metrics
 
-        txs, source_warning = _load_bundle_transactions(pair, settings)
+        tx_payload = _load_bundle_transactions(pair, settings)
+        txs = list(tx_payload.get("records") or [])
+        source_warning = tx_payload.get("warning")
+        tx_warning = _bundle_tx_warning_text(tx_payload)
         if source_warning and not txs:
             return {
                 **evidence_metrics,
                 "bundle_metric_origin": MISSING_BUNDLE_ORIGIN,
                 "bundle_enrichment_status": evidence_metrics.get("bundle_enrichment_status") or "unavailable",
-                "bundle_enrichment_warning": evidence_metrics.get("bundle_enrichment_warning") or source_warning,
-                "bundle_evidence_warning": evidence_metrics.get("bundle_evidence_warning") or source_warning,
+                "bundle_enrichment_warning": _merge_bundle_warning(evidence_metrics.get("bundle_enrichment_warning"), source_warning),
+                "bundle_evidence_warning": _merge_bundle_warning(evidence_metrics.get("bundle_evidence_warning"), source_warning),
             }
 
         window_sec = max(int(getattr(settings, "BUNDLE_ENRICHMENT_WINDOW_SEC", 60) or 60), 1)
@@ -256,13 +348,15 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
             return {
                 **evidence_metrics,
                 "bundle_metric_origin": MISSING_BUNDLE_ORIGIN,
-                "bundle_enrichment_warning": (
-                    evidence_metrics.get("bundle_enrichment_warning")
-                    or "no first-window transactions found"
+                "bundle_enrichment_warning": _merge_bundle_warning(
+                    evidence_metrics.get("bundle_enrichment_warning"),
+                    source_warning,
+                    "no first-window transactions found",
                 ),
-                "bundle_evidence_warning": (
-                    evidence_metrics.get("bundle_evidence_warning")
-                    or "no first-window transactions found"
+                "bundle_evidence_warning": _merge_bundle_warning(
+                    evidence_metrics.get("bundle_evidence_warning"),
+                    tx_warning,
+                    "no first-window transactions found",
                 ),
             }
 
@@ -283,16 +377,24 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
         )
 
         if not inferred_bundles:
+            bundle_warning = _merge_bundle_warning(
+                evidence_metrics.get("bundle_enrichment_warning"),
+                source_warning,
+                "no inferred bundles detected in first window",
+            )
+            evidence_warning = _merge_bundle_warning(
+                evidence_metrics.get("bundle_evidence_warning"),
+                tx_warning,
+                "no inferred bundles detected in first window",
+            )
             return {
                 **evidence_metrics,
                 **clustering_metrics,
                 "bundle_count_first_60s": 0,
                 "bundle_metric_origin": HEURISTIC_FALLBACK_ORIGIN,
-                "bundle_enrichment_status": "ok",
-                "bundle_enrichment_warning": (
-                    evidence_metrics.get("bundle_enrichment_warning")
-                    or "no inferred bundles detected in first window"
-                ),
+                "bundle_enrichment_status": "partial" if _bundle_tx_is_degraded(tx_payload) else "ok",
+                "bundle_enrichment_warning": bundle_warning,
+                "bundle_evidence_warning": evidence_warning,
             }
 
         bundle_count = len(inferred_bundles)
@@ -316,6 +418,7 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
             if successes:
                 success_values.extend(1.0 if flag else 0.0 for flag in successes)
 
+        bundle_status = "partial" if _bundle_tx_is_degraded(tx_payload) else "ok"
         return {
             **evidence_metrics,
             **clustering_metrics,
@@ -325,8 +428,9 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
             "bundle_timing_from_liquidity_add_min": round(min(bundle_offsets_min), 6) if bundle_offsets_min else None,
             "bundle_success_rate": round(sum(success_values) / len(success_values), 6) if success_values else None,
             "bundle_metric_origin": HEURISTIC_FALLBACK_ORIGIN,
-            "bundle_enrichment_status": "ok",
-            "bundle_enrichment_warning": source_warning or evidence_metrics.get("bundle_enrichment_warning"),
+            "bundle_enrichment_status": bundle_status,
+            "bundle_enrichment_warning": _merge_bundle_warning(evidence_metrics.get("bundle_enrichment_warning"), source_warning),
+            "bundle_evidence_warning": _merge_bundle_warning(evidence_metrics.get("bundle_evidence_warning"), tx_warning),
         }
     except Exception as exc:  # pragma: no cover - defensive fail-open
         log_warning(
