@@ -91,6 +91,73 @@ Run smoke:
 python scripts/post_run_analyzer_smoke.py --base-dir data/smoke/post_run
 ```
 
+## PR-AN-2 richer analyzer slices
+
+Some downstream branches extend the post-run analyzer with richer additive slices over replay/paper outputs. When this replay branch is merged with that analyzer work, keep the analyzer-slices README section alongside the replay and post-run sections rather than overwriting it.
+
+## PR-SIG-3 continuation enrichment
+
+PR-SIG-3 adds the continuation evidence layer that sits between short-horizon helper computations and downstream score/exit consumers. It keeps continuation outputs explicit, additive, and fail-open when tx, X, or wallet-registry evidence is incomplete.
+
+### Evidence lanes
+
+Transaction-derived metrics:
+
+- `net_unique_buyers_60s`
+- `liquidity_refill_ratio_120s`
+- `cluster_sell_concentration_120s`
+- `seller_reentry_ratio`
+- `liquidity_shock_recovery_sec`
+
+X-derived metrics:
+
+- `x_author_velocity_5m`
+
+Wallet-registry-derived metrics:
+
+- `smart_wallet_dispersion_score`
+
+Additive provenance/status fields:
+
+- `continuation_status`
+- `continuation_warning`
+- `continuation_confidence`
+- `continuation_metric_origin`
+- `continuation_coverage_ratio`
+- `continuation_inputs_status`
+
+### Missing-evidence policy
+
+- Missing evidence remains missing; it is not silently converted into bullish or bearish continuation strength.
+- Partial evidence is labeled `partial`, not treated as complete coverage.
+- Downstream scoring can consume continuation fields, but low-confidence continuation evidence is intentionally damped.
+
+### Continuation smoke
+
+```bash
+python scripts/continuation_smoke.py
+```
+
+Artifacts written under `data/smoke/`:
+
+- `continuation_enrichment.smoke.json`
+- `continuation_status.json`
+- `continuation_events.jsonl`
+
+See `docs/continuation_enricher.md` for the full contract, provenance semantics, and fallback behavior.
+
+## PR-CL-3 linkage scorer
+
+PR-CL-3 adds a creator/dev/funder linkage layer that keeps the existing cluster heuristics but emits explicit evidence-backed linkage outputs for downstream scoring, regime checks, exits, replay, and future analyzer work.
+
+Key points:
+
+- linkage uses shared funders, shared cluster ids, shared launch groups, and direct creator/dev-linked participation hints;
+- outputs remain additive and fail-open when creator/dev/funder evidence is missing or malformed;
+- bundle-stage enrichment keeps linkage fields null-filled when evidence is unavailable so downstream contracts stay stable;
+- confidence and provenance are exposed through `linkage_confidence`, `linkage_reason_codes`, `linkage_metric_origin`, and `linkage_status`;
+- this PR does **not** claim identity certainty, and weak evidence stays low-confidence.
+
 ## Other smoke scripts
 
 ```bash
@@ -114,4 +181,5 @@ pytest -q
 - `docs/unified_score.md`
 - `docs/exit_engine.md`
 - `docs/continuation_enricher.md`
+- `docs/linkage_scorer.md`
 - `docs/wallet_registry_replay.md`
