@@ -15,7 +15,7 @@ from collectors.discovery_engine import build_shortlist
 from config.settings import load_settings
 from trading.entry_logic import decide_entry
 from utils.bundle_contract_fields import BUNDLE_CONTRACT_FIELDS, LINKAGE_CONTRACT_FIELDS
-from utils.short_horizon_contract_fields import SHORT_HORIZON_SIGNAL_FIELDS
+from utils.short_horizon_contract_fields import CONTINUATION_METADATA_FIELDS, SHORT_HORIZON_SIGNAL_FIELDS
 
 
 class DummyEntrySettings:
@@ -88,6 +88,20 @@ def _short_horizon_values() -> dict[str, object]:
         "x_author_velocity_5m": 0.6,
         "seller_reentry_ratio": 0.33,
         "liquidity_shock_recovery_sec": 55,
+    }
+
+
+def _continuation_metadata_values() -> dict[str, object]:
+    return {
+        "continuation_status": "ready",
+        "continuation_warning": None,
+        "continuation_confidence": 0.81,
+        "continuation_metric_origin": "entry_snapshot",
+        "continuation_coverage_ratio": 1.0,
+        "continuation_inputs_status": "complete",
+        "continuation_warnings": [],
+        "continuation_available_evidence": ["buyers", "liquidity"],
+        "continuation_missing_evidence": [],
     }
 
 
@@ -235,6 +249,16 @@ def test_replay_preserves_bundle_fields_when_missing_or_present():
         assert field in missing_trade
         assert missing_signal[field] is None
         assert missing_trade[field] is None
+    for field in LINKAGE_CONTRACT_FIELDS:
+        assert field in missing_signal
+        assert field in missing_trade
+        assert missing_signal[field] is None
+        assert missing_trade[field] is None
+    for field in CONTINUATION_METADATA_FIELDS:
+        assert field in missing_signal
+        assert field in missing_trade
+        assert missing_signal[field] is None
+        assert missing_trade[field] is None
 
     run_id_present = "bundle_contract_present"
     present_payload = [
@@ -243,7 +267,7 @@ def test_replay_preserves_bundle_fields_when_missing_or_present():
             "pair_address": "pair_present",
             "decision": "paper_enter",
             "wallet_features": {},
-            "entry_snapshot": {**_bundle_values(), **_short_horizon_values()},
+            "entry_snapshot": {**_bundle_values(), **_linkage_values(), **_short_horizon_values(), **_continuation_metadata_values()},
         }
     ]
     (processed / "entry_candidates.json").write_text(json.dumps(present_payload), encoding="utf-8")
@@ -259,5 +283,11 @@ def test_replay_preserves_bundle_fields_when_missing_or_present():
         assert present_signal[field] == value
         assert present_trade[field] == value
     for field, value in _short_horizon_values().items():
+        assert present_signal[field] == value
+        assert present_trade[field] == value
+    for field, value in _linkage_values().items():
+        assert present_signal[field] == value
+        assert present_trade[field] == value
+    for field, value in _continuation_metadata_values().items():
         assert present_signal[field] == value
         assert present_trade[field] == value
