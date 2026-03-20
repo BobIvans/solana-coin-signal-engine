@@ -13,11 +13,7 @@ from collectors.bundle_evidence_collector import (
     collect_bundle_evidence_for_pair,
 )
 from collectors.helius_client import HeliusClient
-from utils.bundle_contract_fields import (
-    BUNDLE_CONTRACT_FIELDS,
-    BUNDLE_PROVENANCE_FIELDS,
-    LINKAGE_CONTRACT_FIELDS,
-)
+from utils.bundle_contract_fields import BUNDLE_CONTRACT_FIELDS, BUNDLE_PROVENANCE_FIELDS
 from utils.logger import log_warning
 from utils.rate_limit import acquire
 
@@ -75,7 +71,7 @@ def safe_null_bundle_metrics(
         "bundle_window_anchor_ts": None,
         "bundle_window_sec": None,
     }
-    for field in [*BUNDLE_CONTRACT_FIELDS, *BUNDLE_PROVENANCE_FIELDS, *LINKAGE_CONTRACT_FIELDS]:
+    for field in BUNDLE_CONTRACT_FIELDS + BUNDLE_PROVENANCE_FIELDS:
         payload.setdefault(field, None)
     payload["bundle_records"] = []
     payload["bundle_evidence_summary"] = {}
@@ -278,8 +274,6 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
             clustering_participants,
             creator_wallet=creator_wallet,
             participant_wallets=participant_wallets,
-            token_address=str(pair.get("token_address") or "") or None,
-            pair_address=str(pair.get("pair_address") or "") or None,
             settings=settings,
             persist_artifacts=True,
             artifact_scope=_clustering_artifact_scope(pair),
@@ -367,43 +361,6 @@ def _extract_clustering_participants(
             merge(wallet_value, group_id=[group_key] if group_key else None, funder=tx_funder)
 
     creator_wallet = _creator_wallet_from_payload(payload)
-
-    list_keys = (
-        "early_buyers",
-        "early_participants",
-        "bundle_participants",
-        "bundle_wallets",
-        "first_window_buyers",
-        "first_window_participants",
-        "buyers_first_60s",
-    )
-    for key in list_keys:
-        values = payload.get(key)
-        if not isinstance(values, list):
-            continue
-        for item in values:
-            if isinstance(item, dict):
-                wallet = str(
-                    item.get("wallet")
-                    or item.get("wallet_address")
-                    or item.get("address")
-                    or item.get("owner")
-                    or item.get("signer")
-                    or item.get("actor")
-                    or ""
-                ).strip()
-                if not wallet:
-                    continue
-                merge(
-                    wallet,
-                    group_id=[item.get("group_id") or item.get("group_key") or item.get("bundle_id")] if (item.get("group_id") or item.get("group_key") or item.get("bundle_id")) else None,
-                    funder=item.get("funder") or item.get("funding_source") or item.get("funded_by"),
-                    launch_id=[item.get("launch_id") or item.get("launch_group") or item.get("same_launch_tag")] if (item.get("launch_id") or item.get("launch_group") or item.get("same_launch_tag")) else None,
-                    creator_linked=item.get("creator_linked") or item.get("creator_overlap") or item.get("dev_linked"),
-                )
-            elif isinstance(item, str) and item.strip():
-                merge(item.strip())
-
     advanced_records = _extract_advanced_bundle_records(payload)
     for record in advanced_records:
         wallet = _advanced_normalized_actor(record)
