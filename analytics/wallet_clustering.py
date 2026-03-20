@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import datetime
 from math import ceil
 from typing import Any
 
@@ -69,6 +70,159 @@ def _participant_wallet(participant: dict[str, Any]) -> str | None:
 
 def _evidence_coverage_threshold(total_wallets: int) -> int:
     return max(2, min(total_wallets, ceil(total_wallets * 0.5)))
+
+
+def _normalize_timestamp(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, (int, float)):
+        ts = int(value)
+        return ts if ts > 0 else None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.isdigit():
+        ts = int(text)
+        return ts if ts > 0 else None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    ts = int(parsed.timestamp())
+    return ts if ts > 0 else None
+
+
+def _participant_timestamp(participant: dict[str, Any]) -> int | None:
+    for key in ("timestamp", "blockTime", "time", "slot_time", "seen_at"):
+        ts = _normalize_timestamp(participant.get(key))
+        if ts is not None:
+            return ts
+    return None
+
+
+def _coerce_positive_int(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        normalized = int(value)
+    except (TypeError, ValueError):
+        return None
+    return normalized if normalized > 0 else None
+
+
+def _extract_clustering_window(
+    artifact_scope: dict[str, Any] | None,
+    settings: Any | None = None,
+) -> tuple[int | None, int]:
+    scope = artifact_scope if isinstance(artifact_scope, dict) else {}
+    anchor_ts = None
+    for key in ("bundle_window_anchor_ts", "anchor_ts", "pair_created_ts"):
+        anchor_ts = _coerce_positive_int(scope.get(key))
+        if anchor_ts is not None:
+            break
+
+    window_sec = None
+    for key in ("bundle_window_sec", "window_sec"):
+        window_sec = _coerce_positive_int(scope.get(key))
+        if window_sec is not None:
+            break
+
+    if window_sec is None and settings is not None:
+        for attr in ("BUNDLE_WINDOW_SEC", "WINDOW_SEC"):
+            window_sec = _coerce_positive_int(getattr(settings, attr, None))
+            if window_sec is not None:
+                break
+
+    return anchor_ts, window_sec or 60
+
+
+def _filter_participants_to_window(
+    participants: list[dict[str, Any]],
+    *,
+    anchor_ts: int | None,
+    window_sec: int,
+) -> dict[str, Any]:
+    if anchor_ts is None:
+        return {
+            "participants": list(participants or []),
+            "window_enforced": False,
+            "dropped_missing_timestamp": 0,
+            "dropped_out_of_window": 0,
+        }
+
+    window_end = anchor_ts + max(0, int(window_sec))
+    filtered: list[dict[str, Any]] = []
+    dropped_missing_timestamp = 0
+    dropped_out_of_window = 0
+
+    for participant in participants or []:
+        if not isinstance(participant, dict):
+            dropped_missing_timestamp += 1
+            continue
+        ts = _participant_timestamp(participant)
+        if ts is None:
+            dropped_missing_timestamp += 1
+            continue
+        if ts < anchor_ts or ts > window_end:
+            dropped_out_of_window += 1
+            continue
+        filtered.append(participant)
+
+    return {
+        "participants": filtered,
+        "window_enforced": True,
+        "dropped_missing_timestamp": dropped_missing_timestamp,
+        "dropped_out_of_window": dropped_out_of_window,
+    }
+
+
+def _prepare_windowed_clustering_inputs(
+    participants: list[dict[str, Any]],
+    *,
+    participant_wallets: list[str] | None = None,
+    artifact_scope: dict[str, Any] | None = None,
+    settings: Any | None = None,
+) -> dict[str, Any]:
+    original_participants = list(participants or [])
+    base_wallets = sorted({_as_wallet(wallet) for wallet in (participant_wallets or []) if _as_wallet(wallet)})
+    if not base_wallets:
+        base_wallets = sorted({_participant_wallet(item) for item in original_participants if isinstance(item, dict) and _participant_wallet(item)})
+
+    anchor_ts, window_sec = _extract_clustering_window(artifact_scope, settings)
+    filtered = _filter_participants_to_window(original_participants, anchor_ts=anchor_ts, window_sec=window_sec)
+    windowed_participants = filtered["participants"]
+    participant_wallet_set = {
+        _participant_wallet(item)
+        for item in windowed_participants
+        if isinstance(item, dict) and _participant_wallet(item)
+    }
+    participant_wallet_set.discard(None)
+
+    if base_wallets:
+        windowed_wallets = sorted(wallet for wallet in base_wallets if wallet in participant_wallet_set)
+    else:
+        windowed_wallets = sorted(participant_wallet_set)
+
+    warnings: list[str] = []
+    if anchor_ts is None:
+        warnings.append("window_scope_unavailable")
+    if filtered["dropped_missing_timestamp"]:
+        warnings.append(f'window_filter_dropped_missing_timestamp:{filtered["dropped_missing_timestamp"]}')
+    if filtered["dropped_out_of_window"]:
+        warnings.append(f'window_filter_dropped_out_of_window:{filtered["dropped_out_of_window"]}')
+
+    return {
+        "participants": windowed_participants if anchor_ts is not None else original_participants,
+        "wallets": windowed_wallets if anchor_ts is not None else base_wallets,
+        "anchor_ts": anchor_ts,
+        "window_sec": window_sec,
+        "window_enforced": bool(filtered["window_enforced"]),
+        "input_participant_count": len(original_participants),
+        "windowed_participant_count": len(windowed_participants),
+        "dropped_missing_timestamp": int(filtered["dropped_missing_timestamp"]),
+        "dropped_out_of_window": int(filtered["dropped_out_of_window"]),
+        "warnings": warnings,
+    }
 
 
 def infer_wallet_cluster_keys(
@@ -364,6 +518,18 @@ def _artifact_scope_matches(artifact: dict[str, Any] | None, requested_scope: di
     return all(actual.get(key) == value for key, value in expected.items())
 
 
+def _merge_warnings(*groups: list[str]) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for group in groups:
+        for item in group or []:
+            warning = str(item).strip()
+            if warning and warning not in seen:
+                seen.add(warning)
+                merged.append(warning)
+    return merged
+
+
 def resolve_wallet_cluster_assignments(
     participants: list[dict[str, Any]],
     *,
@@ -377,9 +543,15 @@ def resolve_wallet_cluster_assignments(
 ) -> dict[str, Any]:
     """Resolve wallet cluster assignments using graph evidence first, heuristic fallback second."""
 
-    wallets = sorted({_as_wallet(wallet) for wallet in (participant_wallets or []) if _as_wallet(wallet)})
-    if not wallets:
-        wallets = sorted({_participant_wallet(item) for item in participants if _participant_wallet(item)})
+    windowed = _prepare_windowed_clustering_inputs(
+        participants,
+        participant_wallets=participant_wallets,
+        artifact_scope=artifact_scope,
+        settings=settings,
+    )
+    scoped_participants = windowed["participants"]
+    wallets = windowed["wallets"]
+    window_warnings = list(windowed["warnings"])
 
     defaults = {
         "cluster_ids_by_wallet": {},
@@ -393,13 +565,35 @@ def resolve_wallet_cluster_assignments(
         "graph_cluster_id_count": 0,
         "creator_cluster_id": None,
         "dominant_cluster_id": None,
-        "warnings": [],
+        "warnings": window_warnings,
     }
+
+    scope = {key: value for key, value in (artifact_scope or {}).items() if value not in (None, "", [], {})}
+    if windowed["window_enforced"]:
+        log_info(
+            "wallet_graph_window_filter_applied",
+            anchor_ts=windowed["anchor_ts"],
+            window_sec=windowed["window_sec"],
+            input_participant_count=windowed["input_participant_count"],
+            windowed_participant_count=windowed["windowed_participant_count"],
+            dropped_missing_timestamp=windowed["dropped_missing_timestamp"],
+            dropped_out_of_window=windowed["dropped_out_of_window"],
+            provenance_mode="windowed_clustering",
+            **scope,
+        )
+    elif "window_scope_unavailable" in window_warnings:
+        log_warning(
+            "wallet_graph_window_scope_unavailable",
+            input_participant_count=windowed["input_participant_count"],
+            wallet_count=len(wallets),
+            provenance_mode="window_scope_unavailable",
+            **scope,
+        )
+
     if len(wallets) < 2:
         return defaults
 
     graph_enabled = True if settings is None else bool(getattr(settings, "WALLET_GRAPH_ENABLED", True))
-    scope = {key: value for key, value in (artifact_scope or {}).items() if value not in (None, "", [], {})}
     existing_clusters = clusters_artifact or {}
     wallet_to_cluster = existing_clusters.get("wallet_to_cluster") if isinstance(existing_clusters, dict) else {}
     if isinstance(wallet_to_cluster, dict) and _artifact_scope_matches(existing_clusters, scope):
@@ -426,13 +620,13 @@ def resolve_wallet_cluster_assignments(
                 "graph_cluster_id_count": len(set(mapped.values())),
                 "creator_cluster_id": mapped.get(_as_wallet(creator_wallet) or ""),
                 "dominant_cluster_id": _dominant_cluster_id(mapped, wallets),
-                "warnings": list(existing_clusters.get("warnings", [])),
+                "warnings": _merge_warnings(window_warnings, list(existing_clusters.get("warnings", []))),
             }
 
     if graph_enabled:
         if persist_artifacts and settings is not None:
             persisted = build_and_persist_wallet_clusters(
-                participants,
+                scoped_participants,
                 creator_wallet=creator_wallet,
                 settings=settings,
                 metadata=scope,
@@ -441,7 +635,7 @@ def resolve_wallet_cluster_assignments(
             graph = persisted["graph"]
             clusters = persisted["clusters"]
         else:
-            graph = build_wallet_graph(participants, creator_wallet=creator_wallet, metadata=scope)
+            graph = build_wallet_graph(scoped_participants, creator_wallet=creator_wallet, metadata=scope)
             clusters = derive_wallet_clusters(graph, min_weight=float(getattr(settings, "WALLET_GRAPH_EDGE_MIN_WEIGHT", 0.5) or 0.5))
         graph_wallet_map = clusters.get("wallet_to_cluster") if isinstance(clusters, dict) else {}
         if isinstance(graph_wallet_map, dict):
@@ -477,7 +671,7 @@ def resolve_wallet_cluster_assignments(
                     "graph_cluster_id_count": len(set(mapped.values())),
                     "creator_cluster_id": mapped.get(_as_wallet(creator_wallet) or ""),
                     "dominant_cluster_id": _dominant_cluster_id(mapped, wallets),
-                    "warnings": list(graph.get("warnings", [])) + list(clusters.get("warnings", [])),
+                    "warnings": _merge_warnings(window_warnings, list(graph.get("warnings", [])), list(clusters.get("warnings", []))),
                 }
             reason = "insufficient_graph_coverage"
             log_warning(
@@ -490,7 +684,7 @@ def resolve_wallet_cluster_assignments(
                 **scope,
             )
 
-    cluster_keys = infer_wallet_cluster_keys(participants, creator_wallet=creator_wallet)
+    cluster_keys = infer_wallet_cluster_keys(scoped_participants, creator_wallet=creator_wallet)
     heuristic_cluster_ids = assign_wallet_cluster_ids(cluster_keys)
     if heuristic_cluster_ids:
         log_info(
@@ -499,7 +693,7 @@ def resolve_wallet_cluster_assignments(
             wallet_count=len(wallets),
             clustered_wallet_count=len(heuristic_cluster_ids),
             provenance_mode="heuristic_fallback",
-            **{key: value for key, value in (artifact_scope or {}).items() if value not in (None, "", [], {})},
+            **scope,
         )
         return {
             "cluster_ids_by_wallet": heuristic_cluster_ids,
@@ -513,7 +707,7 @@ def resolve_wallet_cluster_assignments(
             "graph_cluster_id_count": 0,
             "creator_cluster_id": heuristic_cluster_ids.get(_as_wallet(creator_wallet) or ""),
             "dominant_cluster_id": _dominant_cluster_id(heuristic_cluster_ids, wallets),
-            "warnings": [],
+            "warnings": window_warnings,
         }
 
     return defaults
@@ -534,6 +728,14 @@ def compute_wallet_clustering_metrics(
 
     out = _metric_defaults()
     wallets = participant_wallets or [wallet for wallet in (_participant_wallet(item) for item in participants) if wallet]
+    windowed = _prepare_windowed_clustering_inputs(
+        participants,
+        participant_wallets=wallets,
+        artifact_scope=artifact_scope,
+        settings=settings,
+    )
+    metric_participants = windowed["participants"]
+    metric_wallets = windowed["wallets"]
     resolved = resolve_wallet_cluster_assignments(
         participants,
         creator_wallet=creator_wallet,
@@ -545,9 +747,9 @@ def compute_wallet_clustering_metrics(
         artifact_scope=artifact_scope,
     )
     cluster_ids = resolved["cluster_ids_by_wallet"]
-    concentration_ratio = compute_cluster_concentration_ratio(cluster_ids, wallets)
-    unique_clusters = compute_num_unique_clusters_first_60s(cluster_ids, wallets)
-    creator_flag = detect_creator_in_cluster(cluster_ids, wallets, creator_wallet)
+    concentration_ratio = compute_cluster_concentration_ratio(cluster_ids, metric_wallets)
+    unique_clusters = compute_num_unique_clusters_first_60s(cluster_ids, metric_wallets)
+    creator_flag = detect_creator_in_cluster(cluster_ids, metric_wallets, creator_wallet)
     clustering_score = compute_bundle_wallet_clustering_score(
         cluster_concentration_ratio=concentration_ratio,
         num_unique_clusters_first_60s=unique_clusters,
@@ -570,14 +772,15 @@ def compute_wallet_clustering_metrics(
         }
     )
 
+    scope = artifact_scope if isinstance(artifact_scope, dict) else {}
     linkage = score_creator_dev_funder_linkage(
-        participants,
+        metric_participants,
         creator_wallet=creator_wallet,
         dev_wallet=locals().get("dev_wallet"),
-        early_buyer_wallets=wallets,
+        early_buyer_wallets=metric_wallets,
         cluster_ids_by_wallet=cluster_ids,
-        token_address=locals().get("token_address"),
-        pair_address=locals().get("pair_address"),
+        token_address=scope.get("token_address") or locals().get("token_address"),
+        pair_address=scope.get("pair_address") or locals().get("pair_address"),
     )
     if linkage.get("creator_in_cluster_flag") is None:
         linkage["creator_in_cluster_flag"] = creator_flag
