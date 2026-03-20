@@ -93,7 +93,31 @@ python scripts/post_run_analyzer_smoke.py --base-dir data/smoke/post_run
 
 ## PR-AN-2 richer analyzer slices
 
-Some downstream branches extend the post-run analyzer with richer additive slices over replay/paper outputs. When this replay branch is merged with that analyzer work, keep the analyzer-slices README section alongside the replay and post-run sections rather than overwriting it.
+PR-AN-2 extends the post-run analyzer with richer, additive diagnostic slices over replay/paper outputs.
+
+Highlights:
+
+- richer regime diagnostics for promotion failures, missed trend follow-through, confidence buckets, and blocker frequency
+- richer cluster/bundle diagnostics for creator-linked, concentrated, sell-heavy, retry-heavy, and cross-block bundle behavior
+- richer continuation diagnostics for refill, reentry, recovery, buyer-flow, wallet-dispersion, and X-velocity evidence
+- degraded-X comparison slices with explicit salvage-case handling
+- compact markdown sections plus machine-readable `analyzer_slices.json`
+- conservative recommendation hints that stay manual-only and sample-size-aware
+
+Artifacts:
+
+- `data/processed/analyzer_slices.json`
+- `data/processed/post_run_summary.json`
+- `data/processed/post_run_recommendations.json`
+- `data/processed/post_run_report.md`
+
+Run analyzer slices smoke:
+
+```bash
+python scripts/analyzer_slices_smoke.py
+```
+
+See `docs/analyzer_slices.md` for the slice families, honesty policy, and output contract.
 
 ## PR-SIG-3 continuation enrichment
 
