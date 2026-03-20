@@ -91,7 +91,64 @@ Required bundle/cluster fields:
 - `num_unique_clusters_first_60s`
 - `creator_in_cluster_flag`
 
-Additive linkage fields are also visible through the same helper module and are reported as extras or optional additions instead of being silently ignored.
+
+### bundle_provenance
+Artifact:
+- `data/processed/enriched_tokens.json`
+
+Required fields come from:
+- `utils/bundle_contract_fields.py`
+
+Required bundle provenance fields:
+- `bundle_evidence_status`
+- `bundle_evidence_source`
+- `bundle_evidence_confidence`
+- `bundle_evidence_warning`
+- `bundle_metric_origin`
+
+These fields are audited as first-class evidence provenance, not treated as silent additive extras.
+
+### cluster_provenance
+Artifact:
+- `data/processed/enriched_tokens.json`
+
+Required cluster provenance fields:
+- `cluster_evidence_status`
+- `cluster_evidence_source`
+- `cluster_evidence_confidence`
+- `cluster_metric_origin`
+- `graph_cluster_id_count`
+- `graph_cluster_coverage_ratio`
+- `creator_cluster_id`
+- `dominant_cluster_id`
+
+These fields distinguish graph-backed evidence from heuristic or partial evidence and must remain visible in parity reports.
+
+### linkage_evidence
+Artifact:
+- `data/processed/enriched_tokens.json`
+
+Required linkage evidence fields come from:
+- `utils/bundle_contract_fields.py`
+
+Required fields:
+- `creator_dev_link_score`
+- `creator_buyer_link_score`
+- `dev_buyer_link_score`
+- `shared_funder_link_score`
+- `creator_cluster_link_score`
+- `cluster_dev_link_score`
+- `linkage_risk_score`
+- `creator_funder_overlap_count`
+- `buyer_funder_overlap_count`
+- `funder_overlap_count`
+- `linkage_reason_codes`
+- `linkage_confidence`
+- `linkage_metric_origin`
+- `linkage_status`
+- `linkage_warning`
+
+These are audited as first-class evidence fields, not hidden additive extras.
 
 ### continuation
 Artifact:

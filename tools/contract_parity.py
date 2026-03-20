@@ -10,7 +10,12 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from utils.bundle_contract_fields import BUNDLE_CONTRACT_FIELDS, LINKAGE_CONTRACT_FIELDS
+    from utils.bundle_contract_fields import (
+        BUNDLE_CONTRACT_FIELDS,
+        BUNDLE_PROVENANCE_FIELDS,
+        CLUSTER_PROVENANCE_FIELDS,
+        LINKAGE_CONTRACT_FIELDS,
+    )
 except Exception:  # pragma: no cover - fallback for partial environments
     BUNDLE_CONTRACT_FIELDS = [
         "bundle_count_first_60s",
@@ -26,6 +31,23 @@ except Exception:  # pragma: no cover - fallback for partial environments
         "cluster_concentration_ratio",
         "num_unique_clusters_first_60s",
         "creator_in_cluster_flag",
+    ]
+    BUNDLE_PROVENANCE_FIELDS = [
+        "bundle_evidence_status",
+        "bundle_evidence_source",
+        "bundle_evidence_confidence",
+        "bundle_evidence_warning",
+        "bundle_metric_origin",
+    ]
+    CLUSTER_PROVENANCE_FIELDS = [
+        "cluster_evidence_status",
+        "cluster_evidence_source",
+        "cluster_evidence_confidence",
+        "cluster_metric_origin",
+        "graph_cluster_id_count",
+        "graph_cluster_coverage_ratio",
+        "creator_cluster_id",
+        "dominant_cluster_id",
     ]
     LINKAGE_CONTRACT_FIELDS = [
         "creator_dev_link_score",
@@ -256,8 +278,32 @@ def collect_contract_definitions() -> list[ArtifactContract]:
             artifact_name="enriched_tokens",
             artifact_path="data/processed/enriched_tokens.json",
             required_fields=tuple(BUNDLE_CONTRACT_FIELDS),
-            optional_fields=tuple(LINKAGE_CONTRACT_FIELDS),
-            description="Bundle/cluster fields carried on enriched-token rows.",
+            optional_fields=(),
+            description="Raw bundle and cluster metric fields carried on enriched-token rows.",
+        ),
+        ArtifactContract(
+            contract_group="bundle_provenance",
+            artifact_name="enriched_tokens",
+            artifact_path="data/processed/enriched_tokens.json",
+            required_fields=tuple(BUNDLE_PROVENANCE_FIELDS),
+            optional_fields=(),
+            description="Bundle evidence provenance/status/confidence fields.",
+        ),
+        ArtifactContract(
+            contract_group="cluster_provenance",
+            artifact_name="enriched_tokens",
+            artifact_path="data/processed/enriched_tokens.json",
+            required_fields=tuple(CLUSTER_PROVENANCE_FIELDS),
+            optional_fields=(),
+            description="Graph-backed cluster evidence provenance and coverage fields.",
+        ),
+        ArtifactContract(
+            contract_group="linkage_evidence",
+            artifact_name="enriched_tokens",
+            artifact_path="data/processed/enriched_tokens.json",
+            required_fields=tuple(LINKAGE_CONTRACT_FIELDS),
+            optional_fields=(),
+            description="Creator/dev/funder linkage evidence fields.",
         ),
         ArtifactContract(
             contract_group="continuation",
