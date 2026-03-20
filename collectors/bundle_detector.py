@@ -177,6 +177,13 @@ def _extract_success(tx: dict[str, Any]) -> bool | None:
     return False
 
 
+def _clustering_artifact_scope(pair: dict[str, Any]) -> dict[str, str]:
+    return {
+        "token_address": str(pair.get("token_address") or "").strip(),
+        "pair_address": str(pair.get("pair_address") or "").strip(),
+    }
+
+
 def _load_bundle_transactions(pair: dict[str, Any], settings: Any) -> tuple[list[dict[str, Any]], str | None]:
     inline = pair.get("bundle_transactions")
     if isinstance(inline, list):
@@ -200,6 +207,117 @@ def _load_bundle_transactions(pair: dict[str, Any], settings: Any) -> tuple[list
     return txs, None if txs else "no bundle transactions available"
 
 
+<<<<<<< HEAD
+def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: Any) -> dict[str, Any]:
+    """Infer first-window bundle metrics from available transaction data.
+
+    This MVP uses a conservative heuristic: transactions in the first configured
+    window are grouped by slot when present, otherwise by exact second. Only
+    groups with at least 2 transactions are treated as inferred bundles.
+    """
+
+    if not getattr(settings, "BUNDLE_ENRICHMENT_ENABLED", True):
+        return safe_null_bundle_metrics(status="disabled", warning="bundle enrichment disabled")
+
+    anchor_ts = _extract_anchor_ts(pair)
+    if anchor_ts is None:
+        return safe_null_bundle_metrics(status="unavailable", warning="missing liquidity/pair creation anchor")
+
+    if now_ts < anchor_ts:
+        return safe_null_bundle_metrics(status="unavailable", warning="anchor timestamp is in the future")
+
+    try:
+        txs, source_warning = _load_bundle_transactions(pair, settings)
+        if source_warning and not txs:
+            return safe_null_bundle_metrics(status="unavailable", warning=source_warning)
+
+        window_sec = max(int(getattr(settings, "BUNDLE_ENRICHMENT_WINDOW_SEC", 60) or 60), 1)
+        window_end = anchor_ts + window_sec
+
+        first_window = []
+        for tx in txs:
+            timestamp = _extract_timestamp(tx)
+            if timestamp is None or timestamp < anchor_ts or timestamp > window_end:
+                continue
+            first_window.append(
+                {
+                    "timestamp": timestamp,
+                    "group_key": _extract_group_key(tx, timestamp),
+                    "wallets": _extract_wallets(tx),
+                    "value": _extract_value(tx),
+                    "success": _extract_success(tx),
+                    "funder": str(tx.get("funder") or tx.get("funding_source") or tx.get("funded_by") or "").strip() or None,
+                }
+            )
+
+        if not first_window:
+            return safe_null_bundle_metrics(status="ok", warning="no first-window transactions found")
+
+        grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for tx in first_window:
+            grouped[tx["group_key"]].append(tx)
+
+        inferred_bundles = [group for group in grouped.values() if len(group) >= 2]
+        if not inferred_bundles:
+            return {
+                **safe_null_bundle_metrics(status="ok", warning="no inferred bundles detected in first window"),
+                "bundle_count_first_60s": 0,
+            }
+
+        bundle_count = len(inferred_bundles)
+        wallet_counts: list[int] = []
+        bundle_values: list[float] = []
+        bundle_offsets_min: list[float] = []
+        success_values: list[float] = []
+        clustering_participants, participant_wallets, creator_wallet = _extract_clustering_participants(pair, first_window)
+        clustering_metrics = compute_wallet_clustering_metrics(
+            clustering_participants,
+            creator_wallet=creator_wallet,
+            participant_wallets=participant_wallets,
+            settings=settings,
+            persist_artifacts=True,
+            artifact_scope=_clustering_artifact_scope(pair),
+        )
+
+        for bundle in inferred_bundles:
+            wallets = {wallet for tx in bundle for wallet in tx["wallets"]}
+            wallet_counts.append(len(wallets))
+
+            values = [value for value in (tx["value"] for tx in bundle) if value is not None]
+            if values:
+                bundle_values.append(sum(values))
+
+            timestamps = [int(tx["timestamp"]) for tx in bundle]
+            bundle_offsets_min.append((min(timestamps) - anchor_ts) / 60.0)
+
+            successes = [tx["success"] for tx in bundle if tx["success"] is not None]
+            if successes:
+                success_values.extend(1.0 if flag else 0.0 for flag in successes)
+
+        return {
+            **safe_null_bundle_metrics(status="ok"),
+            "bundle_count_first_60s": bundle_count,
+            "bundle_size_value": round(sum(bundle_values), 6) if bundle_values else None,
+            "unique_wallets_per_bundle_avg": round(sum(wallet_counts) / len(wallet_counts), 6) if wallet_counts else None,
+            "bundle_timing_from_liquidity_add_min": round(min(bundle_offsets_min), 6) if bundle_offsets_min else None,
+            "bundle_success_rate": round(sum(success_values) / len(success_values), 6) if success_values else None,
+            "bundle_enrichment_warning": source_warning,
+            **clustering_metrics,
+        }
+    except Exception as exc:  # pragma: no cover - defensive fail-open
+        log_warning(
+            "bundle_enrichment_failed",
+            token_address=str(pair.get("token_address") or ""),
+            pair_address=str(pair.get("pair_address") or ""),
+            error=str(exc),
+        )
+        return safe_null_bundle_metrics(status="failed", warning=str(exc))
+
+
+
+
+=======
+>>>>>>> origin/main
 def _creator_wallet_from_payload(payload: dict[str, Any]) -> str | None:
     for key in ("creator_wallet", "deployer_wallet", "mint_authority", "update_authority", "dev_wallet_est"):
         value = str(payload.get(key) or "").strip()

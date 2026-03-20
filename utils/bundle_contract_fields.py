@@ -18,6 +18,14 @@ BUNDLE_CONTRACT_FIELDS = [
     "cluster_concentration_ratio",
     "num_unique_clusters_first_60s",
     "creator_in_cluster_flag",
+    "cluster_evidence_status",
+    "cluster_evidence_source",
+    "cluster_evidence_confidence",
+    "cluster_metric_origin",
+    "graph_cluster_id_count",
+    "graph_cluster_coverage_ratio",
+    "creator_cluster_id",
+    "dominant_cluster_id",
 ]
 
 BUNDLE_PROVENANCE_FIELDS = [

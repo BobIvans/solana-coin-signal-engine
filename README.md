@@ -122,6 +122,39 @@ python scripts/post_run_analyzer_smoke.py --base-dir data/smoke/post_run
 ```
 
 
+<<<<<<< HEAD
+## PR-CL-2 wallet graph clustering foundation
+
+PR-CL-2 adds a graph-backed wallet clustering layer while preserving the original heuristic fallback.
+
+New components:
+
+- `analytics/wallet_graph_builder.py`
+- `analytics/cluster_store.py`
+- `schemas/wallet_graph.schema.json`
+- `schemas/wallet_clusters.schema.json`
+- `docs/wallet_graph_clustering.md`
+
+Produced artifacts:
+
+- `data/processed/wallet_graph.json`
+- `data/processed/wallet_clusters.json`
+- `data/processed/wallet_graph_events.jsonl`
+
+Run smoke:
+
+```bash
+python scripts/wallet_graph_smoke.py
+```
+
+Behavior notes:
+
+- graph evidence is used first when coverage is meaningful
+- the legacy heuristic clustering path is still preserved as the safe fallback
+- cluster provenance fields are additive and backward-compatible
+- missing or malformed graph evidence does not hard-fail discovery/scoring
+- implementation details and caveats live in `docs/wallet_graph_clustering.md`
+=======
 ## PR-BDL-4 bundle evidence
 
 PR-BDL-4 adds an evidence-first bundle collection layer for early launch analysis.
@@ -159,3 +192,4 @@ python scripts/bundle_evidence_smoke.py
 ```
 
 See `docs/bundle_evidence.md` for the honesty policy and routing details.
+>>>>>>> origin/main

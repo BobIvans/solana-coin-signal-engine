@@ -158,6 +158,50 @@ def test_discovery_smoke_with_wallet_clustering_enabled(monkeypatch, discovery_t
         assert row["creator_in_cluster_flag"] is True
 
 
+def test_discovery_wallet_clustering_ignores_stale_persisted_cluster_artifacts(monkeypatch, discovery_tmp):
+    monkeypatch.setenv("BUNDLE_ENRICHMENT_ENABLED", "true")
+    processed_dir = discovery_tmp / "processed"
+    processed_dir.mkdir(parents=True, exist_ok=True)
+    (processed_dir / "wallet_clusters.json").write_text(
+        json.dumps(
+            {
+                "wallet_to_cluster": {
+                    "wallet_a": "cluster_stale",
+                    "wallet_b": "cluster_stale",
+                    "wallet_c": "cluster_stale",
+                    "creator_wallet": "cluster_stale",
+                },
+                "clusters": [{"cluster_id": "cluster_stale", "cluster_confidence": 0.99}],
+                "summary": {"cluster_count": 1},
+            }
+        ),
+        encoding="utf-8",
+    )
+    raw_pair = _raw_pair(
+        pairCreatedAt=700,
+        creator_wallet="creator_wallet",
+        bundle_transactions=[
+            {"timestamp": 705, "slot": 11, "feePayer": "wallet_a", "bundle_value": 80.0, "success": True, "funder": "shared_funder"},
+            {"timestamp": 705, "slot": 11, "feePayer": "wallet_b", "bundle_value": 60.0, "success": True, "funder": "shared_funder"},
+            {"timestamp": 725, "slot": 12, "feePayer": "wallet_c", "bundle_value": 40.0, "success": True, "funder": "other_funder"},
+            {"timestamp": 725, "slot": 12, "feePayer": "creator_wallet", "bundle_value": 20.0, "success": True, "funder": "shared_funder"},
+        ],
+    )
+    monkeypatch.setattr("collectors.discovery_engine.fetch_latest_solana_pairs", lambda: [raw_pair])
+
+    result = run_discovery_once()
+
+    candidate = result["candidates"]["candidates"][0]
+    shortlist_item = result["shortlist"]["shortlist"][0]
+    for row in (candidate, shortlist_item):
+        assert row["bundle_wallet_clustering_score"] == 0.825
+        assert row["cluster_concentration_ratio"] == 0.75
+        assert row["num_unique_clusters_first_60s"] == 1
+        assert row["creator_in_cluster_flag"] is True
+        assert row["cluster_metric_origin"] == "graph_evidence"
+        assert row["dominant_cluster_id"] != "cluster_stale"
+
+
 def test_discovery_bundle_enrichment_failure_keeps_candidate(monkeypatch, discovery_tmp):
     monkeypatch.setenv("BUNDLE_ENRICHMENT_ENABLED", "true")
     monkeypatch.setattr("collectors.discovery_engine.fetch_latest_solana_pairs", lambda: [_raw_pair()])
