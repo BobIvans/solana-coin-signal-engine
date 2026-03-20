@@ -81,6 +81,10 @@ def default_wallet_registry_bias(
         "smart_wallet_conviction_bonus": 0.0,
         "smart_wallet_registry_confidence": "low",
         "smart_wallet_dispersion_score": None,
+        "smart_wallet_family_ids": [],
+        "smart_wallet_independent_family_ids": [],
+        "smart_wallet_family_unique_count": 0,
+        "smart_wallet_independent_family_unique_count": 0,
     }
 
 
@@ -126,6 +130,11 @@ def compute_wallet_registry_bias(raw_hit_wallets: list[str] | tuple[str, ...] | 
         watch_hits=watch_hits,
     )
 
+    family_ids = sorted({str(record.get("wallet_family_id") or "") for record in matched_records if record.get("wallet_family_id")})
+    independent_family_ids = sorted(
+        {str(record.get("independent_family_id") or "") for record in matched_records if record.get("independent_family_id")}
+    )
+
     return {
         **defaults,
         "smart_wallet_score_sum": score_sum,
@@ -140,6 +149,10 @@ def compute_wallet_registry_bias(raw_hit_wallets: list[str] | tuple[str, ...] | 
         "smart_wallet_conviction_bonus": conviction_bonus,
         "smart_wallet_registry_confidence": confidence,
         "smart_wallet_dispersion_score": compute_smart_wallet_dispersion_score(raw_hit_wallets, lookup),
+        "smart_wallet_family_ids": family_ids,
+        "smart_wallet_independent_family_ids": independent_family_ids,
+        "smart_wallet_family_unique_count": len(family_ids),
+        "smart_wallet_independent_family_unique_count": len(independent_family_ids),
     }
 
 

@@ -95,6 +95,14 @@ def load_normalized_wallet_candidates(path: str | Path) -> dict[str, Any]:
             "imported_at": str(raw.get("imported_at") or payload.get("generated_at") or ""),
             "input_status": str(raw.get("status") or "candidate"),
             "format_confidence": 1.0 if is_plausible_solana_wallet(wallet) else 0.0,
+            "wallet_cluster_id": raw.get("wallet_cluster_id") or raw.get("cluster_id"),
+            "funder": raw.get("funder") or raw.get("funding_source") or raw.get("funded_by"),
+            "launch_group": raw.get("launch_group") or raw.get("launch_id") or raw.get("group_key"),
+            "wallet_family_hint": raw.get("wallet_family_hint") or raw.get("family_hint") or raw.get("registry_family_hint"),
+            "independent_family_hint": raw.get("independent_family_hint") or raw.get("wallet_independent_family_hint"),
+            "linkage_group": raw.get("linkage_group") or raw.get("linkage_hint"),
+            "linked_wallets": raw.get("linked_wallets") or raw.get("wallet_family_peers") or [],
+            "creator_linked": bool(raw.get("creator_linked") or raw.get("creator_overlap") or raw.get("dev_linked")),
             "quality_flags": {
                 "invalid_format_rejected": not is_plausible_solana_wallet(wallet),
                 "duplicate_source_merged": False,
@@ -177,6 +185,16 @@ def _normalize_validated_wallet_record(record: dict[str, Any], *, is_hot: bool) 
         "is_hot": bool(is_hot),
         "early_entry_positive": _has_early_entry_positive(record),
         "replay_evidence": replay_evidence,
+        "wallet_family_id": record.get("wallet_family_id"),
+        "independent_family_id": record.get("independent_family_id"),
+        "wallet_family_confidence": float(record.get("wallet_family_confidence") or 0.0),
+        "wallet_family_origin": str(record.get("wallet_family_origin") or "missing"),
+        "wallet_family_reason_codes": _normalize_string_list(record.get("wallet_family_reason_codes") or []),
+        "wallet_cluster_id": record.get("wallet_cluster_id"),
+        "wallet_family_member_count": int(record.get("wallet_family_member_count") or 0),
+        "wallet_family_shared_funder_flag": bool(record.get("wallet_family_shared_funder_flag", False)),
+        "wallet_family_creator_link_flag": bool(record.get("wallet_family_creator_link_flag", False)),
+        "wallet_family_status": str(record.get("wallet_family_status") or "missing"),
     }
 
 
