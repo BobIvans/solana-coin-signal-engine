@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import sys
+import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -85,44 +87,53 @@ def main() -> int:
     pos = _base_position("SCALP")
     state = _base_state()
     state["price_usd_now"] = 0.88
-    cases.append(("scalp_stop", pos, state, "FULL_EXIT", "scalp_stop_loss"))
+    cases.append(("scalp_stop", pos, state, "FULL_EXIT", "scalp_stop_loss", settings))
 
     pos = _base_position("SCALP")
     state = _base_state()
     state["volume_velocity_now"] = 2.5
-    cases.append(("scalp_recheck_decay", pos, state, "FULL_EXIT", "scalp_momentum_decay_after_recheck"))
+    cases.append(("scalp_recheck_decay", pos, state, "FULL_EXIT", "scalp_momentum_decay_after_recheck", settings))
 
     pos = _base_position("TREND")
     state = _base_state()
     state["price_usd_now"] = 1.40
-    cases.append(("trend_partial_1", pos, state, "PARTIAL_EXIT", "trend_partial_take_profit_1"))
+    cases.append(("trend_partial_1", pos, state, "PARTIAL_EXIT", "trend_partial_take_profit_1", settings))
 
     pos = _base_position("TREND")
     state = _base_state()
     state["rug_flag_now"] = True
-    cases.append(("trend_rug_hard", pos, state, "FULL_EXIT", "rug_flag_triggered"))
+    cases.append(("trend_rug_hard", pos, state, "FULL_EXIT", "rug_flag_triggered", settings))
 
     pos = _base_position("SCALP")
     state = _base_state()
     state["now_ts"] = "2026-03-15T12:30:50Z"
     state["price_usd_now"] = 1.03
-    cases.append(("healthy_hold", pos, state, "HOLD", "hold_conditions_intact"))
+    cases.append(("healthy_hold", pos, state, "HOLD", "hold_conditions_intact", settings))
 
-    selected_pos = cases[0][1]
-    selected_state = cases[0][2]
-    payload = run_position_monitor([selected_pos], [selected_state], settings)
-    write_json(settings.PROCESSED_DATA_DIR / "exit_decisions.smoke.json", payload)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        kill_switch_path = Path(tmpdir) / "kill_switch.flag"
+        kill_switch_path.write_text("armed\n", encoding="utf-8")
+        kill_switch_settings = SimpleNamespace(**vars(settings), KILL_SWITCH_FILE=str(kill_switch_path))
+        pos = _base_position("TREND")
+        state = _base_state()
+        cases.append(("kill_switch_forced_exit", pos, state, "FULL_EXIT", "kill_switch_triggered", kill_switch_settings))
 
-    for name, position, current, expected_decision, expected_reason in cases:
-        result = run_position_monitor([position], [current], settings)["positions"][0]
-        _validate(result)
-        if result["exit_decision"] != expected_decision:
-            raise ValueError(f"{name}: expected {expected_decision}, got {result['exit_decision']}")
-        if result["exit_reason"] != expected_reason:
-            raise ValueError(f"{name}: expected reason {expected_reason}, got {result['exit_reason']}")
+        selected_pos = cases[0][1]
+        selected_state = cases[0][2]
+        selected_settings = cases[0][5]
+        payload = run_position_monitor([selected_pos], [selected_state], selected_settings)
+        write_json(settings.PROCESSED_DATA_DIR / "exit_decisions.smoke.json", payload)
 
-    print(json.dumps(payload["positions"][0], sort_keys=True, ensure_ascii=False))
-    return 0
+        for name, position, current, expected_decision, expected_reason, case_settings in cases:
+            result = run_position_monitor([position], [current], case_settings)["positions"][0]
+            _validate(result)
+            if result["exit_decision"] != expected_decision:
+                raise ValueError(f"{name}: expected {expected_decision}, got {result['exit_decision']}")
+            if result["exit_reason"] != expected_reason:
+                raise ValueError(f"{name}: expected reason {expected_reason}, got {result['exit_reason']}")
+
+        print(json.dumps(payload["positions"][0], sort_keys=True, ensure_ascii=False))
+        return 0
 
 
 if __name__ == "__main__":

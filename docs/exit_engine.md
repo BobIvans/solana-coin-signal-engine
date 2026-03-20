@@ -13,7 +13,7 @@
 
 ## Decision precedence
 
-1. Hard safety exits (`dev_sell`, `rug_flag`, fail-closed missing data)
+1. Hard safety exits (`kill_switch_triggered`, `dev_sell`, `rug_flag`, fail-closed missing data)
 2. Regime hard stops
 3. Regime deterioration full exits
 4. `TREND` partial take-profit milestones
@@ -95,3 +95,13 @@ When required current-state fields are missing and `EXIT_ENGINE_FAILCLOSED=true`
 - `exit_status=partial`
 
 This prevents optimistic silent `HOLD` on incomplete data.
+
+## Kill switch liquidation
+
+The kill switch is a global emergency control, not just an entry guard. When the configured kill-switch file is present, the exit engine immediately emits:
+
+- `exit_decision=FULL_EXIT`
+- `exit_reason=kill_switch_triggered`
+- `exit_flags=["kill_switch_triggered"]`
+
+This check runs before the other hard-exit branches so open positions are liquidated deterministically even if market signals would otherwise still look healthy. New entries remain blocked upstream by the promotion guards.
