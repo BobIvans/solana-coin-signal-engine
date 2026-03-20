@@ -210,6 +210,12 @@
       "type": [
         "string",
         "null"
+      ],
+      "enum": [
+        "direct_evidence",
+        "heuristic_evidence",
+        "missing",
+        null
       ]
     },
     "cluster_evidence_status": {
@@ -234,6 +240,12 @@
       "type": [
         "string",
         "null"
+      ],
+      "enum": [
+        "graph_evidence",
+        "heuristic_evidence",
+        "missing",
+        null
       ]
     },
     "graph_cluster_id_count": {
@@ -339,6 +351,13 @@
       "type": [
         "string",
         "null"
+      ],
+      "enum": [
+        "graph_evidence",
+        "heuristic_evidence",
+        "mixed_evidence",
+        "missing",
+        null
       ]
     },
     "linkage_status": {

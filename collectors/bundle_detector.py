@@ -8,10 +8,14 @@ from typing import Any
 from analytics.wallet_clustering import compute_wallet_clustering_metrics
 from collectors.helius_client import HeliusClient
 from collectors.bundle_evidence_collector import (
-    HEURISTIC_FALLBACK_ORIGIN,
     MISSING_BUNDLE_ORIGIN,
     collect_bundle_evidence_for_pair,
     compute_bundle_metrics_from_evidence,
+)
+from utils.provenance_enums import (
+    DIRECT_EVIDENCE_ORIGIN,
+    HEURISTIC_EVIDENCE_ORIGIN,
+    normalize_provenance_origin,
 )
 from utils.bundle_contract_fields import BUNDLE_CONTRACT_FIELDS
 from utils.logger import log_warning
@@ -276,8 +280,8 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
     """Infer first-window bundle metrics with evidence-first fallback semantics.
 
     Order:
-    1. Try real bundle evidence collector.
-    2. If real evidence is sufficient, return real_evidence metrics.
+    1. Try direct bundle evidence collector.
+    2. If direct evidence is sufficient, return direct_evidence metrics.
     3. If evidence is sparse/partial, fall back to heuristic tx grouping.
     4. If neither path is usable, return missing.
     """
@@ -308,7 +312,7 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
         normalized_evidence = collect_bundle_evidence_for_pair(pair, now_ts, settings)
         evidence_metrics = compute_bundle_metrics_from_evidence(normalized_evidence, pair=pair)
 
-        if evidence_metrics.get("bundle_metric_origin") == "real_evidence":
+        if normalize_provenance_origin(evidence_metrics.get("bundle_metric_origin")) == DIRECT_EVIDENCE_ORIGIN:
             return evidence_metrics
 
         tx_payload = _load_bundle_transactions(pair, settings)
@@ -391,7 +395,7 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
                 **evidence_metrics,
                 **clustering_metrics,
                 "bundle_count_first_60s": 0,
-                "bundle_metric_origin": HEURISTIC_FALLBACK_ORIGIN,
+                "bundle_metric_origin": HEURISTIC_EVIDENCE_ORIGIN,
                 "bundle_enrichment_status": "partial" if _bundle_tx_is_degraded(tx_payload) else "ok",
                 "bundle_enrichment_warning": bundle_warning,
                 "bundle_evidence_warning": evidence_warning,
@@ -427,7 +431,7 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
             "unique_wallets_per_bundle_avg": round(sum(wallet_counts) / len(wallet_counts), 6) if wallet_counts else None,
             "bundle_timing_from_liquidity_add_min": round(min(bundle_offsets_min), 6) if bundle_offsets_min else None,
             "bundle_success_rate": round(sum(success_values) / len(success_values), 6) if success_values else None,
-            "bundle_metric_origin": HEURISTIC_FALLBACK_ORIGIN,
+            "bundle_metric_origin": HEURISTIC_EVIDENCE_ORIGIN,
             "bundle_enrichment_status": bundle_status,
             "bundle_enrichment_warning": _merge_bundle_warning(evidence_metrics.get("bundle_enrichment_warning"), source_warning),
             "bundle_evidence_warning": _merge_bundle_warning(evidence_metrics.get("bundle_evidence_warning"), tx_warning),

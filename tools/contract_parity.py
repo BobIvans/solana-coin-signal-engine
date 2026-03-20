@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from utils.provenance_enums import PROVENANCE_ALLOWED_BY_FIELD
+
 try:
     from utils.bundle_contract_fields import (
         BUNDLE_CONTRACT_FIELDS,
@@ -440,6 +442,22 @@ def _apply_docs_sync_notes(
     entry["docs_sync_notes"] = notes
 
 
+def _collect_invalid_enum_values(rows: list[dict[str, Any]], fields: Iterable[str]) -> dict[str, list[str]]:
+    invalid: dict[str, set[str]] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        for field in fields:
+            allowed = PROVENANCE_ALLOWED_BY_FIELD.get(field)
+            if not allowed or field not in row:
+                continue
+            value = row.get(field)
+            normalized = str(value).strip() if value is not None else ""
+            if normalized not in allowed:
+                invalid.setdefault(field, set()).add(normalized or "<null>")
+    return {field: sorted(values) for field, values in sorted(invalid.items())}
+
+
 def compute_contract_parity_report(
     repo_root: Path | str,
     *,
@@ -486,10 +504,11 @@ def compute_contract_parity_report(
         missing_required = _as_sorted_strings(required - present_all)
         missing_optional = _as_sorted_strings(optional - present_any)
         extras = _as_sorted_strings(present_any - allowed_for_artifact)
+        invalid_required_values = _collect_invalid_enum_values(presence.get("rows", []), required | optional)
 
         if presence["status"] in {"missing", "malformed", "empty"}:
             status = presence["status"]
-        elif missing_required:
+        elif missing_required or invalid_required_values:
             status = "mismatch"
         elif extras:
             status = "warning"
@@ -544,6 +563,18 @@ def compute_contract_parity_report(
                     "extra_fields": extras,
                 }
             )
+        if invalid_required_values:
+            warnings.append("invalid_field_values")
+            events.append(
+                {
+                    "event": "invalid_field_values",
+                    "ts": _utc_now_iso(),
+                    "contract_group": definition.contract_group,
+                    "artifact_name": definition.artifact_name,
+                    "invalid_field_count": len(invalid_required_values),
+                    "invalid_fields": invalid_required_values,
+                }
+            )
 
         entry = {
             "contract_group": definition.contract_group,
@@ -557,6 +588,7 @@ def compute_contract_parity_report(
             "missing_required_fields": missing_required,
             "missing_optional_fields": missing_optional,
             "extra_fields": extras,
+            "invalid_required_values": invalid_required_values,
             "row_count": presence.get("row_count", 0),
             "status": status,
             "warnings": _as_sorted_strings(warnings),

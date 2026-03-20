@@ -84,9 +84,11 @@ Additive provenance/status fields:
 
 Allowed `bundle_metric_origin` values:
 
-- `real_evidence`
-- `heuristic_fallback`
+- `direct_evidence`
+- `heuristic_evidence`
 - `missing`
+
+Legacy aliases may still be normalized internally during migration, but fresh emitted artifacts must not use `real_evidence` or `heuristic_fallback`.
 
 ## Smoke artifacts
 

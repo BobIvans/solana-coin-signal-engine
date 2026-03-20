@@ -43,7 +43,7 @@ def test_strong_early_landed_buy_only_evidence_fixture():
     metrics = compute_bundle_metrics_from_evidence(evidence, pair=pair)
 
     assert evidence["bundle_evidence_status"] == "ok"
-    assert metrics["bundle_metric_origin"] == "real_evidence"
+    assert metrics["bundle_metric_origin"] == "direct_evidence"
     assert metrics["bundle_count_first_60s"] == 2
     assert metrics["bundle_composition_dominant"] == "buy-only"
     assert metrics["bundle_tip_efficiency"] == 0.002
@@ -66,7 +66,7 @@ def test_failed_retry_heavy_pattern_uses_real_evidence():
     evidence = collect_bundle_evidence_for_pair(pair, now_ts=1_050, settings=DummySettings())
     metrics = compute_bundle_metrics_from_evidence(evidence, pair=pair)
 
-    assert metrics["bundle_metric_origin"] == "real_evidence"
+    assert metrics["bundle_metric_origin"] == "direct_evidence"
     assert metrics["bundle_failure_retry_pattern"] > 0
     assert metrics["bundle_evidence_warning"] is not None or evidence["bundle_evidence_warning"] is not None or evidence["bundle_evidence_status"] in {"ok", "partial"}
 
@@ -85,7 +85,7 @@ def test_cross_block_coordination_fixture():
     evidence = collect_bundle_evidence_for_pair(pair, now_ts=1_050, settings=DummySettings())
     metrics = compute_bundle_metrics_from_evidence(evidence, pair=pair)
 
-    assert metrics["bundle_metric_origin"] == "real_evidence"
+    assert metrics["bundle_metric_origin"] == "direct_evidence"
     assert metrics["cross_block_bundle_correlation"] is not None
 
 

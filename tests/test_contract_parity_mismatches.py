@@ -207,8 +207,10 @@ def test_contract_parity_mismatch_visibility(tmp_path: Path) -> None:
     assert statuses[("cluster_provenance", "enriched_tokens")]["status"] == "mismatch"
     assert "cluster_metric_origin" in statuses[("cluster_provenance", "enriched_tokens")]["missing_required_fields"]
 
-    assert statuses[("linkage_evidence", "enriched_tokens")]["status"] in {"ok", "warning"}
+    assert statuses[("linkage_evidence", "enriched_tokens")]["status"] == "mismatch"
     assert statuses[("linkage_evidence", "enriched_tokens")]["missing_required_fields"] == []
+    assert statuses[("bundle_provenance", "enriched_tokens")]["invalid_required_values"]["bundle_metric_origin"] == ["raw_bundles"]
+    assert statuses[("linkage_evidence", "enriched_tokens")]["invalid_required_values"]["linkage_metric_origin"] == ["heuristic"]
 
     assert statuses[("core_x_validation", "x_validated")]["status"] == "missing"
     assert statuses[("core_rug_assessed", "rug_assessed_tokens")]["status"] == "malformed"
@@ -223,3 +225,4 @@ def test_contract_parity_mismatch_visibility(tmp_path: Path) -> None:
     assert "artifact_malformed" in event_types
     assert "required_fields_missing" in event_types
     assert "extra_fields_detected" in event_types
+    assert "invalid_field_values" in event_types

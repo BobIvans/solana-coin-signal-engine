@@ -9,6 +9,7 @@ from utils.bundle_contract_fields import (
     LINKAGE_CONTRACT_FIELDS,
 )
 from utils.short_horizon_contract_fields import CONTINUATION_METADATA_FIELDS
+from utils.provenance_enums import BUNDLE_PROVENANCE_ORIGINS, CLUSTER_PROVENANCE_ORIGINS, LINKAGE_PROVENANCE_ORIGINS
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -60,3 +61,17 @@ def test_trade_event_schema_exposes_provenance_field_groups() -> None:
     assert properties['continuation_confidence'] == {
         'type': ['number', 'string', 'null'],
     }
+
+
+def test_signal_event_schema_origin_enums_are_canonical() -> None:
+    properties = _schema_properties('signal_event.schema.json')
+    assert set(properties['bundle_metric_origin']['enum']) == set(BUNDLE_PROVENANCE_ORIGINS) | {None}
+    assert set(properties['cluster_metric_origin']['enum']) == set(CLUSTER_PROVENANCE_ORIGINS) | {None}
+    assert set(properties['linkage_metric_origin']['enum']) == set(LINKAGE_PROVENANCE_ORIGINS) | {None}
+
+
+def test_trade_event_schema_origin_enums_are_canonical() -> None:
+    properties = _schema_properties('trade_event.schema.json')
+    assert set(properties['bundle_metric_origin']['enum']) == set(BUNDLE_PROVENANCE_ORIGINS) | {None}
+    assert set(properties['cluster_metric_origin']['enum']) == set(CLUSTER_PROVENANCE_ORIGINS) | {None}
+    assert set(properties['linkage_metric_origin']['enum']) == set(LINKAGE_PROVENANCE_ORIGINS) | {None}

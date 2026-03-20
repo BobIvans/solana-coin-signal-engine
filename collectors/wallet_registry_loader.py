@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from utils.provenance_enums import MISSING_PROVENANCE_ORIGIN, WALLET_FAMILY_PROVENANCE_ORIGINS, validate_provenance_origin
+
 from collectors.wallet_seed_import import is_plausible_solana_wallet
 from utils.io import read_json
 
@@ -188,7 +190,7 @@ def _normalize_validated_wallet_record(record: dict[str, Any], *, is_hot: bool) 
         "wallet_family_id": record.get("wallet_family_id"),
         "independent_family_id": record.get("independent_family_id"),
         "wallet_family_confidence": float(record.get("wallet_family_confidence") or 0.0),
-        "wallet_family_origin": str(record.get("wallet_family_origin") or "missing"),
+        "wallet_family_origin": validate_provenance_origin(record.get("wallet_family_origin") or MISSING_PROVENANCE_ORIGIN, allowed=WALLET_FAMILY_PROVENANCE_ORIGINS),
         "wallet_family_reason_codes": _normalize_string_list(record.get("wallet_family_reason_codes") or []),
         "wallet_cluster_id": record.get("wallet_cluster_id"),
         "wallet_family_member_count": int(record.get("wallet_family_member_count") or 0),

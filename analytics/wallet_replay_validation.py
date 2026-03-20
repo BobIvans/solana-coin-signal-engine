@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from utils.io import append_jsonl, ensure_dir, read_json, write_json
+from utils.provenance_enums import MISSING_PROVENANCE_ORIGIN, WALLET_FAMILY_PROVENANCE_ORIGINS, validate_provenance_origin
 
 REPLAY_VALIDATION_CONTRACT_VERSION = "wallet_replay_validation.v1"
 VALIDATED_REGISTRY_CONTRACT_VERSION = "smart_wallet_registry_validated.v1"
@@ -716,7 +717,7 @@ def evaluate_wallet_registry_replay(
                 "wallet_family_id": wallet_record.get("wallet_family_id"),
                 "independent_family_id": wallet_record.get("independent_family_id"),
                 "wallet_family_confidence": _round(wallet_record.get("wallet_family_confidence")) or 0.0,
-                "wallet_family_origin": str(wallet_record.get("wallet_family_origin") or "missing"),
+                "wallet_family_origin": validate_provenance_origin(wallet_record.get("wallet_family_origin") or MISSING_PROVENANCE_ORIGIN, allowed=WALLET_FAMILY_PROVENANCE_ORIGINS),
                 "wallet_family_reason_codes": sorted(wallet_record.get("wallet_family_reason_codes") or []),
                 "wallet_cluster_id": wallet_record.get("wallet_cluster_id"),
                 "wallet_family_member_count": int(wallet_record.get("wallet_family_member_count") or 0),

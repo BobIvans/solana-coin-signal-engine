@@ -9,17 +9,15 @@ from typing import Any
 
 from utils.clock import utc_now_iso
 from utils.logger import log_info, log_warning
+from utils.provenance_enums import (
+    MISSING_PROVENANCE_ORIGIN,
+    WALLET_FAMILY_PROVENANCE_ORIGINS,
+    normalize_provenance_origin,
+)
 
 WALLET_FAMILY_METADATA_CONTRACT_VERSION = "wallet_family_metadata.v1"
 
-WALLET_FAMILY_ORIGINS = {
-    "graph_evidence",
-    "linkage_evidence",
-    "registry_evidence",
-    "mixed_evidence",
-    "heuristic_evidence",
-    "missing",
-}
+WALLET_FAMILY_ORIGINS = set(WALLET_FAMILY_PROVENANCE_ORIGINS)
 WALLET_FAMILY_STATUSES = {"ok", "partial", "missing", "failed"}
 
 REASON_EXPLICIT_FAMILY_HINT = "explicit_family_hint"
@@ -187,7 +185,12 @@ def _member_groups(mapping: dict[str, str]) -> dict[str, list[str]]:
 
 
 def _origin_for_sources(sources: set[str]) -> str:
-    normalized = {source for source in sources if source in WALLET_FAMILY_ORIGINS and source != "missing"}
+    normalized = {
+        normalize_provenance_origin(source)
+        for source in sources
+        if normalize_provenance_origin(source) in WALLET_FAMILY_PROVENANCE_ORIGINS
+        and normalize_provenance_origin(source) != MISSING_PROVENANCE_ORIGIN
+    }
     if not normalized:
         return "missing"
     if len(normalized) > 1:
@@ -339,7 +342,7 @@ def summarize_wallet_family_metadata(
 ) -> dict[str, Any]:
     warnings = warnings or []
     statuses = [str(record.get("wallet_family_status") or "missing") for record in wallet_records]
-    origins = [str(record.get("wallet_family_origin") or "missing") for record in wallet_records]
+    origins = [normalize_provenance_origin(record.get("wallet_family_origin")) for record in wallet_records]
     confidence_values = [float(record.get("wallet_family_confidence") or 0.0) for record in wallet_records if record.get("wallet_family_confidence") is not None]
     broad_ids = {str(record.get("wallet_family_id")) for record in wallet_records if record.get("wallet_family_id")}
     independent_ids = {str(record.get("independent_family_id")) for record in wallet_records if record.get("independent_family_id")}
