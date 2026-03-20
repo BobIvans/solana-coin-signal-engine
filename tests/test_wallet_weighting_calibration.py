@@ -165,19 +165,6 @@ def test_schema_validation(tmp_path: Path):
     _run(paths)
     report = json.loads(paths["out_report"].read_text(encoding="utf-8"))
     recommendation = json.loads(paths["out_recommendation"].read_text(encoding="utf-8"))
-<<<<<<< HEAD
-    report_schema = json.loads((Path(__file__).resolve().parents[1] / "schemas" / "wallet_calibration_report.schema.json").read_text(encoding="utf-8"))
-    recommendation_schema = json.loads((Path(__file__).resolve().parents[1] / "schemas" / "wallet_rollout_recommendation.schema.json").read_text(encoding="utf-8"))
-    report_schema = {
-        **report_schema,
-        "properties": {
-            **(report_schema.get("properties") or {}),
-            "recommendation": recommendation_schema,
-        },
-    }
-    jsonschema.validate(report, report_schema)
-    jsonschema.validate(recommendation, recommendation_schema)
-=======
     schema_dir = Path(__file__).resolve().parents[1] / "schemas"
     report_schema_path = schema_dir / "wallet_calibration_report.schema.json"
     recommendation_schema_path = schema_dir / "wallet_rollout_recommendation.schema.json"
@@ -201,4 +188,3 @@ def test_schema_validation(tmp_path: Path):
         resolver = jsonschema.RefResolver(base_uri=schema_dir.resolve().as_uri() + "/", referrer=report_schema)
         jsonschema.validate(report, report_schema, resolver=resolver)
         jsonschema.validate(recommendation, recommendation_schema)
->>>>>>> origin/main

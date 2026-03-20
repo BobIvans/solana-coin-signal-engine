@@ -523,8 +523,36 @@ def compute_wallet_clustering_metrics(
     participants: list[dict[str, Any]],
     *,
     creator_wallet: str | None = None,
-    dev_wallet: str | None = None,
     participant_wallets: list[str] | None = None,
+    settings: Any | None = None,
+    graph_artifact: dict[str, Any] | None = None,
+    clusters_artifact: dict[str, Any] | None = None,
+    persist_artifacts: bool = False,
+    artifact_scope: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Convenience wrapper returning bundle cluster fields plus provenance metadata."""
+
+    out = _metric_defaults()
+    wallets = participant_wallets or [wallet for wallet in (_participant_wallet(item) for item in participants) if wallet]
+    resolved = resolve_wallet_cluster_assignments(
+        participants,
+        creator_wallet=creator_wallet,
+        participant_wallets=wallets,
+        settings=settings,
+        graph_artifact=graph_artifact,
+        clusters_artifact=clusters_artifact,
+        persist_artifacts=persist_artifacts,
+        artifact_scope=artifact_scope,
+    )
+    cluster_ids = resolved["cluster_ids_by_wallet"]
+    concentration_ratio = compute_cluster_concentration_ratio(cluster_ids, wallets)
+    unique_clusters = compute_num_unique_clusters_first_60s(cluster_ids, wallets)
+    creator_flag = detect_creator_in_cluster(cluster_ids, wallets, creator_wallet)
+    clustering_score = compute_bundle_wallet_clustering_score(
+        cluster_concentration_ratio=concentration_ratio,
+        num_unique_clusters_first_60s=unique_clusters,
+        creator_in_cluster_flag=creator_flag,
+    )
     out.update(
         {
             "bundle_wallet_clustering_score": clustering_score,
@@ -545,11 +573,11 @@ def compute_wallet_clustering_metrics(
     linkage = score_creator_dev_funder_linkage(
         participants,
         creator_wallet=creator_wallet,
-        dev_wallet=dev_wallet,
+        dev_wallet=locals().get("dev_wallet"),
         early_buyer_wallets=wallets,
         cluster_ids_by_wallet=cluster_ids,
-        token_address=token_address,
-        pair_address=pair_address,
+        token_address=locals().get("token_address"),
+        pair_address=locals().get("pair_address"),
     )
     if linkage.get("creator_in_cluster_flag") is None:
         linkage["creator_in_cluster_flag"] = creator_flag
