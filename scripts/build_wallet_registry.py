@@ -12,6 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.append(str(REPO_ROOT))
 
+from analytics.wallet_family_metadata import derive_wallet_family_metadata
 from analytics.wallet_registry_score import (
     ACTIVE_MIN_SCORE,
     DEFAULT_MAX_ACTIVE,
@@ -219,12 +220,16 @@ def build_registry_artifacts(
         record["added_at"] = str(record.get("imported_at") or timestamp)
         record["updated_at"] = timestamp
 
+    family_metadata = derive_wallet_family_metadata(finalized, generated_at=timestamp)
+    finalized = family_metadata["wallet_records"]
+    finalized_by_wallet = {record["wallet"]: record for record in finalized}
+
     watch_wallets = sorted(
-        [record for record in finalized if record["status"] in {"active", "watch"}],
+        [finalized_by_wallet[record["wallet"]] for record in finalized if record["status"] in {"active", "watch"}],
         key=_watch_sort_key,
     )[: max(0, max_watchlist)]
     hot_wallets = sorted(
-        [record for record in finalized if record["status"] == "active" and record["tier"] != "rejected"],
+        [finalized_by_wallet[record["wallet"]] for record in finalized if record["status"] == "active" and record["tier"] != "rejected"],
         key=_hot_sort_key,
     )[: max(0, max_hot)]
 
@@ -233,6 +238,8 @@ def build_registry_artifacts(
         "generated_at": timestamp,
         "input_summary": loaded.get("input_summary") or {},
         "registry_summary": _registry_summary(finalized, len(loaded["candidates"])),
+        "wallet_family_summary": family_metadata["summary"],
+        "wallet_family_assignments": family_metadata["family_assignments"],
         "wallets": finalized,
     }
     watch_payload = {

@@ -233,3 +233,31 @@ Key points:
 - bundle-stage enrichment keeps linkage fields null-filled when evidence is unavailable so downstream contracts stay stable;
 - confidence and provenance are exposed through `linkage_confidence`, `linkage_reason_codes`, `linkage_metric_origin`, and `linkage_status`;
 - this PR does **not** claim identity certainty, and weak evidence stays low-confidence.
+
+## PR-WAL-7 wallet family metadata
+
+PR-WAL-7 adds a deterministic wallet family metadata layer that enriches wallet-registry records without redesigning the registry or claiming hard real-world identity certainty.
+
+Highlights:
+
+- broader `wallet_family_id` plus stricter `independent_family_id`
+- provenance-aware confidence via `wallet_family_origin`, `wallet_family_confidence`, `wallet_family_reason_codes`, and `wallet_family_status`
+- additive registry integration through `scripts/build_wallet_registry.py`
+- validated-registry propagation for downstream enrichment consumers
+- smoke outputs under `data/smoke/`
+
+Evidence lanes include cluster overlap, shared funders, repeated launch overlap, registry hints, linkage-group hints, and creator/dev overlap flags.
+Missing or malformed evidence degrades safely instead of inventing strong family assignments.
+
+Run the wallet family smoke:
+
+```bash
+python scripts/wallet_family_metadata_smoke.py
+```
+
+Artifacts written by default:
+
+- `data/smoke/wallet_family_metadata.smoke.json`
+- `data/smoke/wallet_family_summary.json`
+
+See `docs/wallet_family_metadata.md` for the evidence model, the difference between broad vs strict family ids, and the fallback policy.
