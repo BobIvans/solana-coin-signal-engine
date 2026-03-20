@@ -10,6 +10,7 @@ from analytics.wallet_clustering import (
     compute_bundle_wallet_clustering_score,
     compute_wallet_clustering_metrics,
     infer_wallet_cluster_keys,
+    resolve_wallet_cluster_assignments,
 )
 
 
@@ -110,3 +111,58 @@ def test_cluster_key_assignment_is_deterministic_for_repeated_group_pairs():
         num_unique_clusters_first_60s=1,
         creator_in_cluster_flag=False,
     ) == 0.9
+
+
+def test_graph_windowing_excludes_later_participants_from_cluster_metrics():
+    participants = [
+        {"wallet": "wallet_a", "funder": "shared_funder", "group_id": ["slot:1"], "launch_id": "launch_alpha", "timestamp": 1000},
+        {"wallet": "wallet_b", "funder": "shared_funder", "group_id": ["slot:1"], "launch_id": "launch_alpha", "timestamp": 1010},
+        {"wallet": "wallet_c", "funder": "shared_funder", "group_id": ["slot:1"], "launch_id": "launch_alpha", "timestamp": 1020},
+        {"wallet": "wallet_d", "funder": "retail_1", "group_id": ["slot:9"], "launch_id": "launch_late", "timestamp": 1700},
+        {"wallet": "wallet_e", "funder": "retail_2", "group_id": ["slot:10"], "launch_id": "launch_late", "timestamp": 1710},
+        {"wallet": "wallet_f", "funder": "retail_3", "group_id": ["slot:11"], "launch_id": "launch_late", "timestamp": 1720},
+        {"wallet": "wallet_g", "funder": "retail_4", "group_id": ["slot:12"], "launch_id": "launch_late", "timestamp": 1730},
+    ]
+
+    metrics = compute_wallet_clustering_metrics(
+        participants,
+        participant_wallets=[item["wallet"] for item in participants],
+        artifact_scope={"bundle_window_anchor_ts": 1000, "bundle_window_sec": 60},
+    )
+
+    assert metrics["cluster_concentration_ratio"] == 1.0
+    assert metrics["num_unique_clusters_first_60s"] == 1
+    assert metrics["graph_cluster_id_count"] == 1
+    assert metrics["dominant_cluster_id"] is not None
+
+
+def test_graph_windowing_drops_missing_timestamps_from_strict_path():
+    participants = [
+        {"wallet": "wallet_a", "funder": "shared_funder", "group_id": ["slot:1"], "launch_id": "launch_alpha", "timestamp": 1000},
+        {"wallet": "wallet_b", "funder": "shared_funder", "group_id": ["slot:1"], "launch_id": "launch_alpha", "timestamp": 1015},
+        {"wallet": "wallet_c", "funder": "shared_funder", "group_id": ["slot:1"], "launch_id": "launch_alpha"},
+        {"wallet": "wallet_d", "funder": "shared_funder", "group_id": ["slot:1"], "launch_id": "launch_alpha", "time": "not-a-timestamp"},
+    ]
+
+    resolved = resolve_wallet_cluster_assignments(
+        participants,
+        participant_wallets=[item["wallet"] for item in participants],
+        artifact_scope={"bundle_window_anchor_ts": 1000, "bundle_window_sec": 60},
+    )
+
+    assert set(resolved["cluster_ids_by_wallet"]) == {"wallet_a", "wallet_b"}
+    assert "window_filter_dropped_missing_timestamp:2" in resolved["warnings"]
+
+
+def test_graph_windowing_warns_when_scope_unavailable():
+    participants = [
+        {"wallet": "wallet_a", "funder": "shared_funder", "timestamp": 1000},
+        {"wallet": "wallet_b", "funder": "shared_funder", "timestamp": 1010},
+    ]
+
+    resolved = resolve_wallet_cluster_assignments(
+        participants,
+        participant_wallets=[item["wallet"] for item in participants],
+    )
+
+    assert "window_scope_unavailable" in resolved["warnings"]

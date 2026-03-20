@@ -184,3 +184,28 @@ def test_explicit_scoped_artifact_is_ignored_when_scope_mismatches():
     assert metrics["cluster_metric_origin"] == "graph_evidence"
     assert metrics["cluster_evidence_source"] == "inline_graph_builder"
     assert metrics["dominant_cluster_id"] != "cluster_stale"
+
+
+class HeuristicOnlySettings(DummySettings):
+    WALLET_GRAPH_ENABLED = False
+
+
+def test_windowed_heuristic_fallback_ignores_late_out_of_window_wallets():
+    participants = [
+        {"wallet": "wallet_a", "group_id": ["slot:1", "slot:2"], "timestamp": 1000},
+        {"wallet": "wallet_b", "group_id": ["slot:1", "slot:2"], "timestamp": 1010},
+        {"wallet": "wallet_c", "group_id": ["slot:9", "slot:10"], "timestamp": 1700},
+        {"wallet": "wallet_d", "group_id": ["slot:9", "slot:10"], "timestamp": 1710},
+    ]
+
+    metrics = compute_wallet_clustering_metrics(
+        participants,
+        participant_wallets=[item["wallet"] for item in participants],
+        settings=HeuristicOnlySettings(),
+        artifact_scope={"bundle_window_anchor_ts": 1000, "bundle_window_sec": 60},
+    )
+
+    assert metrics["cluster_metric_origin"] == "heuristic_fallback"
+    assert metrics["cluster_evidence_source"] == "heuristic_keys"
+    assert metrics["cluster_concentration_ratio"] == 1.0
+    assert metrics["num_unique_clusters_first_60s"] == 1
