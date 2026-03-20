@@ -69,6 +69,28 @@ python scripts/historical_replay_smoke.py
 
 This writes deterministic smoke outputs under `data/smoke/`.
 
+## PR-RUN-1 runtime signal consumption
+
+This repository also contains the runtime promotion loop and related guards/reporting under `scripts/run_promotion_loop.py` and `src/promotion/`.
+
+Runtime consumes local signal artifacts conservatively: missing or incomplete signal evidence should degrade safely and skip unusable rows rather than inventing paper trades. This replay PR does not change runtime promotion behavior, but it keeps the README section that would otherwise conflict when replay and runtime docs are merged together.
+
+## PR-10 post-run analyzer
+
+PR-10 adds a post-run analytics layer over paper-trading artifacts:
+
+- reconstructs closed position lifecycle from `trades.jsonl` + `positions.json`
+- computes portfolio/regime/exit/friction metrics
+- computes descriptive metric correlations vs PnL
+- emits conservative machine-readable recommendations
+- writes markdown report with caveats and sample warnings
+
+Run smoke:
+
+```bash
+python scripts/post_run_analyzer_smoke.py --base-dir data/smoke/post_run
+```
+
 ## Other smoke scripts
 
 ```bash
