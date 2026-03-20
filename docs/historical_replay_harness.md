@@ -1,6 +1,12 @@
 # Historical replay harness
 
-The historical replay harness replaces the old replay shim with an evidence-first path that reconstructs token lifecycles from recorded local artifacts.
+The historical replay harness is the only supported replay path in this repository. It replaces the old replay shim with an evidence-first path that reconstructs token lifecycles from recorded local artifacts.
+
+## Removal of the stale synthetic simulator
+
+The old synthetic replay helper at `src/replay/simulator.py` has been removed. Future contributors must not reintroduce a separate synthetic replay module as a default path, convenience fallback, or hidden import surface.
+
+Any smoke or degraded replay behavior must continue to flow through `src/replay/historical_replay_harness.py`, with explicit provenance/status labeling in the emitted artifacts. Synthetic PnL, synthetic hold-time generation, and synthetic exit reasons must not return as an alternative replay engine beside the historical harness.
 
 ## What makes replay historical here
 
