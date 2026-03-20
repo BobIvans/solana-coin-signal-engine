@@ -7,6 +7,7 @@ from trading.exit_logic import decide_exit
 
 
 class DummySettings:
+    KILL_SWITCH_FILE = "runs/runtime/kill_switch.flag"
     EXIT_ENGINE_FAILCLOSED = True
     EXIT_DEV_SELL_HARD = True
     EXIT_RUG_FLAG_HARD = True
@@ -75,6 +76,20 @@ def test_failclosed_missing_current_state_forces_safe_exit():
     assert out["exit_decision"] == "FULL_EXIT"
     assert out["exit_reason"] == "missing_current_state_failclosed"
     assert out["exit_status"] == "partial"
+
+
+def test_decide_exit_propagates_kill_switch_into_hard_exit(tmp_path):
+    kill_switch_path = tmp_path / "kill_switch.flag"
+    kill_switch_path.write_text("armed\n", encoding="utf-8")
+
+    class KillSwitchSettings(DummySettings):
+        KILL_SWITCH_FILE = str(kill_switch_path)
+
+    out = decide_exit(_position(), _current(), KillSwitchSettings())
+    assert out["exit_decision"] == "FULL_EXIT"
+    assert out["exit_reason"] == "kill_switch_triggered"
+    assert out["exit_status"] == "ok"
+    assert "kill_switch_triggered" in out["exit_flags"]
 
 
 def test_valid_hold_stays_hold():
