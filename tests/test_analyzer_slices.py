@@ -84,6 +84,19 @@ def _rich_rows() -> list[dict]:
                 "size_sol": size_sol,
                 "exit_reason_final": exit_reason,
                 "partial_exit_count": partial_exit_count,
+                "evidence_quality_score": 0.82 if pnl > 0 else 0.38,
+                "sizing_confidence": 0.78 if pnl > 0 else 0.36,
+                "evidence_conflict_flag": position_id in {"t1", "t12"},
+                "partial_evidence_flag": position_id in {"t1", "t11"},
+                "continuation_status": "partial" if position_id in {"t2", "t12"} else "ok",
+                "bundle_evidence_status": "partial" if position_id == "t3" else "ok",
+                "cluster_evidence_status": "partial" if position_id == "t1" else "ok",
+                "linkage_status": "partial" if position_id == "t2" else "ok",
+                "runtime_signal_status": "partial" if position_id == "t3" else "ok",
+                "tx_batch_status": "partial" if position_id == "t12" else "ok",
+                "linkage_risk_score": 0.72 if pnl < 0 else 0.18,
+                "linkage_confidence": "low" if pnl < 0 else "high",
+                "sizing_reason_codes": ["low_confidence"] if position_id in {"t1", "t2", "t3", "t11", "t12"} else ["supported"],
             }
         )
     return rows
@@ -109,10 +122,95 @@ def test_compute_analyzer_slices_rich_groups():
     assert degraded["degraded_x_vs_healthy_x"]["degraded_sample_size"] >= 1
     assert degraded["degraded_x_salvage_cases"]["sample_size"] >= 1
 
+    evidence_quality = payload["slice_groups"]["evidence_quality"]
+    assert payload["evidence_quality_slices"] == evidence_quality
+    assert evidence_quality["partial_evidence_trades"]["sample_size"] >= 1
+    assert evidence_quality["low_confidence_evidence_trades"]["sample_size"] >= 1
+    assert evidence_quality["evidence_conflict_trades"]["sample_size"] >= 1
+    assert evidence_quality["degraded_x_trades"]["sample_size"] >= 1
+    assert evidence_quality["degraded_x_salvage_cases"]["sample_size"] >= 1
+    assert evidence_quality["linkage_risk_underperformance"]["expectancy"] < 0
+
     exit_failure = payload["slice_groups"]["exit_failure"]
     assert exit_failure["creator_cluster_exit_risk_performance"]["sample_size"] >= 2
     assert payload["recommendation_inputs"]["manual_only"] is True
     assert payload["recommendation_inputs"]["actionable_slices"]
+
+
+def test_evidence_quality_slices_bucket_rows_deterministically():
+    rows = [
+        {
+            "position_id": "partial-flag",
+            "net_pnl_pct": -4.0,
+            "partial_evidence_flag": True,
+            "evidence_quality_score": 0.35,
+            "sizing_confidence": 0.34,
+            "evidence_conflict_flag": True,
+            "x_status": "degraded",
+            "linkage_risk_score": 0.72,
+        },
+        {
+            "position_id": "partial-status",
+            "net_pnl_pct": -2.0,
+            "continuation_status": "partial",
+            "evidence_quality_score": 0.62,
+            "sizing_confidence": 0.60,
+            "x_status": "ok",
+            "linkage_risk_score": 0.20,
+        },
+        {
+            "position_id": "low-confidence-only",
+            "net_pnl_pct": 1.0,
+            "evidence_quality_score": 0.41,
+            "sizing_confidence": 0.70,
+            "x_status": "ok",
+            "linkage_risk_score": 0.20,
+        },
+        {
+            "position_id": "degraded-salvage",
+            "net_pnl_pct": 3.5,
+            "evidence_quality_score": 0.66,
+            "sizing_confidence": 0.64,
+            "x_status": "degraded",
+            "linkage_risk_score": 0.18,
+        },
+        {
+            "position_id": "linkage-risk-underperform",
+            "net_pnl_pct": -1.5,
+            "evidence_quality_score": 0.70,
+            "sizing_confidence": 0.68,
+            "x_status": "ok",
+            "linkage_risk_score": 0.61,
+        },
+        {
+            "position_id": "healthy",
+            "net_pnl_pct": 4.0,
+            "evidence_quality_score": 0.88,
+            "sizing_confidence": 0.82,
+            "x_status": "ok",
+            "linkage_risk_score": 0.12,
+        },
+    ]
+
+    payload = compute_analyzer_slices(rows, min_sample=1, run_id="evidence-quality", source="fixture")
+    group = payload["slice_groups"]["evidence_quality"]
+
+    assert set(payload["evidence_quality_slices"]) >= {
+        "partial_evidence_trades",
+        "low_confidence_evidence_trades",
+        "evidence_conflict_trades",
+        "degraded_x_trades",
+        "degraded_x_salvage_cases",
+        "linkage_risk_underperformance",
+    }
+    assert group["partial_evidence_trades"]["sample_size"] == 2
+    assert group["low_confidence_evidence_trades"]["sample_size"] == 2
+    assert group["evidence_conflict_trades"]["sample_size"] == 1
+    assert group["degraded_x_trades"]["sample_size"] == 2
+    assert group["degraded_x_salvage_cases"]["sample_size"] == 1
+    assert group["linkage_risk_underperformance"]["sample_size"] == 2
+    assert group["healthy_evidence_trades"]["sample_size"] == 1
+    assert "degraded-X plus positive realized net_pnl_pct" in group["degraded_x_salvage_cases"]["interpretation"]
 
 
 def test_run_post_run_analysis_writes_analyzer_slice_outputs(tmp_path):
@@ -166,6 +264,8 @@ def test_run_post_run_analysis_writes_analyzer_slice_outputs(tmp_path):
     assert analyzer_slices_path.exists()
     payload = read_json(analyzer_slices_path)
     assert payload["slice_groups"]["cluster_bundle"]["creator_linked_underperformance"]["sample_size"] >= 2
+    assert payload["slice_groups"]["evidence_quality"]["degraded_x_trades"]["sample_size"] >= 1
+    assert payload["evidence_quality_slices"]["linkage_risk_underperformance"]["sample_size"] >= 1
 
     recommendations = read_json(Path(result["recommendations_path"]))
     assert recommendations["analyzer_slices"]["metadata"]["contract_version"] == "analyzer_slices.v1"
@@ -175,3 +275,4 @@ def test_run_post_run_analysis_writes_analyzer_slice_outputs(tmp_path):
     assert "## regime diagnostics" in report
     assert "## continuation diagnostics" in report
     assert "## degraded X diagnostics" in report
+    assert "## evidence quality diagnostics" in report

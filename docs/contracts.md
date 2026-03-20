@@ -238,6 +238,19 @@ Parity uses a pragmatic required subset derived from `analytics/analyzer_matrix.
 - `hold_sec`
 - `net_pnl_pct`
 - `bundle_count_first_60s`
+
+The replay feature matrix is also the preferred source for analyzer evidence-quality slices. When available, post-run analyzer diagnostics may consume existing fields such as:
+- `partial_evidence_flag`
+- `evidence_quality_score`
+- `evidence_conflict_flag`
+- `sizing_confidence`
+- `x_status`
+- `linkage_risk_score`
+- `bundle_evidence_status`
+- `cluster_evidence_status`
+- `continuation_status`
+
+These fields remain analysis-only in the analyzer slice layer; they are not mutated by the analyzer itself.
 - `bundle_size_value`
 - `net_unique_buyers_60s`
 - `liquidity_refill_ratio_120s`

@@ -19,3 +19,4 @@ def test_analyzer_slices_smoke_script(tmp_path):
     analyzer_slices = json.loads(Path(payload["analyzer_slices_path"]).read_text(encoding="utf-8"))
     assert analyzer_slices["metadata"]["contract_version"] == "analyzer_slices.v1"
     assert analyzer_slices["slice_groups"]["regime"]["trend_promoted_but_failed_fast"]["sample_size"] >= 1
+    assert "evidence_quality" in analyzer_slices["slice_groups"]

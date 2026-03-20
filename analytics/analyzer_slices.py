@@ -11,6 +11,10 @@ _DEFAULT_MIN_SAMPLE = 5
 _MIN_MEANINGFUL_EDGE_PCT = 1.0
 _DEGRADED_X_STATUSES = {"degraded", "degraded_x", "degraded-x"}
 _HEALTHY_X_STATUSES = {"healthy", "ok", "strong", "validated"}
+_PARTIAL_EVIDENCE_STATUSES = {"partial"}
+_LOW_CONFIDENCE_LABELS = {"low", "weak"}
+_ELEVATED_LINKAGE_RISK_THRESHOLD = 0.55
+_LOW_EVIDENCE_CONFIDENCE_THRESHOLD = 0.45
 
 
 # ---------------------------------------------------------------------------
@@ -119,8 +123,90 @@ def _x_status(row: dict[str, Any]) -> str | None:
     return status.lower() if status else None
 
 
+def _normalized_status(row: dict[str, Any], *fields: str) -> str | None:
+    value = _safe_str(_coalesce(row, *fields))
+    return value.lower() if value else None
+
+
+def _normalized_reason_codes(row: dict[str, Any], *fields: str) -> list[str]:
+    value = _coalesce(row, *fields)
+    if value in (None, ""):
+        return []
+    if isinstance(value, str):
+        raw_items = [part.strip() for part in value.split(",")]
+    elif isinstance(value, (list, tuple, set)):
+        raw_items = [str(part).strip() for part in value]
+    else:
+        raw_items = [str(value).strip()]
+    return [item.lower() for item in raw_items if item]
+
+
 def _position_id(row: dict[str, Any]) -> str:
     return str(_coalesce(row, "position_id", "id", "token_address") or "unknown")
+
+
+def _is_partial_evidence_row(row: dict[str, Any]) -> bool:
+    if _safe_bool(row.get("partial_evidence_flag")) is True:
+        return True
+    for status in (
+        _normalized_status(row, "bundle_evidence_status"),
+        _normalized_status(row, "cluster_evidence_status"),
+        _normalized_status(row, "continuation_status"),
+        _normalized_status(row, "linkage_status"),
+        _normalized_status(row, "runtime_signal_status"),
+        _normalized_status(row, "tx_batch_status"),
+    ):
+        if status in _PARTIAL_EVIDENCE_STATUSES:
+            return True
+    return False
+
+
+def _is_low_confidence_evidence_row(row: dict[str, Any]) -> bool:
+    evidence_quality = _safe_float(row.get("evidence_quality_score"))
+    sizing_confidence = _safe_float(row.get("sizing_confidence"))
+    continuation_confidence = _safe_float(row.get("continuation_confidence"))
+    linkage_confidence = _safe_float(row.get("linkage_confidence"))
+    numeric_confidences = [
+        value
+        for value in (evidence_quality, sizing_confidence, continuation_confidence, linkage_confidence)
+        if value is not None
+    ]
+    if numeric_confidences and min(numeric_confidences) < _LOW_EVIDENCE_CONFIDENCE_THRESHOLD:
+        return True
+
+    linkage_label = _normalized_status(row, "linkage_confidence")
+    continuation_label = _normalized_status(row, "continuation_confidence")
+    if linkage_label in _LOW_CONFIDENCE_LABELS or continuation_label in _LOW_CONFIDENCE_LABELS:
+        return True
+
+    for code in _normalized_reason_codes(row, "sizing_reason_codes", "linkage_reason_codes"):
+        if "low_confidence" in code or code in {"weak_evidence_quality", "cluster_confidence_low"}:
+            return True
+    return False
+
+
+def _is_evidence_conflict_row(row: dict[str, Any]) -> bool:
+    return _safe_bool(row.get("evidence_conflict_flag")) is True
+
+
+def _is_linkage_risk_underperformance_row(row: dict[str, Any]) -> bool:
+    linkage_risk = max(
+        [
+            value
+            for value in (
+                _safe_float(row.get("linkage_risk_score")),
+                _safe_float(row.get("creator_link_risk_score")),
+                0.0,
+            )
+            if value is not None
+        ]
+    )
+    if linkage_risk < _ELEVATED_LINKAGE_RISK_THRESHOLD:
+        return False
+    pnl = _net_pnl_pct(row)
+    if pnl is None:
+        return False
+    return pnl <= 0.0
 
 
 def _supporting_rows(rows: list[dict[str, Any]], limit: int = 8) -> list[str]:
@@ -577,6 +663,79 @@ def compute_degraded_x_slices(rows: list[dict[str, Any]], *, min_sample: int = _
     return output
 
 
+def compute_evidence_quality_slices(rows: list[dict[str, Any]], *, min_sample: int = _DEFAULT_MIN_SAMPLE) -> dict[str, dict[str, Any]]:
+    partial_rows = _pick_rows(rows, _is_partial_evidence_row)
+    low_confidence_rows = _pick_rows(rows, _is_low_confidence_evidence_row)
+    evidence_conflict_rows = _pick_rows(rows, _is_evidence_conflict_row)
+    degraded_x_rows = _pick_rows(rows, lambda row: _x_status(row) in _DEGRADED_X_STATUSES)
+    degraded_x_salvage_rows = _pick_rows(degraded_x_rows, lambda row: (_net_pnl_pct(row) or 0.0) > 0.0)
+    linkage_risk_rows = _pick_rows(rows, _is_linkage_risk_underperformance_row)
+    healthy_rows = _pick_rows(
+        rows,
+        lambda row: not _is_partial_evidence_row(row)
+        and not _is_low_confidence_evidence_row(row)
+        and not _is_evidence_conflict_row(row)
+        and (_x_status(row) not in _DEGRADED_X_STATUSES)
+        and not _is_linkage_risk_underperformance_row(row),
+    )
+
+    return {
+        "partial_evidence_trades": _summarize_slice(
+            "partial_evidence_trades",
+            partial_rows,
+            min_sample=min_sample,
+            negative_hint="review whether partial-evidence rows need stricter SCALP-only routing or smaller size",
+            interpretation_suffix="This bucket is direct-field-driven: explicit partial flags or partial core evidence statuses qualify a row.",
+        ),
+        "low_confidence_evidence_trades": _summarize_slice(
+            "low_confidence_evidence_trades",
+            low_confidence_rows,
+            min_sample=min_sample,
+            negative_hint="review whether low-confidence evidence should stay reduced-size even when other metrics look supportive",
+            interpretation_suffix="This bucket prefers existing scalar confidence fields and low-confidence reason codes over opaque heuristics.",
+        ),
+        "evidence_conflict_trades": _summarize_slice(
+            "evidence_conflict_trades",
+            evidence_conflict_rows,
+            min_sample=min_sample,
+            required_fields=["evidence_conflict_flag"],
+            negative_hint="review whether conflicting evidence should trigger stronger caution or smaller size",
+            interpretation_suffix="Rows are included only when the artifact explicitly marks evidence_conflict_flag=true.",
+        ),
+        "degraded_x_trades": _summarize_slice(
+            "degraded_x_trades",
+            degraded_x_rows,
+            min_sample=min_sample,
+            required_fields=["x_status"],
+            negative_hint="review whether degraded-X rows still deserve reduced-size-only handling",
+            interpretation_suffix="Rows are included directly from x_status=degraded-style states.",
+        ),
+        "degraded_x_salvage_cases": _summarize_slice(
+            "degraded_x_salvage_cases",
+            degraded_x_salvage_rows,
+            min_sample=min_sample,
+            required_fields=["x_status"],
+            positive_hint="some degraded-X rows still realize positive pnl and can be reviewed as salvage rather than automatic rejects",
+            interpretation_suffix="Salvage uses a simple calibration rule: degraded-X plus positive realized net_pnl_pct.",
+        ),
+        "linkage_risk_underperformance": _summarize_slice(
+            "linkage_risk_underperformance",
+            linkage_risk_rows,
+            min_sample=min_sample,
+            negative_hint="review whether elevated linkage/manipulation risk needs stronger penalty or smaller size",
+            interpretation_suffix="Rows require elevated linkage risk and non-positive realized pnl so the slice stays easy to reproduce.",
+        ),
+        "healthy_evidence_trades": _summarize_slice(
+            "healthy_evidence_trades",
+            healthy_rows,
+            min_sample=min_sample,
+            required_fields=["net_pnl_pct"],
+            positive_hint="healthy-evidence rows can serve as the manual comparison baseline for degraded or conflicting buckets",
+            interpretation_suffix="This optional comparison bucket excludes degraded, partial, conflicting, low-confidence, and elevated-linkage-risk underperformance rows.",
+        ),
+    }
+
+
 def compute_exit_failure_slices(rows: list[dict[str, Any]], *, min_sample: int = _DEFAULT_MIN_SAMPLE) -> dict[str, dict[str, Any]]:
     cluster_dump = _pick_rows(rows, lambda row: _exit_reason(row) in {"cluster_dump", "cluster_dump_exit"})
     creator_cluster_exit = _pick_rows(rows, lambda row: _exit_reason(row) in {"creator_cluster_risk", "creator_cluster_exit"} or ((_safe_bool(row.get("creator_in_cluster_flag")) is True) and (_net_pnl_pct(row) or 0.0) <= 0))
@@ -677,12 +836,14 @@ def compute_analyzer_slices(
     cluster_bundle = compute_cluster_bundle_slices(rows, min_sample=min_sample)
     continuation = compute_continuation_slices(rows, min_sample=min_sample)
     degraded_x = compute_degraded_x_slices(rows, min_sample=min_sample)
+    evidence_quality = compute_evidence_quality_slices(rows, min_sample=min_sample)
     exit_failure = compute_exit_failure_slices(rows, min_sample=min_sample)
     slice_groups = {
         "regime": regime,
         "cluster_bundle": cluster_bundle,
         "continuation": continuation,
         "degraded_x": degraded_x,
+        "evidence_quality": evidence_quality,
         "exit_failure": exit_failure,
     }
     recommendation_inputs = compute_recommendation_inputs_from_slices(slice_groups, min_sample=min_sample)
@@ -702,6 +863,7 @@ def compute_analyzer_slices(
             "row_count": len(rows),
         },
         "slice_groups": slice_groups,
+        "evidence_quality_slices": evidence_quality,
         "recommendation_inputs": recommendation_inputs,
         "status": "ok",
         "warnings": recommendation_inputs.get("warnings", []),
@@ -720,6 +882,7 @@ __all__ = [
     "compute_cluster_bundle_slices",
     "compute_continuation_slices",
     "compute_degraded_x_slices",
+    "compute_evidence_quality_slices",
     "compute_exit_failure_slices",
     "compute_recommendation_inputs_from_slices",
 ]

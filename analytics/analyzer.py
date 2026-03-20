@@ -268,6 +268,7 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
         ("cluster_bundle", "analyzer_cluster_bundle_slices_computed"),
         ("continuation", "analyzer_continuation_slices_computed"),
         ("degraded_x", "analyzer_degraded_x_slices_computed"),
+        ("evidence_quality", "analyzer_evidence_quality_slices_computed"),
         ("exit_failure", "analyzer_exit_failure_slices_computed"),
     ]:
         group_payload = analyzer_slices.get("slice_groups", {}).get(group_name, {})
