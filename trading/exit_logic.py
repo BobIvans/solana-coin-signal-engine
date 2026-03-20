@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.promotion.kill_switch import is_kill_switch_active
 from trading.exit_rules import evaluate_hard_exit, evaluate_scalp_exit, evaluate_trend_exit
 from trading.exit_snapshot import build_exit_snapshot
 from trading.position_monitor import compute_hold_sec, compute_pnl_pct, compute_position_deltas
@@ -81,6 +82,15 @@ def _hydrate_current_state(position_ctx: dict[str, Any], current_ctx: dict[str, 
     return hydrated_ctx, resolution
 
 
+def _kill_switch_config_from_settings(settings: Any) -> dict[str, dict[str, str]]:
+    configured_path = getattr(settings, "KILL_SWITCH_FILE", None) or getattr(settings, "kill_switch_file", None)
+    return {"safety": {"kill_switch_file": str(configured_path or "runs/runtime/kill_switch.flag")}}
+
+
+def _resolve_kill_switch_active(settings: Any) -> bool:
+    return is_kill_switch_active(_kill_switch_config_from_settings(settings))
+
+
 def decide_exit(position_ctx: dict, current_ctx: dict, settings: Any) -> dict:
     hydrated_ctx, resolution = _hydrate_current_state(position_ctx, current_ctx)
     now_ts = str(hydrated_ctx.get("now_ts") or hydrated_ctx.get("observed_at") or utc_now_iso())
@@ -91,12 +101,19 @@ def decide_exit(position_ctx: dict, current_ctx: dict, settings: Any) -> dict:
     pnl_pct = compute_pnl_pct(entry_price, current_price)
 
     deltas = compute_position_deltas(dict(position_ctx.get("entry_snapshot") or {}), hydrated_ctx)
+    kill_switch_config = _kill_switch_config_from_settings(settings)
     current_eval_ctx = {
         **hydrated_ctx,
         "hold_sec": hold_sec,
         "pnl_pct": pnl_pct,
+        "kill_switch_active": _resolve_kill_switch_active(settings),
+        "kill_switch_file": kill_switch_config["safety"]["kill_switch_file"],
         **deltas,
     }
+
+    if current_eval_ctx["kill_switch_active"]:
+        decision = evaluate_hard_exit(position_ctx, current_eval_ctx, settings)
+        return _finalize(position_ctx, current_eval_ctx, settings, decision, hold_sec, pnl_pct, now_ts)
 
     warnings: list[str] = []
     if resolution["degraded_current_state"]:

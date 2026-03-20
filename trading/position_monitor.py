@@ -84,7 +84,12 @@ def run_position_monitor(positions: list[dict], current_states: list[dict], sett
             event = "exit_partial_triggered"
         elif decision["exit_decision"] == "FULL_EXIT":
             event = "exit_full_triggered"
-        if decision.get("exit_reason") in {"dev_sell_detected", "rug_flag_triggered", "missing_current_state_failclosed"}:
+        if decision.get("exit_reason") in {
+            "dev_sell_detected",
+            "rug_flag_triggered",
+            "missing_current_state_failclosed",
+            "kill_switch_triggered",
+        }:
             append_jsonl(
                 events_path,
                 {

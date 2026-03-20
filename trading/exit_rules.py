@@ -479,6 +479,9 @@ def detect_linkage_exit_risk(position_ctx: dict[str, Any], current_ctx: dict[str
 
 
 def evaluate_hard_exit(position_ctx: dict, current_ctx: dict, settings: Any) -> dict:
+    if _to_bool(current_ctx.get("kill_switch_active")):
+        return _full("kill_switch_triggered", ["kill_switch_triggered"])
+
     dev_sell = _to_float(
         _current_or_entry(position_ctx, current_ctx, "dev_sell_pressure_now", "dev_sell_pressure_5m")
     )

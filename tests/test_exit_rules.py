@@ -7,6 +7,7 @@ from trading.exit_rules import evaluate_hard_exit, evaluate_scalp_exit, evaluate
 
 
 class DummySettings:
+    KILL_SWITCH_FILE = "runs/runtime/kill_switch.flag"
     EXIT_DEV_SELL_HARD = True
     EXIT_RUG_FLAG_HARD = True
     EXIT_SCALP_STOP_LOSS_PCT = -10
@@ -52,6 +53,22 @@ def test_hard_exit_rug_uses_entry_fallback():
     out = evaluate_hard_exit(position, {}, DummySettings())
     assert out["exit_decision"] == "FULL_EXIT"
     assert out["exit_reason"] == "rug_flag_triggered"
+
+
+def test_evaluate_hard_exit_kill_switch_forces_full_exit_before_other_rules():
+    out = evaluate_hard_exit(
+        {},
+        {
+            "kill_switch_active": True,
+            "rug_flag_now": True,
+            "dev_sell_pressure_now": 1.0,
+            "cluster_sell_concentration_120s": 0.95,
+        },
+        DummySettings(),
+    )
+    assert out["exit_decision"] == "FULL_EXIT"
+    assert out["exit_reason"] == "kill_switch_triggered"
+    assert out["exit_flags"] == ["kill_switch_triggered"]
 
 
 def test_scalp_recheck_momentum_decay_full_exit():
