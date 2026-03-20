@@ -49,6 +49,33 @@ Hard exits always win over partial-profit logic.
   - partial 2 at `EXIT_TREND_PARTIAL2_PCT` (`exit_fraction=0.50`)
 - partials are stateful and do not repeat (`partial_1_taken` / `partial_2_taken` or `partials_taken`)
 
+## Current-state resilience
+
+### Critical live field
+
+- `price_usd_now`
+
+### Degradable / sticky fields
+
+- `buy_pressure_now`
+- `volume_velocity_now`
+- `liquidity_usd_now`
+- `x_validation_score_now`
+- `x_status_now`
+- `bundle_cluster_score_now`
+- `dev_sell_pressure_now`
+- `rug_flag_now`
+
+### Policy
+
+- missing critical live field + `EXIT_ENGINE_FAILCLOSED=true` => `FULL_EXIT` with `exit_reason=missing_current_state_failclosed`
+- missing degradable fields do **not** auto-liquidate the position
+- the engine resolves degradable fields through current-payload aliases first, then `entry_snapshot` fallback where available
+- degraded polls are labeled honestly with:
+  - `exit_status=partial`
+  - `exit_warnings` markers such as `degraded_current_state_fields`, `fallback_<field>`, and `missing_degradable_<field>`
+- live price never falls back to `entry_snapshot`; this is graceful degradation, not silent optimism
+
 ## Snapshot contract
 
 Each decision includes `exit_snapshot` with load-bearing fields:
@@ -88,13 +115,13 @@ Events include:
 
 ## Fail-closed behavior
 
-When required current-state fields are missing and `EXIT_ENGINE_FAILCLOSED=true`, the engine emits a forced safe decision:
+When the critical live field is missing and `EXIT_ENGINE_FAILCLOSED=true`, the engine emits a forced safe decision:
 
 - `exit_decision=FULL_EXIT`
 - `exit_reason=missing_current_state_failclosed`
 - `exit_status=partial`
 
-This prevents optimistic silent `HOLD` on incomplete data.
+When only degradable fields are missing, the engine continues evaluation with alias / `entry_snapshot` fallback where possible and emits explicit degraded warnings instead of panic liquidation. This prevents optimistic silent `HOLD` on incomplete data.
 
 ## Kill switch liquidation
 

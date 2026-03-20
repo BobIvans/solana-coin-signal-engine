@@ -11,8 +11,10 @@ from trading.position_monitor import compute_hold_sec, compute_pnl_pct, compute_
 from utils.clock import utc_now_iso
 
 _ALLOWED_DECISIONS = {"HOLD", "PARTIAL_EXIT", "FULL_EXIT"}
-_REQUIRED_CURRENT_FIELDS = {
+_CRITICAL_CURRENT_FIELDS = {
     "price_usd_now",
+}
+_DEGRADABLE_CURRENT_FIELDS = {
     "buy_pressure_now",
     "volume_velocity_now",
     "liquidity_usd_now",
@@ -21,6 +23,17 @@ _REQUIRED_CURRENT_FIELDS = {
     "bundle_cluster_score_now",
     "dev_sell_pressure_now",
     "rug_flag_now",
+}
+_FIELD_FALLBACKS = {
+    "price_usd_now": [("current", "price_usd_now"), ("current", "price_usd")],
+    "buy_pressure_now": [("current", "buy_pressure_now"), ("current", "buy_pressure"), ("entry", "buy_pressure")],
+    "volume_velocity_now": [("current", "volume_velocity_now"), ("current", "volume_velocity"), ("entry", "volume_velocity")],
+    "liquidity_usd_now": [("current", "liquidity_usd_now"), ("current", "liquidity_usd"), ("entry", "liquidity_usd")],
+    "x_validation_score_now": [("current", "x_validation_score_now"), ("current", "x_validation_score"), ("entry", "x_validation_score")],
+    "x_status_now": [("current", "x_status_now"), ("current", "x_status"), ("entry", "x_status")],
+    "bundle_cluster_score_now": [("current", "bundle_cluster_score_now"), ("current", "bundle_cluster_score"), ("entry", "bundle_cluster_score")],
+    "dev_sell_pressure_now": [("current", "dev_sell_pressure_now"), ("current", "dev_sell_pressure_5m"), ("entry", "dev_sell_pressure_5m")],
+    "rug_flag_now": [("current", "rug_flag_now"), ("current", "rug_flag"), ("entry", "rug_flag")],
 }
 
 
@@ -34,8 +47,39 @@ def _dedupe(items: list[str]) -> list[str]:
     return out
 
 
-def _missing_fields(current_ctx: dict[str, Any]) -> list[str]:
-    return sorted([field for field in _REQUIRED_CURRENT_FIELDS if field not in current_ctx or current_ctx.get(field) is None])
+def _hydrate_current_state(position_ctx: dict[str, Any], current_ctx: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    hydrated_ctx = dict(current_ctx)
+    entry_snapshot = dict(position_ctx.get("entry_snapshot") or {})
+    fallback_applied_fields: list[str] = []
+    missing_critical_fields: list[str] = []
+    missing_degradable_fields: list[str] = []
+
+    for field, fallbacks in _FIELD_FALLBACKS.items():
+        resolved = False
+        for idx, (source, key) in enumerate(fallbacks):
+            source_ctx = current_ctx if source == "current" else entry_snapshot
+            if key in source_ctx and source_ctx.get(key) is not None:
+                hydrated_ctx[field] = source_ctx.get(key)
+                if idx > 0:
+                    fallback_applied_fields.append(field)
+                resolved = True
+                break
+        if resolved:
+            continue
+        if field in _CRITICAL_CURRENT_FIELDS:
+            missing_critical_fields.append(field)
+        else:
+            missing_degradable_fields.append(field)
+
+    resolution = {
+        "missing_critical_fields": sorted(missing_critical_fields),
+        "missing_degradable_fields": sorted(missing_degradable_fields),
+        "fallback_applied_fields": sorted(set(fallback_applied_fields)),
+    }
+    resolution["degraded_current_state"] = bool(
+        resolution["fallback_applied_fields"] or resolution["missing_degradable_fields"]
+    )
+    return hydrated_ctx, resolution
 
 
 def _kill_switch_config_from_settings(settings: Any) -> dict[str, dict[str, str]]:
@@ -48,17 +92,18 @@ def _resolve_kill_switch_active(settings: Any) -> bool:
 
 
 def decide_exit(position_ctx: dict, current_ctx: dict, settings: Any) -> dict:
-    now_ts = str(current_ctx.get("now_ts") or current_ctx.get("observed_at") or utc_now_iso())
+    hydrated_ctx, resolution = _hydrate_current_state(position_ctx, current_ctx)
+    now_ts = str(hydrated_ctx.get("now_ts") or hydrated_ctx.get("observed_at") or utc_now_iso())
     hold_sec = compute_hold_sec(str(position_ctx.get("entry_time") or now_ts), now_ts)
 
-    current_price = float(current_ctx.get("price_usd_now", current_ctx.get("price_usd") or 0.0))
+    current_price = float(hydrated_ctx.get("price_usd_now", hydrated_ctx.get("price_usd") or 0.0))
     entry_price = float(position_ctx.get("entry_price_usd") or 0.0)
     pnl_pct = compute_pnl_pct(entry_price, current_price)
 
-    deltas = compute_position_deltas(dict(position_ctx.get("entry_snapshot") or {}), current_ctx)
+    deltas = compute_position_deltas(dict(position_ctx.get("entry_snapshot") or {}), hydrated_ctx)
     kill_switch_config = _kill_switch_config_from_settings(settings)
     current_eval_ctx = {
-        **current_ctx,
+        **hydrated_ctx,
         "hold_sec": hold_sec,
         "pnl_pct": pnl_pct,
         "kill_switch_active": _resolve_kill_switch_active(settings),
@@ -71,9 +116,13 @@ def decide_exit(position_ctx: dict, current_ctx: dict, settings: Any) -> dict:
         return _finalize(position_ctx, current_eval_ctx, settings, decision, hold_sec, pnl_pct, now_ts)
 
     warnings: list[str] = []
-    missing = _missing_fields(current_ctx)
-    if missing:
-        warnings.append("missing_current_state_fields")
+    if resolution["degraded_current_state"]:
+        warnings.append("degraded_current_state_fields")
+    warnings.extend([f"fallback_{field}" for field in resolution["fallback_applied_fields"]])
+    warnings.extend([f"missing_degradable_{field}" for field in resolution["missing_degradable_fields"]])
+
+    if resolution["missing_critical_fields"]:
+        warnings.extend([f"missing_critical_{field}" for field in resolution["missing_critical_fields"]])
         if bool(settings.EXIT_ENGINE_FAILCLOSED):
             decision = {
                 "exit_decision": "FULL_EXIT",
@@ -103,7 +152,7 @@ def decide_exit(position_ctx: dict, current_ctx: dict, settings: Any) -> dict:
     else:
         decision = hard
 
-    wallet_features = current_ctx.get("wallet_features") or {}
+    wallet_features = hydrated_ctx.get("wallet_features") or {}
     netflow_bias = float(wallet_features.get("smart_wallet_netflow_bias") or 0.0)
     tier1_distribution = int(wallet_features.get("smart_wallet_tier1_distribution_hits") or 0)
     if netflow_bias < 0:
@@ -112,6 +161,8 @@ def decide_exit(position_ctx: dict, current_ctx: dict, settings: Any) -> dict:
         decision.setdefault("exit_warnings", []).append("tier1_wallet_distribution_detected")
 
     decision["exit_warnings"] = _dedupe([*decision.get("exit_warnings", []), *warnings])
+    if resolution["degraded_current_state"]:
+        decision["exit_status"] = "partial"
     return _finalize(position_ctx, current_eval_ctx, settings, decision, hold_sec, pnl_pct, now_ts)
 
 

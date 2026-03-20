@@ -59,6 +59,7 @@ def _base_position(regime: str = "SCALP") -> dict:
             "x_validation_score": 71.4,
             "x_status": "ok",
             "dev_sell_pressure_5m": 0.0,
+            "rug_flag": False,
             "rug_score": 0.18,
         },
     }
@@ -82,33 +83,77 @@ def _base_state() -> dict:
 
 def main() -> int:
     settings = load_settings()
-    cases = []
+    cases: list[tuple[str, dict, dict, str, str, str | None, list[str]]] = []
 
     pos = _base_position("SCALP")
     state = _base_state()
     state["price_usd_now"] = 0.88
+<<<<<<< HEAD
+    cases.append(("scalp_stop", pos, state, "FULL_EXIT", "scalp_stop_loss", "ok", []))
+=======
     cases.append(("scalp_stop", pos, state, "FULL_EXIT", "scalp_stop_loss", settings))
+>>>>>>> origin/main
 
     pos = _base_position("SCALP")
     state = _base_state()
     state["volume_velocity_now"] = 2.5
+<<<<<<< HEAD
+    cases.append(("scalp_recheck_decay", pos, state, "FULL_EXIT", "scalp_momentum_decay_after_recheck", "ok", []))
+=======
     cases.append(("scalp_recheck_decay", pos, state, "FULL_EXIT", "scalp_momentum_decay_after_recheck", settings))
+>>>>>>> origin/main
 
     pos = _base_position("TREND")
     state = _base_state()
     state["price_usd_now"] = 1.40
+<<<<<<< HEAD
+    cases.append(("trend_partial_1", pos, state, "PARTIAL_EXIT", "trend_partial_take_profit_1", "ok", []))
+=======
     cases.append(("trend_partial_1", pos, state, "PARTIAL_EXIT", "trend_partial_take_profit_1", settings))
+>>>>>>> origin/main
 
     pos = _base_position("TREND")
     state = _base_state()
     state["rug_flag_now"] = True
+<<<<<<< HEAD
+    cases.append(("trend_rug_hard", pos, state, "FULL_EXIT", "rug_flag_triggered", "ok", []))
+=======
     cases.append(("trend_rug_hard", pos, state, "FULL_EXIT", "rug_flag_triggered", settings))
+>>>>>>> origin/main
 
     pos = _base_position("SCALP")
     state = _base_state()
     state["now_ts"] = "2026-03-15T12:30:50Z"
     state["price_usd_now"] = 1.03
+<<<<<<< HEAD
+    cases.append(("healthy_hold", pos, state, "HOLD", "hold_conditions_intact", "ok", []))
+
+    pos = _base_position("SCALP")
+    state = _base_state()
+    state.pop("x_validation_score_now")
+    state.pop("bundle_cluster_score_now")
+    state.pop("dev_sell_pressure_now")
+    state["now_ts"] = "2026-03-15T12:30:50Z"
+    state["price_usd_now"] = 1.03
+    cases.append(
+        (
+            "degraded_poll_sticky_fallback",
+            pos,
+            state,
+            "HOLD",
+            "hold_conditions_intact",
+            "partial",
+            [
+                "degraded_current_state_fields",
+                "fallback_x_validation_score_now",
+                "fallback_bundle_cluster_score_now",
+                "fallback_dev_sell_pressure_now",
+            ],
+        )
+    )
+=======
     cases.append(("healthy_hold", pos, state, "HOLD", "hold_conditions_intact", settings))
+>>>>>>> origin/main
 
     with tempfile.TemporaryDirectory() as tmpdir:
         kill_switch_path = Path(tmpdir) / "kill_switch.flag"
@@ -118,11 +163,26 @@ def main() -> int:
         state = _base_state()
         cases.append(("kill_switch_forced_exit", pos, state, "FULL_EXIT", "kill_switch_triggered", kill_switch_settings))
 
+<<<<<<< HEAD
+    for name, position, current, expected_decision, expected_reason, expected_status, expected_warnings in cases:
+        result = run_position_monitor([position], [current], settings)["positions"][0]
+        _validate(result)
+        if result["exit_decision"] != expected_decision:
+            raise ValueError(f"{name}: expected {expected_decision}, got {result['exit_decision']}")
+        if result["exit_reason"] != expected_reason:
+            raise ValueError(f"{name}: expected reason {expected_reason}, got {result['exit_reason']}")
+        if expected_status is not None and result["exit_status"] != expected_status:
+            raise ValueError(f"{name}: expected status {expected_status}, got {result['exit_status']}")
+        for warning in expected_warnings:
+            if warning not in result.get("exit_warnings", []):
+                raise ValueError(f"{name}: expected warning {warning}, got {result.get('exit_warnings', [])}")
+=======
         selected_pos = cases[0][1]
         selected_state = cases[0][2]
         selected_settings = cases[0][5]
         payload = run_position_monitor([selected_pos], [selected_state], selected_settings)
         write_json(settings.PROCESSED_DATA_DIR / "exit_decisions.smoke.json", payload)
+>>>>>>> origin/main
 
         for name, position, current, expected_decision, expected_reason, case_settings in cases:
             result = run_position_monitor([position], [current], case_settings)["positions"][0]

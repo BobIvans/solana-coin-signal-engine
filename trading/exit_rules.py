@@ -482,11 +482,14 @@ def evaluate_hard_exit(position_ctx: dict, current_ctx: dict, settings: Any) -> 
     if _to_bool(current_ctx.get("kill_switch_active")):
         return _full("kill_switch_triggered", ["kill_switch_triggered"])
 
-    dev_sell = _to_float(current_ctx.get("dev_sell_pressure_now", current_ctx.get("dev_sell_pressure_5m")))
+    dev_sell = _to_float(
+        _current_or_entry(position_ctx, current_ctx, "dev_sell_pressure_now", "dev_sell_pressure_5m")
+    )
     if bool(settings.EXIT_DEV_SELL_HARD) and dev_sell > 0:
         return _full("dev_sell_detected", ["dev_sell_detected"])
 
-    if bool(settings.EXIT_RUG_FLAG_HARD) and bool(current_ctx.get("rug_flag_now")):
+    rug_flag_now = _to_bool(_current_or_entry(position_ctx, current_ctx, "rug_flag_now", "rug_flag"))
+    if bool(settings.EXIT_RUG_FLAG_HARD) and rug_flag_now:
         return _full("rug_flag_triggered", ["rug_flag_detected"])
 
     cluster_dump = detect_cluster_dump(position_ctx, current_ctx, settings)
