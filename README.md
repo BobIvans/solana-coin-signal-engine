@@ -127,6 +127,28 @@ python scripts/runtime_signal_smoke.py
 
 See `docs/runtime_real_signals.md` for the runtime signal contract and fallback behavior.
 
+## PR-RISK-2 evidence-weighted sizing
+
+PR-RISK-2 adds a conservative evidence-weighted sizing layer on top of the existing mode-policy and degraded-X sizing rules.
+
+Highlights:
+
+- preserves hard guards and mode restrictions
+- keeps degraded-X reduced-size behavior compatible
+- reduces paper/runtime size when evidence is partial, sparse, conflicting, or linkage-risky
+- emits explainable sizing fields such as `base_position_pct`, `effective_position_pct`, `sizing_multiplier`, `sizing_reason_codes`, and `sizing_confidence`
+- extends replay-compatible rows with additive sizing provenance fields
+
+Strong evidence can preserve base size, but this layer does **not** increase size above current safe bounds. Missing evidence never fabricates confidence.
+
+Run sizing smoke:
+
+```bash
+python scripts/evidence_weighted_sizing_smoke.py
+```
+
+See `docs/evidence_weighted_sizing.md` for the sizing policy, reason codes, event names, and emitted fields.
+
 ## PR-10 post-run analyzer
 
 PR-10 adds a post-run analytics layer over paper-trading artifacts:

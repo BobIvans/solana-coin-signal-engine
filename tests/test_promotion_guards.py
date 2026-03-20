@@ -1,4 +1,4 @@
-from src.promotion.guards import effective_position_scale, evaluate_entry_guards
+from src.promotion.guards import compute_position_sizing, effective_position_scale, evaluate_entry_guards
 
 
 BASE_CONFIG = {
@@ -42,3 +42,27 @@ def test_soft_degraded_x_reduced_size():
     state = {"active_mode": "constrained_paper", "open_positions": [], "counters": {}, "consecutive_losses": 0}
     scale = effective_position_scale({"x_status": "degraded"}, state, BASE_CONFIG)
     assert scale == 0.5
+
+
+def test_position_sizing_adds_evidence_weighted_fields():
+    state = {"active_mode": "constrained_paper", "open_positions": [], "counters": {}, "consecutive_losses": 0}
+    signal = {
+        "signal_id": "guard_size",
+        "token_address": "SoGuard111",
+        "entry_decision": "SCALP",
+        "regime": "SCALP",
+        "x_status": "healthy",
+        "recommended_position_pct": 0.4,
+        "regime_confidence": 0.8,
+        "runtime_signal_confidence": 0.82,
+        "continuation_confidence": 0.7,
+        "continuation_status": "confirmed",
+        "linkage_confidence": 0.8,
+        "linkage_risk_score": 0.1,
+        "x_validation_score": 78,
+    }
+    sizing = compute_position_sizing(signal, state, BASE_CONFIG)
+    assert sizing["base_position_pct"] == 0.4
+    assert sizing["effective_position_pct"] == 0.4
+    assert sizing["sizing_multiplier"] == 1.0
+    assert sizing["sizing_reason_codes"]

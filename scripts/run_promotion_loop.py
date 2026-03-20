@@ -15,7 +15,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from src.promotion.cooldowns import is_x_cooldown_active, register_x_error
 from src.promotion.counters import roll_daily_state_if_needed, update_trade_counters
-from src.promotion.guards import effective_position_scale, evaluate_entry_guards, should_block_entry
+from src.promotion.guards import compute_position_sizing, evaluate_entry_guards, should_block_entry
 from src.promotion.io import append_jsonl, write_json
 from src.promotion.kill_switch import is_kill_switch_active
 from src.promotion.policy import config_hash, validate_runtime_config
@@ -330,7 +330,72 @@ def main() -> int:
 
             append_jsonl(event_log, {"ts": utc_now_iso(), "event": "signal_seen", "signal_id": signal["signal_id"]})
             guard_results = evaluate_entry_guards(signal, state, cfg)
-            scale = effective_position_scale(signal, state, cfg)
+            sizing = compute_position_sizing(signal, state, cfg)
+            scale = sizing["effective_position_scale"]
+
+            append_jsonl(
+                event_log,
+                {
+                    "ts": utc_now_iso(),
+                    "event": "evidence_weighted_sizing_started",
+                    "run_id": args.run_id,
+                    "signal_id": signal.get("signal_id"),
+                    "token_address": signal.get("token_address"),
+                    "base_position_pct": sizing.get("base_position_pct"),
+                    "policy_origin": sizing.get("policy_origin"),
+                },
+            )
+            append_jsonl(
+                event_log,
+                {
+                    "ts": utc_now_iso(),
+                    "event": "evidence_quality_computed",
+                    "run_id": args.run_id,
+                    "signal_id": signal.get("signal_id"),
+                    "token_address": signal.get("token_address"),
+                    "evidence_quality_score": sizing.get("evidence_quality_score"),
+                    "sizing_confidence": sizing.get("sizing_confidence"),
+                    "partial_evidence_flag": sizing.get("partial_evidence_flag"),
+                    "evidence_conflict_flag": sizing.get("evidence_conflict_flag"),
+                },
+            )
+            append_jsonl(
+                event_log,
+                {
+                    "ts": utc_now_iso(),
+                    "event": "sizing_multiplier_computed",
+                    "run_id": args.run_id,
+                    "signal_id": signal.get("signal_id"),
+                    "token_address": signal.get("token_address"),
+                    "base_position_pct": sizing.get("base_position_pct"),
+                    "effective_position_pct": sizing.get("effective_position_pct"),
+                    "sizing_multiplier": sizing.get("sizing_multiplier"),
+                    "reason_codes": sizing.get("sizing_reason_codes", []),
+                },
+            )
+            event_reason_map = {
+                "partial_evidence_size_reduced": "sizing_reduced_partial_evidence",
+                "x_status_degraded_size_reduced": "sizing_reduced_degraded_x",
+                "creator_link_risk_size_reduced": "sizing_reduced_creator_link_risk",
+                "creator_link_risk_moderate_size_reduced": "sizing_reduced_creator_link_risk",
+            }
+            for reason_code, event_name in event_reason_map.items():
+                if reason_code in sizing.get("sizing_reason_codes", []):
+                    append_jsonl(
+                        event_log,
+                        {
+                            "ts": utc_now_iso(),
+                            "event": event_name,
+                            "run_id": args.run_id,
+                            "signal_id": signal.get("signal_id"),
+                            "token_address": signal.get("token_address"),
+                            "base_position_pct": sizing.get("base_position_pct"),
+                            "effective_position_pct": sizing.get("effective_position_pct"),
+                            "sizing_multiplier": sizing.get("sizing_multiplier"),
+                            "reason_codes": sizing.get("sizing_reason_codes", []),
+                            "sizing_confidence": sizing.get("sizing_confidence"),
+                        },
+                    )
 
             if should_block_entry(guard_results) or args.dry_run or scale <= 0:
                 rejected += 1
@@ -353,6 +418,16 @@ def main() -> int:
                     "signal_origin": signal.get("runtime_signal_origin"),
                     "signal_status": signal.get("runtime_signal_status"),
                     "recommended_position_pct": signal.get("recommended_position_pct"),
+                    "base_position_pct": sizing.get("base_position_pct"),
+                    "effective_position_pct": sizing.get("effective_position_pct"),
+                    "sizing_multiplier": sizing.get("sizing_multiplier"),
+                    "sizing_reason_codes": sizing.get("sizing_reason_codes", []),
+                    "sizing_confidence": sizing.get("sizing_confidence"),
+                    "sizing_origin": sizing.get("sizing_origin"),
+                    "evidence_quality_score": sizing.get("evidence_quality_score"),
+                    "evidence_conflict_flag": sizing.get("evidence_conflict_flag"),
+                    "partial_evidence_flag": sizing.get("partial_evidence_flag"),
+                    "sizing_warning": sizing.get("sizing_warning"),
                 }
                 append_jsonl(decisions_log, decision)
                 append_jsonl(
@@ -368,6 +443,21 @@ def main() -> int:
                         "reason": reason_codes,
                     },
                 )
+                append_jsonl(
+                    event_log,
+                    {
+                        "ts": utc_now_iso(),
+                        "event": "evidence_weighted_sizing_completed",
+                        "run_id": args.run_id,
+                        "signal_id": signal.get("signal_id"),
+                        "token_address": signal.get("token_address"),
+                        "base_position_pct": sizing.get("base_position_pct"),
+                        "effective_position_pct": sizing.get("effective_position_pct"),
+                        "sizing_multiplier": sizing.get("sizing_multiplier"),
+                        "reason_codes": sizing.get("sizing_reason_codes", []),
+                        "sizing_confidence": sizing.get("sizing_confidence"),
+                    },
+                )
                 continue
 
             position = {
@@ -378,6 +468,16 @@ def main() -> int:
                 "opened_at": utc_now_iso(),
                 "size_scale": scale,
                 "recommended_position_pct": signal.get("recommended_position_pct"),
+                "base_position_pct": sizing.get("base_position_pct"),
+                "effective_position_pct": sizing.get("effective_position_pct"),
+                "sizing_multiplier": sizing.get("sizing_multiplier"),
+                "sizing_reason_codes": sizing.get("sizing_reason_codes", []),
+                "sizing_confidence": sizing.get("sizing_confidence"),
+                "sizing_origin": sizing.get("sizing_origin"),
+                "sizing_warning": sizing.get("sizing_warning"),
+                "evidence_quality_score": sizing.get("evidence_quality_score"),
+                "evidence_conflict_flag": sizing.get("evidence_conflict_flag"),
+                "partial_evidence_flag": sizing.get("partial_evidence_flag"),
                 "signal_origin": signal.get("runtime_signal_origin"),
                 "signal_status": signal.get("runtime_signal_status"),
                 "source_artifact": signal.get("source_artifact"),
@@ -398,6 +498,10 @@ def main() -> int:
                     "token_address": signal["token_address"],
                     "signal_origin": signal.get("runtime_signal_origin"),
                     "signal_status": signal.get("runtime_signal_status"),
+                    "base_position_pct": sizing.get("base_position_pct"),
+                    "effective_position_pct": sizing.get("effective_position_pct"),
+                    "sizing_multiplier": sizing.get("sizing_multiplier"),
+                    "sizing_reason_codes": sizing.get("sizing_reason_codes", []),
                 },
             )
             append_jsonl(
@@ -415,6 +519,32 @@ def main() -> int:
                     "signal_origin": signal.get("runtime_signal_origin"),
                     "signal_status": signal.get("runtime_signal_status"),
                     "recommended_position_pct": signal.get("recommended_position_pct"),
+                    "base_position_pct": sizing.get("base_position_pct"),
+                    "effective_position_pct": sizing.get("effective_position_pct"),
+                    "sizing_multiplier": sizing.get("sizing_multiplier"),
+                    "sizing_reason_codes": sizing.get("sizing_reason_codes", []),
+                    "sizing_confidence": sizing.get("sizing_confidence"),
+                    "sizing_origin": sizing.get("sizing_origin"),
+                    "evidence_quality_score": sizing.get("evidence_quality_score"),
+                    "evidence_conflict_flag": sizing.get("evidence_conflict_flag"),
+                    "partial_evidence_flag": sizing.get("partial_evidence_flag"),
+                    "sizing_warning": sizing.get("sizing_warning"),
+                },
+            )
+
+            append_jsonl(
+                event_log,
+                {
+                    "ts": utc_now_iso(),
+                    "event": "evidence_weighted_sizing_completed",
+                    "run_id": args.run_id,
+                    "signal_id": signal.get("signal_id"),
+                    "token_address": signal.get("token_address"),
+                    "base_position_pct": sizing.get("base_position_pct"),
+                    "effective_position_pct": sizing.get("effective_position_pct"),
+                    "sizing_multiplier": sizing.get("sizing_multiplier"),
+                    "reason_codes": sizing.get("sizing_reason_codes", []),
+                    "sizing_confidence": sizing.get("sizing_confidence"),
                 },
             )
 

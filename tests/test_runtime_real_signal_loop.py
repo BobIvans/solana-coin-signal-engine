@@ -44,6 +44,13 @@ def test_runtime_loop_opens_paper_position_from_real_signal(tmp_path):
                     "regime_confidence": 0.9,
                     "entry_confidence": 0.88,
                     "recommended_position_pct": 0.4,
+                    "continuation_confidence": 0.76,
+                    "continuation_status": "confirmed",
+                    "linkage_confidence": 0.8,
+                    "linkage_risk_score": 0.12,
+                    "bundle_wallet_clustering_score": 0.72,
+                    "cluster_concentration_ratio": 0.24,
+                    "x_validation_score": 82,
                     "entry_reason": "fixture_valid_real_entry",
                     "entry_snapshot": {"price_usd": 1.0},
                 }
@@ -75,6 +82,13 @@ def test_runtime_loop_opens_paper_position_from_real_signal(tmp_path):
     assert summary["runtime_signal_origin"] == "entry_candidates"
     assert summary["total_opened"] == 1
     assert positions["open_positions"][0]["token_address"] == "SoReal111"
+    assert positions["open_positions"][0]["base_position_pct"] == 0.4
+    assert positions["open_positions"][0]["effective_position_pct"] == 0.4
+    assert positions["open_positions"][0]["sizing_multiplier"] == 1.0
+
+    decision_row = json.loads((run_dir / "decisions.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    assert decision_row["sizing_origin"] == "evidence_weighted"
+    assert decision_row["sizing_reason_codes"]
 
 
 def test_runtime_loop_respects_mode_guards_for_real_signal(tmp_path):
