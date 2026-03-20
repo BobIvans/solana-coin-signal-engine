@@ -6,6 +6,9 @@ from pathlib import Path
 import pytest
 
 jsonschema = pytest.importorskip("jsonschema")
+referencing = pytest.importorskip("referencing")
+Registry = referencing.Registry
+Resource = referencing.Resource
 
 from analytics.wallet_weighting_calibration import run_wallet_weighting_calibration
 
@@ -159,8 +162,18 @@ def test_schema_validation(tmp_path: Path):
     _run(paths)
     report = json.loads(paths["out_report"].read_text(encoding="utf-8"))
     recommendation = json.loads(paths["out_recommendation"].read_text(encoding="utf-8"))
-    report_schema = json.loads((Path(__file__).resolve().parents[1] / "schemas" / "wallet_calibration_report.schema.json").read_text(encoding="utf-8"))
-    recommendation_schema = json.loads((Path(__file__).resolve().parents[1] / "schemas" / "wallet_rollout_recommendation.schema.json").read_text(encoding="utf-8"))
-    resolver = jsonschema.RefResolver(base_uri=(Path(__file__).resolve().parents[1] / "schemas").resolve().as_uri() + "/", referrer=report_schema)
-    jsonschema.validate(report, report_schema, resolver=resolver)
-    jsonschema.validate(recommendation, recommendation_schema)
+    schema_dir = Path(__file__).resolve().parents[1] / "schemas"
+    report_schema_path = schema_dir / "wallet_calibration_report.schema.json"
+    recommendation_schema_path = schema_dir / "wallet_rollout_recommendation.schema.json"
+    report_schema = json.loads(report_schema_path.read_text(encoding="utf-8"))
+    recommendation_schema = json.loads(recommendation_schema_path.read_text(encoding="utf-8"))
+    registry = Registry().with_resources(
+        [
+            ("./wallet_calibration_report.schema.json", Resource.from_contents(report_schema)),
+            ("./wallet_rollout_recommendation.schema.json", Resource.from_contents(recommendation_schema)),
+            (report_schema_path.resolve().as_uri(), Resource.from_contents(report_schema)),
+            (recommendation_schema_path.resolve().as_uri(), Resource.from_contents(recommendation_schema)),
+        ]
+    )
+    jsonschema.Draft202012Validator(report_schema, registry=registry).validate(report)
+    jsonschema.Draft202012Validator(recommendation_schema, registry=registry).validate(recommendation)
