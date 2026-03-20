@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from analytics.evidence_weighted_sizing import compute_evidence_weighted_size
+
 from .cooldowns import is_x_cooldown_active, resolve_degraded_x_policy
 from .kill_switch import is_kill_switch_active
 
@@ -64,13 +66,52 @@ def should_block_entry(guard_results: dict) -> bool:
     return bool(guard_results.get("hard_block"))
 
 
-def effective_position_scale(signal: dict, state: dict, config: dict) -> float:
+def _base_policy_position_scale_details(signal: dict, state: dict, config: dict) -> dict:
     mode = state.get("active_mode")
-    scale = float(config.get("modes", {}).get(mode, {}).get("position_size_scale", 1.0))
+    mode_scale = float(config.get("modes", {}).get(mode, {}).get("position_size_scale", 1.0))
+    scale = mode_scale
+    origin = "mode_policy_only"
+    reason_codes: list[str] = []
+
     if signal.get("x_status") == "degraded":
         policy = resolve_degraded_x_policy(mode, config)
         if policy == "reduced_size":
-            return round(scale * 0.5, 4)
-        if policy in {"watchlist_only", "pause_new_entries"}:
-            return 0.0
-    return scale
+            scale = round(mode_scale * 0.5, 4)
+            origin = "degraded_x_policy"
+            reason_codes.append("x_status_degraded_size_reduced")
+        elif policy in {"watchlist_only", "pause_new_entries"}:
+            scale = 0.0
+            origin = "degraded_x_policy"
+            reason_codes.append("x_status_degraded_entry_blocked")
+
+    return {
+        "mode_position_scale": round(mode_scale, 4),
+        "effective_position_scale": round(scale, 4),
+        "policy_origin": origin,
+        "policy_reason_codes": reason_codes,
+    }
+
+
+def effective_position_scale(signal: dict, state: dict, config: dict) -> float:
+    return _base_policy_position_scale_details(signal, state, config)["effective_position_scale"]
+
+
+def compute_position_sizing(signal: dict, state: dict, config: dict) -> dict:
+    policy_details = _base_policy_position_scale_details(signal, state, config)
+    recommended_position_pct = float(signal.get("recommended_position_pct", 0.0) or 0.0)
+    base_position_pct = round(max(0.0, min(1.0, recommended_position_pct * policy_details["effective_position_scale"])), 4)
+    sizing = compute_evidence_weighted_size(
+        signal,
+        base_position_pct=base_position_pct,
+        config=config,
+        policy_origin=policy_details["policy_origin"],
+        policy_reason_codes=policy_details["policy_reason_codes"],
+    )
+    effective_position_pct = float(sizing["effective_position_pct"])
+    final_scale = 0.0 if recommended_position_pct <= 0 else round(effective_position_pct / recommended_position_pct, 4)
+    return {
+        **policy_details,
+        **sizing,
+        "recommended_position_pct": round(recommended_position_pct, 4),
+        "effective_position_scale": final_scale,
+    }

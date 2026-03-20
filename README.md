@@ -75,6 +75,50 @@ This repository also contains the runtime promotion loop and related guards/repo
 
 Runtime consumes local signal artifacts conservatively: missing or incomplete signal evidence should degrade safely and skip unusable rows rather than inventing paper trades. This replay PR does not change runtime promotion behavior, but it keeps the README section that would otherwise conflict when replay and runtime docs are merged together.
 
+## PR-RUN-1 runtime real signal wiring
+
+The runtime promotion loop now reads real local signal artifacts by default instead of using synthetic placeholder signals.
+
+Primary artifact precedence:
+
+1. `data/processed/entry_candidates.json`
+2. `data/processed/entry_candidates.smoke.json`
+3. `data/processed/entry_events.jsonl`
+4. `data/processed/scored_tokens.json` when it already contains decision-support fields
+5. replay-compatible artifacts such as `trade_feature_matrix.json`
+
+If artifacts are missing, stale, partial, or malformed, runtime degrades safely, records provenance/status fields, and skips unusable rows rather than inventing trades. Synthetic behavior is still available only through explicit `--signal-source synthetic-dev` opt-in.
+
+Run the real-signal smoke path:
+
+```bash
+python scripts/runtime_signal_smoke.py
+```
+
+See `docs/runtime_real_signals.md` for the runtime signal contract and fallback behavior.
+
+## PR-RISK-2 evidence-weighted sizing
+
+PR-RISK-2 adds a conservative evidence-weighted sizing layer on top of the existing mode-policy and degraded-X sizing rules.
+
+Highlights:
+
+- preserves hard guards and mode restrictions
+- keeps degraded-X reduced-size behavior compatible
+- reduces paper/runtime size when evidence is partial, sparse, conflicting, or linkage-risky
+- emits explainable sizing fields such as `base_position_pct`, `effective_position_pct`, `sizing_multiplier`, `sizing_reason_codes`, and `sizing_confidence`
+- extends replay-compatible rows with additive sizing provenance fields
+
+Strong evidence can preserve base size, but this layer does **not** increase size above current safe bounds. Missing evidence never fabricates confidence.
+
+Run sizing smoke:
+
+```bash
+python scripts/evidence_weighted_sizing_smoke.py
+```
+
+See `docs/evidence_weighted_sizing.md` for the sizing policy, reason codes, event names, and emitted fields.
+
 ## PR-10 post-run analyzer
 
 PR-10 adds a post-run analytics layer over paper-trading artifacts:
@@ -181,3 +225,66 @@ Key points:
 - bundle-stage enrichment keeps linkage fields null-filled when evidence is unavailable so downstream contracts stay stable;
 - confidence and provenance are exposed through `linkage_confidence`, `linkage_reason_codes`, `linkage_metric_origin`, and `linkage_status`;
 - this PR does **not** claim identity certainty, and weak evidence stays low-confidence.
+<<<<<<< HEAD
+=======
+
+## PR-WAL-7 wallet family metadata
+
+PR-WAL-7 adds a deterministic wallet family metadata layer that enriches wallet-registry records without redesigning the registry or claiming hard real-world identity certainty.
+
+Highlights:
+
+- broader `wallet_family_id` plus stricter `independent_family_id`
+- provenance-aware confidence via `wallet_family_origin`, `wallet_family_confidence`, `wallet_family_reason_codes`, and `wallet_family_status`
+- additive registry integration through `scripts/build_wallet_registry.py`
+- validated-registry propagation for downstream enrichment consumers
+- smoke outputs under `data/smoke/`
+
+Evidence lanes include cluster overlap, shared funders, repeated launch overlap, registry hints, linkage-group hints, and creator/dev overlap flags.
+Missing or malformed evidence degrades safely instead of inventing strong family assignments.
+
+Run the wallet family smoke:
+
+```bash
+python scripts/wallet_family_metadata_smoke.py
+```
+
+Artifacts written by default:
+
+- `data/smoke/wallet_family_metadata.smoke.json`
+- `data/smoke/wallet_family_summary.json`
+
+See `docs/wallet_family_metadata.md` for the evidence model, the difference between broad vs strict family ids, and the fallback policy.
+
+## PR-ML-1 offline feature importance
+
+PR-ML-1 adds an offline feature importance layer over replay-derived trade matrices such as `trade_feature_matrix.jsonl`.
+
+Highlights:
+
+- computes offline-only feature importance for explicit replay targets
+- emits grouped and per-feature rankings
+- reports sample size, missingness, malformed rows, and exclusions
+- writes machine-readable JSON plus markdown summaries
+- keeps outputs analysis-only and not for online decisioning
+
+Supported offline targets:
+
+- `profitable_trade_flag`
+- `trend_success_flag`
+- `fast_failure_flag`
+
+Run the deterministic smoke path:
+
+```bash
+python scripts/offline_feature_importance_smoke.py
+```
+
+Artifacts written by the smoke path:
+
+- `data/smoke/offline_feature_importance.json`
+- `data/smoke/offline_feature_importance_summary.md`
+
+See `docs/offline_feature_importance.md` for the target definitions, grouping logic, methods, caveats, and honesty policy.
+
+>>>>>>> origin/main

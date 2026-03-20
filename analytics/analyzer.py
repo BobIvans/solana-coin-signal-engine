@@ -18,7 +18,7 @@ from analytics.analyzer_metrics import (
 from analytics.analyzer_recommendations import generate_recommendations
 from analytics.analyzer_report_writer import write_markdown_report
 from src.replay.calibration_metrics import derive_outcome_metrics
-from analytics.analyzer_slices import bucketize_metric, slice_positions
+from analytics.analyzer_slices import bucketize_metric, compute_analyzer_slices, slice_positions
 from analytics.config_suggestions import write_config_suggestions
 from config.settings import Settings
 from utils.io import append_jsonl, read_json, write_json
@@ -244,6 +244,58 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
 
     matrix_analysis = compute_matrix_analysis(matrix_analysis_rows, settings)
 
+    slice_source_rows = matrix_analysis_rows or closed_positions
+    analyzer_slices = compute_analyzer_slices(
+        slice_source_rows,
+        min_sample=int(settings.POST_RUN_MIN_TRADES_FOR_REGIME_COMPARISON),
+        run_id=settings.PROCESSED_DATA_DIR.parent.name,
+        source="trade_feature_matrix" if matrix_analysis_rows else "closed_positions",
+        as_of=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    )
+    slice_group_counts = {group: len(payload) for group, payload in analyzer_slices.get("slice_groups", {}).items()}
+    append_jsonl(
+        events_path,
+        {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "event": "analyzer_slices_started",
+            "run_id": settings.PROCESSED_DATA_DIR.parent.name,
+            "source": analyzer_slices.get("metadata", {}).get("source"),
+            "row_count": analyzer_slices.get("metadata", {}).get("row_count", 0),
+        },
+    )
+    for group_name, event_name in [
+        ("regime", "analyzer_regime_slices_computed"),
+        ("cluster_bundle", "analyzer_cluster_bundle_slices_computed"),
+        ("continuation", "analyzer_continuation_slices_computed"),
+        ("degraded_x", "analyzer_degraded_x_slices_computed"),
+        ("exit_failure", "analyzer_exit_failure_slices_computed"),
+    ]:
+        group_payload = analyzer_slices.get("slice_groups", {}).get(group_name, {})
+        low_sample_count = sum(1 for value in group_payload.values() if isinstance(value, dict) and value.get("status") == "insufficient_sample")
+        append_jsonl(
+            events_path,
+            {
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "event": event_name,
+                "run_id": settings.PROCESSED_DATA_DIR.parent.name,
+                "slice_group": group_name,
+                "slice_count": len(group_payload),
+                "low_sample_count": low_sample_count,
+                "warnings": analyzer_slices.get("warnings", []),
+            },
+        )
+        if low_sample_count:
+            append_jsonl(
+                events_path,
+                {
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "event": "analyzer_slice_low_sample",
+                    "run_id": settings.PROCESSED_DATA_DIR.parent.name,
+                    "slice_group": group_name,
+                    "count": low_sample_count,
+                },
+            )
+
     warnings = ["correlation_not_causation"]
     if len(closed_positions) < settings.POST_RUN_MIN_TRADES_FOR_REGIME_COMPARISON:
         warnings.append("small_sample_warning")
@@ -285,21 +337,26 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
         "top_positive_feature_slices": matrix_analysis.get("top_positive_feature_slices", []),
         "top_negative_feature_slices": matrix_analysis.get("top_negative_feature_slices", []),
         "trade_feature_matrix_path": str(matrix_path) if matrix_path else "",
+        "analyzer_slices_available": bool(analyzer_slices.get("slice_groups")),
+        "analyzer_slices_overview": analyzer_slices.get("coverage", {}),
+        "analyzer_slices_recommendation_inputs": analyzer_slices.get("recommendation_inputs", {}),
         "warnings": warnings,
         "contract_version": settings.POST_RUN_CONTRACT_VERSION,
     }
 
-    recs = generate_recommendations(summary, correlations, slices, settings)
-    recommendations_payload = {"recommendations": recs, "contract_version": settings.POST_RUN_CONTRACT_VERSION}
+    recs = generate_recommendations(summary, correlations, slices, settings, analyzer_slices=analyzer_slices)
+    recommendations_payload = {"recommendations": recs, "contract_version": settings.POST_RUN_CONTRACT_VERSION, "analyzer_slices": analyzer_slices}
     append_jsonl(events_path, {"ts": datetime.now(timezone.utc).isoformat(), "event": "recommendations_generated", "count": len(recs)})
 
     summary_path = settings.PROCESSED_DATA_DIR / "post_run_summary.json"
     recommendations_path = settings.PROCESSED_DATA_DIR / "post_run_recommendations.json"
     report_path = settings.PROCESSED_DATA_DIR / "post_run_report.md"
     config_suggestions_path = settings.PROCESSED_DATA_DIR / "config_suggestions.json"
+    analyzer_slices_path = settings.PROCESSED_DATA_DIR / "analyzer_slices.json"
 
     write_json(summary_path, summary)
     write_json(recommendations_path, recommendations_payload)
+    write_json(analyzer_slices_path, analyzer_slices)
     write_config_suggestions(
         settings=settings,
         summary=summary,
@@ -309,6 +366,17 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
     )
     write_markdown_report(summary, recommendations_payload, str(report_path))
 
+    append_jsonl(
+        events_path,
+        {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "event": "analyzer_slices_completed",
+            "run_id": settings.PROCESSED_DATA_DIR.parent.name,
+            "slice_group_counts": slice_group_counts,
+            "summary_path": str(summary_path),
+            "analyzer_slices_path": str(analyzer_slices_path),
+        },
+    )
     append_jsonl(events_path, {"ts": datetime.now(timezone.utc).isoformat(), "event": "analysis_completed", "summary_path": str(summary_path)})
 
     return {
@@ -316,5 +384,6 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
         "recommendations_path": str(recommendations_path),
         "config_suggestions_path": str(config_suggestions_path),
         "report_path": str(report_path),
+        "analyzer_slices_path": str(analyzer_slices_path),
         "closed_positions": len(closed_positions),
     }

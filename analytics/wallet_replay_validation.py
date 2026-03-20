@@ -713,6 +713,16 @@ def evaluate_wallet_registry_replay(
                 "source_count": int(wallet_record.get("source_count") or 0),
                 "tags": sorted(wallet_record.get("tags") or []),
                 "notes": wallet_record.get("notes") or "",
+                "wallet_family_id": wallet_record.get("wallet_family_id"),
+                "independent_family_id": wallet_record.get("independent_family_id"),
+                "wallet_family_confidence": _round(wallet_record.get("wallet_family_confidence")) or 0.0,
+                "wallet_family_origin": str(wallet_record.get("wallet_family_origin") or "missing"),
+                "wallet_family_reason_codes": sorted(wallet_record.get("wallet_family_reason_codes") or []),
+                "wallet_cluster_id": wallet_record.get("wallet_cluster_id"),
+                "wallet_family_member_count": int(wallet_record.get("wallet_family_member_count") or 0),
+                "wallet_family_shared_funder_flag": bool(wallet_record.get("wallet_family_shared_funder_flag", False)),
+                "wallet_family_creator_link_flag": bool(wallet_record.get("wallet_family_creator_link_flag", False)),
+                "wallet_family_status": str(wallet_record.get("wallet_family_status") or "missing"),
                 "updated_at": timestamp,
             }
         )
@@ -724,6 +734,8 @@ def evaluate_wallet_registry_replay(
         "generated_at": timestamp,
         "input_summary": report["input_summary"],
         "replay_summary": report["replay_summary"],
+        "wallet_family_summary": registry.get("wallet_family_summary") or {},
+        "wallet_family_assignments": registry.get("wallet_family_assignments") or [],
         "wallets": validated_wallets,
     }
 

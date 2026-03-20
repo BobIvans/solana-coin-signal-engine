@@ -11,6 +11,8 @@ def _section(title: str) -> str:
 
 
 def _fmt_float(value: Any) -> str:
+    if value is None:
+        return "n/a"
     if isinstance(value, float):
         return f"{value:.4f}"
     return str(value)
@@ -42,6 +44,32 @@ def _append_numeric_summary(lines: list[str], label: str, summary: dict[str, Any
             maxv=_fmt_float(summary.get("max")),
         )
     )
+
+
+def _append_rich_slice_group(lines: list[str], title: str, group: dict[str, Any]) -> None:
+    lines += [_section(title)]
+    if not group:
+        lines.append("- unavailable")
+        return
+    for slice_name, payload in group.items():
+        if not isinstance(payload, dict):
+            continue
+        sample_size = payload.get("sample_size", 0)
+        status = payload.get("status", "unknown")
+        confidence = payload.get("confidence", "unknown")
+        expectancy = payload.get("expectancy", payload.get("expectancy_gap", payload.get("trend_expectancy")))
+        hint = payload.get("recommendation_hint")
+        interpretation = payload.get("interpretation", "")
+        warnings = payload.get("warnings", [])
+        lines.append(
+            f"- {slice_name}: sample={sample_size} status={status} confidence={confidence} expectancy={_fmt_float(expectancy)}"
+        )
+        if interpretation:
+            lines.append(f"  - note: {interpretation}")
+        if hint:
+            lines.append(f"  - recommendation_hint: {hint}")
+        if warnings:
+            lines.append(f"  - warnings: {', '.join(str(w) for w in warnings)}")
 
 
 def write_markdown_report(summary: dict[str, Any], recommendations: dict[str, Any], output_path: str) -> None:
@@ -129,7 +157,15 @@ def write_markdown_report(summary: dict[str, Any], recommendations: dict[str, An
     lines.append("- strongest negative slices:")
     _append_slice_lines(lines, summary.get("top_negative_feature_slices", []))
 
-    lines += [_section("top threshold-adjustment suggestions")]
+    analyzer_slices = recommendations.get("analyzer_slices", {})
+    slice_groups = analyzer_slices.get("slice_groups", {}) if isinstance(analyzer_slices, dict) else {}
+    _append_rich_slice_group(lines, "regime diagnostics", slice_groups.get("regime", {}))
+    _append_rich_slice_group(lines, "cluster/bundle diagnostics", slice_groups.get("cluster_bundle", {}))
+    _append_rich_slice_group(lines, "continuation diagnostics", slice_groups.get("continuation", {}))
+    _append_rich_slice_group(lines, "degraded X diagnostics", slice_groups.get("degraded_x", {}))
+    _append_rich_slice_group(lines, "exit/failure diagnostics", slice_groups.get("exit_failure", {}))
+
+    lines += [_section("key conservative recommendations")]
     if recommendations.get("recommendations"):
         for rec in recommendations.get("recommendations", []):
             lines.append(
@@ -141,6 +177,15 @@ def write_markdown_report(summary: dict[str, Any], recommendations: dict[str, An
     lines += [_section("recommendations")]
     for rec in recommendations.get("recommendations", []):
         lines.append(f"- [{rec.get('type')}] {rec.get('target')}: {rec.get('suggested_action')} (confidence={rec.get('confidence')})")
+
+    lines += [_section("sample-size warnings")]
+    slice_inputs = analyzer_slices.get("recommendation_inputs", {}) if isinstance(analyzer_slices, dict) else {}
+    low_sample = slice_inputs.get("low_sample_slices", [])
+    if low_sample:
+        for item in low_sample:
+            lines.append(f"- low-confidence slice: {item}")
+    else:
+        lines.append("- no analyzer-slice-specific sample warnings")
 
     lines += [_section("caveats / sample-size warnings")]
     for warning in summary.get("warnings", []):
