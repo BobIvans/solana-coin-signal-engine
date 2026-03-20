@@ -10,7 +10,7 @@ A runtime signal is considered real when it comes from an artifact already produ
 2. `data/processed/entry_candidates.smoke.json`
 3. `data/processed/entry_events.jsonl`
 4. `data/processed/scored_tokens.json` when it already carries decision-support fields
-5. optional replay-compatible artifacts such as `trade_feature_matrix.json`
+5. replay-compatible artifacts such as `trade_feature_matrix.jsonl` (canonical), with optional legacy fallback to `trade_feature_matrix.json` for older local fixtures
 
 The runtime loader never fabricates missing signals. If an artifact exists but rows are malformed, those rows are marked partial or invalid and skipped safely.
 
@@ -22,9 +22,10 @@ The runtime loader uses this precedence order:
 2. `entry_candidates.smoke.json`
 3. `entry_events.jsonl`
 4. `scored_tokens.json`
-5. `trade_feature_matrix.json`
+5. `trade_feature_matrix.jsonl`
+6. `trade_feature_matrix.json` (legacy fallback only)
 
-This keeps runtime aligned with the repo's existing entry-selection outputs first, while still allowing scored-token or replay-compatible artifacts to drive the loop only when they already provide enough decision-support fields.
+This keeps runtime aligned with the repo's existing entry-selection outputs first, while still allowing scored-token or replay-compatible artifacts to drive the loop only when they already provide enough decision-support fields. When both replay artifacts exist, the canonical `.jsonl` contract wins over the legacy `.json` fallback.
 
 ## Runtime signal contract
 

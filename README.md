@@ -110,7 +110,7 @@ Primary artifact precedence:
 2. `data/processed/entry_candidates.smoke.json`
 3. `data/processed/entry_events.jsonl`
 4. `data/processed/scored_tokens.json` when it already contains decision-support fields
-5. replay-compatible artifacts such as `trade_feature_matrix.json`
+5. replay-compatible artifacts such as `trade_feature_matrix.jsonl` (canonical), with optional legacy fallback to `trade_feature_matrix.json` when only old local fixtures exist
 
 If artifacts are missing, stale, partial, or malformed, runtime degrades safely, records provenance/status fields, and skips unusable rows rather than inventing trades. Synthetic behavior is still available only through explicit `--signal-source synthetic-dev` opt-in.
 
