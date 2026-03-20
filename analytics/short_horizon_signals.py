@@ -48,11 +48,30 @@ def _window_transactions(txs: list[dict[str, Any]], start_ts: int, window_sec: i
     return out
 
 
+def _window_successful_transactions(txs: list[dict[str, Any]], start_ts: int, window_sec: int) -> list[dict[str, Any]]:
+    return [tx for tx in _window_transactions(txs, start_ts, window_sec) if _tx_is_successful(tx)]
+
+
 def _normalize_wallet(value: Any) -> str | None:
     if value is None:
         return None
     wallet = str(value).strip()
     return wallet or None
+
+
+def _tx_is_successful(tx: dict[str, Any]) -> bool:
+    if not isinstance(tx, dict):
+        return False
+    success = tx.get("success")
+    if success is True:
+        return True
+    if success is False:
+        return False
+    err = tx.get("err")
+    tx_error = tx.get("transactionError")
+    if err not in (None, "", False) or tx_error not in (None, "", False):
+        return False
+    return False
 
 
 def _iter_token_transfers(tx: dict[str, Any]) -> list[dict[str, Any]]:
@@ -79,7 +98,7 @@ def compute_net_unique_buyers_60s(*, pair_created_ts: int, txs: list[dict[str, A
     sellers: set[str] = set()
     saw_side_evidence = False
 
-    for tx in _window_transactions(txs, pair_created_ts, _SHORT_WINDOW_60S):
+    for tx in _window_successful_transactions(txs, pair_created_ts, _SHORT_WINDOW_60S):
         for transfer in _iter_token_transfers(tx):
             amount = _transfer_amount(transfer)
             if amount is None:
@@ -187,7 +206,7 @@ def compute_cluster_sell_concentration_120s(
     txs: list[dict[str, Any]],
     creator_wallet: str | None = None,
 ) -> float | None:
-    window_txs = _window_transactions(txs, pair_created_ts, _SHORT_WINDOW_120S)
+    window_txs = _window_successful_transactions(txs, pair_created_ts, _SHORT_WINDOW_120S)
     participants = _participant_records(window_txs)
     if not participants:
         return None
@@ -317,7 +336,7 @@ def compute_x_author_velocity_5m(snapshots: list[dict[str, Any]]) -> float | Non
 def compute_seller_reentry_ratio(*, pair_created_ts: int, txs: list[dict[str, Any]], window_sec: int = _SHORT_WINDOW_120S) -> float | None:
     lifecycle: dict[str, list[tuple[int, str]]] = defaultdict(list)
     saw_transfer = False
-    for tx in _window_transactions(txs, pair_created_ts, window_sec):
+    for tx in _window_successful_transactions(txs, pair_created_ts, window_sec):
         ts = int(tx.get("_parsed_ts") or 0)
         for transfer in _iter_token_transfers(tx):
             amount = _transfer_amount(transfer)

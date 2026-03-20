@@ -15,11 +15,13 @@ def test_tx_present_x_missing_marks_partial_without_crashing():
     txs = [
         {
             "timestamp": 1_000,
+            "success": True,
             "liquidity_usd": 100.0,
             "tokenTransfers": [{"fromUserAccount": "lp_pool", "toUserAccount": "buyer_a", "tokenAmount": 5}],
         },
         {
             "timestamp": 1_030,
+            "success": True,
             "liquidity_usd": 80.0,
             "tokenTransfers": [{"fromUserAccount": "buyer_a", "toUserAccount": "lp_pool", "tokenAmount": 2}],
         },
@@ -86,3 +88,33 @@ def test_malformed_payloads_degrade_safely_and_emit_warnings():
     assert result["continuation_confidence"] == "low"
     assert result["continuation_warning"]
     assert isinstance(result["continuation_warnings"], list)
+
+
+def test_all_failed_txs_leave_transfer_metrics_unresolved():
+    txs = [
+        {
+            "timestamp": 1_000,
+            "success": False,
+            "liquidity_usd": 100.0,
+            "participants": [{"wallet": "buyer_a", "funder": "shared"}],
+            "tokenTransfers": [{"fromUserAccount": "lp_pool", "toUserAccount": "buyer_a", "tokenAmount": 10}],
+        },
+        {
+            "timestamp": 1_020,
+            "success": False,
+            "liquidity_usd": 90.0,
+            "tokenTransfers": [{"fromUserAccount": "buyer_a", "toUserAccount": "lp_pool", "tokenAmount": 4}],
+        },
+    ]
+
+    result = compute_continuation_metrics(
+        token_ctx={"pair_created_at": "1970-01-01T00:16:40Z"},
+        txs=txs,
+        pair_created_ts=PAIR_CREATED_TS,
+    )
+
+    assert result["net_unique_buyers_60s"] is None
+    assert result["cluster_sell_concentration_120s"] is None
+    assert result["seller_reentry_ratio"] is None
+    assert result["continuation_status"] == "partial"
+    assert result["continuation_inputs_status"]["tx"] == "ready"
