@@ -1,0 +1,227 @@
+# Contract parity and docs sync
+
+This document describes the repo's current contract-audit layer. It is intentionally pragmatic: it checks that major artifacts, helper-level contract field groups, and docs references stay aligned without rewriting business logic.
+
+## What this layer checks
+
+- declared helper-driven contract groups;
+- major JSON / JSONL artifacts produced or consumed by the pipeline;
+- required vs optional field presence;
+- missing, malformed, empty, and additive-extra artifacts/fields;
+- README / docs drift.
+
+Parity checks live in:
+- `tools/contract_parity.py`
+- `tools/docs_sync_audit.py`
+- `scripts/contract_parity_smoke.py`
+
+Machine-readable output schema lives in:
+- `schemas/contract_parity_report.schema.json`
+
+## Status meanings
+
+- `ok`: required fields are present and no visible drift was found for that artifact/group.
+- `warning`: required fields are present, but optional fields are missing or additive extra fields appeared.
+- `mismatch`: required fields are missing or docs drift is explicit.
+- `missing`: expected artifact file is absent.
+- `malformed`: artifact could not be parsed as valid JSON / JSONL.
+- `empty`: artifact exists but yielded no usable rows.
+
+## Contract groups
+
+### core_shortlist
+Artifact:
+- `data/processed/shortlist.json`
+
+Required fields:
+- `token_address`
+
+Optional examples:
+- `symbol`
+- `name`
+- `pair_address`
+- `age_sec`
+- `liquidity_usd`
+- `txns_m5`
+
+### core_x_validation
+Artifact:
+- `data/processed/x_validated.json`
+
+Required fields:
+- `token_address`
+
+Optional examples:
+- `x_status`
+- `x_validation_score`
+- `x_validation_confidence`
+- `x_validation_reason`
+
+### core_enriched
+Artifact:
+- `data/processed/enriched_tokens.json`
+
+Required fields:
+- `token_address`
+- `enrichment_status`
+- `contract_version`
+- `enriched_at`
+
+This is the minimal enriched-token core contract. Additional fields can remain additive.
+
+### bundle_cluster
+Artifact:
+- `data/processed/enriched_tokens.json`
+
+Required fields come from:
+- `utils/bundle_contract_fields.py`
+
+Required bundle/cluster fields:
+- `bundle_count_first_60s`
+- `bundle_size_value`
+- `unique_wallets_per_bundle_avg`
+- `bundle_timing_from_liquidity_add_min`
+- `bundle_success_rate`
+- `bundle_composition_dominant`
+- `bundle_tip_efficiency`
+- `bundle_failure_retry_pattern`
+- `cross_block_bundle_correlation`
+- `bundle_wallet_clustering_score`
+- `cluster_concentration_ratio`
+- `num_unique_clusters_first_60s`
+- `creator_in_cluster_flag`
+
+Additive linkage fields are also visible through the same helper module and are reported as extras or optional additions instead of being silently ignored.
+
+### continuation
+Artifact:
+- `data/processed/enriched_tokens.json`
+
+Required short-horizon metric fields come from:
+- `utils/short_horizon_contract_fields.py`
+
+Required metric fields:
+- `net_unique_buyers_60s`
+- `liquidity_refill_ratio_120s`
+- `cluster_sell_concentration_120s`
+- `smart_wallet_dispersion_score`
+- `x_author_velocity_5m`
+- `seller_reentry_ratio`
+- `liquidity_shock_recovery_sec`
+
+Required continuation provenance/status fields:
+- `continuation_status`
+- `continuation_warning`
+- `continuation_confidence`
+- `continuation_metric_origin`
+- `continuation_coverage_ratio`
+- `continuation_inputs_status`
+- `continuation_warnings`
+- `continuation_available_evidence`
+- `continuation_missing_evidence`
+
+These checks validate presence and visibility. They do not claim that continuation signals are complete or non-heuristic.
+
+### core_rug_assessed
+Artifact:
+- `data/processed/rug_assessed_tokens.json`
+
+Required fields:
+- `token_address`
+- `rug_score`
+- `rug_status`
+
+Optional examples:
+- `rug_flags`
+- `rug_warnings`
+- `lp_burn_confirmed`
+- `lp_locked_flag`
+
+### core_scored
+Artifact:
+- `data/processed/scored_tokens.json`
+
+Required fields:
+- `token_address`
+- `onchain_core`
+- `early_signal_bonus`
+- `x_validation_bonus`
+- `rug_penalty`
+- `spam_penalty`
+- `confidence_adjustment`
+- `final_score`
+- `regime_candidate`
+
+### core_entry_candidates
+Artifact:
+- `data/processed/entry_candidates.json`
+
+Required fields:
+- `token_address`
+- `entry_decision`
+- `entry_confidence`
+- `recommended_position_pct`
+- `entry_reason`
+- `regime_confidence`
+- `regime_reason_flags`
+- `regime_blockers`
+- `expected_hold_class`
+- `entry_snapshot`
+
+### replay_feature_matrix
+Artifact:
+- `trade_feature_matrix.jsonl`
+
+Parity uses a pragmatic required subset derived from `analytics/analyzer_matrix.py`, including:
+- `position_id`
+- `regime_decision`
+- `expected_hold_class`
+- `x_status`
+- `exit_reason_final`
+- `hold_sec`
+- `net_pnl_pct`
+- `bundle_count_first_60s`
+- `bundle_size_value`
+- `net_unique_buyers_60s`
+- `liquidity_refill_ratio_120s`
+- `cluster_sell_concentration_120s`
+- `smart_wallet_dispersion_score`
+- `x_author_velocity_5m`
+- `seller_reentry_ratio`
+- `liquidity_shock_recovery_sec`
+
+Other replay/analyzer matrix columns remain additive and are reported rather than force-dropped.
+
+### post_run_summary
+Artifact:
+- `data/processed/post_run_summary.json`
+
+Required fields:
+- `as_of`
+- `contract_version`
+- `warnings`
+
+### post_run_recommendations
+Artifact:
+- `data/processed/post_run_recommendations.json`
+
+Required fields:
+- `contract_version`
+- `recommendations`
+
+## Docs sync scope
+
+Docs sync checks currently verify that:
+- `README.md` mentions the major current artifacts;
+- `docs/contracts.md` mentions the same major artifacts and contract groups;
+- merge-conflict markers and stale references are surfaced explicitly;
+- parity tool entry points are referenced.
+
+This is intentionally lightweight. It is not a full autogenerated documentation platform.
+
+## Current honesty / limitation notes
+
+- The parity layer checks field presence and documentation drift, not model quality.
+- Optional/additive fields are visible in reports and are not silently treated as failures.
+- Missing or malformed artifacts are explicit failures for audit purposes.
+- Docs should describe what is current in the repo now, not what a future PR may eventually add.
