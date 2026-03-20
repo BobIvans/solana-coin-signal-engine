@@ -33,7 +33,7 @@ Hard exits always win over partial-profit logic.
 - Recheck at `EXIT_SCALP_RECHECK_SEC`:
   - this is a **re-evaluation threshold**, not a forced sell
   - if profitable and momentum/social confirmation decays, trigger `FULL_EXIT`
-  - severe `cluster_dump_detected`, `bundle_failure_spike`, or creator-linked cluster risk may also force an immediate protective exit
+  - severe `cluster_dump_detected`, `bundle_failure_spike`, `creator_cluster_exit_risk`, or `linkage_risk_exit` may also force an immediate protective exit
 
 ### TREND
 
@@ -43,6 +43,7 @@ Hard exits always win over partial-profit logic.
   - liquidity breakdown
   - social/holder collapse
   - concentrated post-entry cluster dump / creator-cluster escalation
+  - high-confidence creator/dev/funder linkage escalation confirmed by distribution-style or retry-style manipulation evidence (`linkage_risk_exit`)
   - global hard flags (`dev_sell`, `rug_flag`)
 - Partial exits:
   - partial 1 at `EXIT_TREND_PARTIAL1_PCT` (`exit_fraction=0.33`)
@@ -91,7 +92,18 @@ Each decision includes `exit_snapshot` with load-bearing fields:
 - `bundle_cluster_delta`
 - `dev_sell_pressure_now`
 - `rug_flag_now`
-- optional bundle/cluster risk evidence such as `cluster_sell_concentration_120s`, `bundle_failure_retry_delta`, `creator_cluster_activity_now`, and `smart_wallet_netflow_bias` when present
+- optional bundle/cluster risk evidence such as `cluster_sell_concentration_120s`, `bundle_failure_retry_delta`, `creator_cluster_activity_now`, `linkage_risk_score_now`, and `smart_wallet_netflow_bias` when present
+
+Protective exit families that should remain distinct in artifacts and replay/debugging include:
+
+- `creator_cluster_exit_risk`
+- `linkage_risk_exit`
+- `cluster_dump_detected`
+- `failed_liquidity_refill_exit`
+- `shock_not_recovered_exit`
+- `retry_manipulation_detected`
+
+`linkage_risk_exit` is the canonical protective exit for high-confidence creator/dev/funder linkage risk that is confirmed by distribution-style or retry-style manipulation evidence. Its detection marker is `linkage_risk_detected`.
 
 Optional attribution fields:
 

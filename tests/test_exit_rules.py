@@ -260,5 +260,55 @@ def test_high_linkage_risk_triggers_trend_exit_when_distribution_confirms():
     }
     out = evaluate_trend_exit(position, current, DummySettings())
     assert out["exit_decision"] == "FULL_EXIT"
-    assert out["exit_reason"] == "linkage_exit_risk"
-    assert "linkage_exit_risk" in out["exit_flags"]
+    assert out["exit_reason"] == "linkage_risk_exit"
+    assert "linkage_risk_detected" in out["exit_flags"]
+
+
+def test_linkage_warning_path_uses_canonical_warning_marker_without_forcing_exit():
+    position = {"entry_snapshot": {"linkage_confidence": 0.52, "creator_buyer_link_score": 0.74}}
+    current = {
+        "pnl_pct": 11,
+        "buy_pressure_now": 0.71,
+        "liquidity_drop_pct": 2,
+        "x_validation_score_delta": 2,
+        "linkage_risk_score_now": 0.63,
+        "creator_buyer_link_score_now": 0.74,
+        "shared_funder_link_score_now": 0.71,
+        "cluster_sell_concentration_120s": 0.40,
+        "bundle_failure_retry_pattern_now": 0.0,
+    }
+    out = evaluate_trend_exit(position, current, DummySettings())
+    assert out["exit_decision"] == "HOLD"
+    assert "linkage_risk_detected" in out["exit_warnings"]
+
+
+def test_high_linkage_risk_triggers_hard_exit_with_canonical_reason_and_flag():
+    position = {"entry_snapshot": {"linkage_confidence": 0.73, "creator_buyer_link_score": 0.81}}
+    current = {
+        "linkage_risk_score_now": 0.88,
+        "creator_buyer_link_score_now": 0.81,
+        "shared_funder_link_score_now": 0.76,
+        "cluster_sell_concentration_120s": 0.80,
+    }
+    out = evaluate_hard_exit(position, current, DummySettings())
+    assert out["exit_decision"] == "FULL_EXIT"
+    assert out["exit_reason"] == "linkage_risk_exit"
+    assert "linkage_risk_detected" in out["exit_flags"]
+
+
+def test_high_linkage_risk_triggers_scalp_exit_with_canonical_reason_and_flag():
+    position = {"entry_snapshot": {"linkage_confidence": 0.72, "creator_buyer_link_score": 0.82}}
+    current = {
+        "hold_sec": 14,
+        "pnl_pct": 8,
+        "liquidity_drop_pct": 2,
+        "buy_pressure_now": 0.72,
+        "linkage_risk_score_now": 0.84,
+        "creator_buyer_link_score_now": 0.82,
+        "shared_funder_link_score_now": 0.75,
+        "cluster_sell_concentration_120s": 0.76,
+    }
+    out = evaluate_scalp_exit(position, current, DummySettings())
+    assert out["exit_decision"] == "FULL_EXIT"
+    assert out["exit_reason"] == "linkage_risk_exit"
+    assert "linkage_risk_detected" in out["exit_flags"]
