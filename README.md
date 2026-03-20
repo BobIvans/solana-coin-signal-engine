@@ -225,8 +225,6 @@ Key points:
 - bundle-stage enrichment keeps linkage fields null-filled when evidence is unavailable so downstream contracts stay stable;
 - confidence and provenance are exposed through `linkage_confidence`, `linkage_reason_codes`, `linkage_metric_origin`, and `linkage_status`;
 - this PR does **not** claim identity certainty, and weak evidence stays low-confidence.
-<<<<<<< HEAD
-=======
 
 ## PR-WAL-7 wallet family metadata
 
@@ -287,4 +285,3 @@ Artifacts written by the smoke path:
 
 See `docs/offline_feature_importance.md` for the target definitions, grouping logic, methods, caveats, and honesty policy.
 
->>>>>>> origin/main

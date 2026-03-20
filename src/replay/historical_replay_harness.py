@@ -89,7 +89,9 @@ _DEFAULT_WALLET_FEATURES = {
 _TRADE_FEATURE_MATRIX_FIELDS = [
     "run_id", "ts", "token_address", "pair_address", "symbol", "config_hash", "decision", "entry_decision",
     "regime_decision", "regime_confidence", "regime_reason_flags", "regime_blockers", "expected_hold_class",
-    "entry_confidence", "recommended_position_pct", "final_score", "onchain_core", "early_signal_bonus",
+    "entry_confidence", "recommended_position_pct", "base_position_pct", "effective_position_pct", "sizing_multiplier",
+    "sizing_reason_codes", "sizing_confidence", "sizing_origin", "sizing_warning", "evidence_quality_score",
+    "evidence_conflict_flag", "partial_evidence_flag", "final_score", "onchain_core", "early_signal_bonus",
     "x_validation_bonus", "rug_penalty", "spam_penalty", "confidence_adjustment", "wallet_adjustment",
     "bundle_aggression_bonus", "organic_multi_cluster_bonus", "single_cluster_penalty", "creator_cluster_penalty",
     "cluster_dev_link_penalty", "shared_funder_penalty", "bundle_sell_heavy_penalty", "retry_manipulation_penalty",
@@ -405,6 +407,16 @@ def _build_trade_feature_row(
         "expected_hold_class": _first_present(sources, "expected_hold_class"),
         "entry_confidence": _first_present(sources, "entry_confidence"),
         "recommended_position_pct": _first_present(sources, "recommended_position_pct"),
+        "base_position_pct": _first_present(sources, "base_position_pct"),
+        "effective_position_pct": _first_present(sources, "effective_position_pct"),
+        "sizing_multiplier": _first_present(sources, "sizing_multiplier"),
+        "sizing_reason_codes": _first_present(sources, "sizing_reason_codes"),
+        "sizing_confidence": _first_present(sources, "sizing_confidence"),
+        "sizing_origin": _first_present(sources, "sizing_origin"),
+        "sizing_warning": _first_present(sources, "sizing_warning"),
+        "evidence_quality_score": _first_present(sources, "evidence_quality_score"),
+        "evidence_conflict_flag": _first_present(sources, "evidence_conflict_flag"),
+        "partial_evidence_flag": _first_present(sources, "partial_evidence_flag"),
         "final_score": _first_present(sources, "final_score"),
         "onchain_core": _first_present(sources, "onchain_core"),
         "early_signal_bonus": _first_present(sources, "early_signal_bonus"),
@@ -412,7 +424,11 @@ def _build_trade_feature_row(
         "rug_penalty": _first_present(sources, "rug_penalty"),
         "spam_penalty": _first_present(sources, "spam_penalty"),
         "confidence_adjustment": _first_present(sources, "confidence_adjustment"),
-        "wallet_adjustment": _first_present(sources, "wallet_adjustment"),
+        "wallet_adjustment": (
+            wallet_adjustment.get("applied_delta")
+            if isinstance((wallet_adjustment := _first_present(sources, "wallet_adjustment")), dict)
+            else wallet_adjustment
+        ),
         "bundle_aggression_bonus": _first_present(sources, "bundle_aggression_bonus"),
         "organic_multi_cluster_bonus": _first_present(sources, "organic_multi_cluster_bonus"),
         "single_cluster_penalty": _first_present(sources, "single_cluster_penalty"),
@@ -431,6 +447,22 @@ def _build_trade_feature_row(
         "x_status": _first_present(sources, "x_status"),
         "x_validation_score_entry": _first_present(sources, "x_validation_score_entry", "x_validation_score"),
         "x_validation_delta_entry": _first_present(sources, "x_validation_delta_entry", "x_validation_delta"),
+        "creator_in_cluster_flag": _first_present(sources, "creator_in_cluster_flag"),
+        "creator_dev_link_score": _first_present(sources, "creator_dev_link_score"),
+        "creator_buyer_link_score": _first_present(sources, "creator_buyer_link_score"),
+        "dev_buyer_link_score": _first_present(sources, "dev_buyer_link_score"),
+        "shared_funder_link_score": _first_present(sources, "shared_funder_link_score"),
+        "creator_cluster_link_score": _first_present(sources, "creator_cluster_link_score"),
+        "cluster_dev_link_score": _first_present(sources, "cluster_dev_link_score"),
+        "linkage_risk_score": _first_present(sources, "linkage_risk_score"),
+        "creator_funder_overlap_count": _first_present(sources, "creator_funder_overlap_count"),
+        "buyer_funder_overlap_count": _first_present(sources, "buyer_funder_overlap_count"),
+        "funder_overlap_count": _first_present(sources, "funder_overlap_count"),
+        "linkage_reason_codes": _first_present(sources, "linkage_reason_codes"),
+        "linkage_confidence": _first_present(sources, "linkage_confidence"),
+        "linkage_metric_origin": _first_present(sources, "linkage_metric_origin"),
+        "linkage_status": _first_present(sources, "linkage_status"),
+        "linkage_warning": _first_present(sources, "linkage_warning"),
         "smart_wallet_score_sum": wallet_features.get("smart_wallet_score_sum"),
         "smart_wallet_tier1_hits": wallet_features.get("smart_wallet_tier1_hits"),
         "smart_wallet_tier2_hits": wallet_features.get("smart_wallet_tier2_hits"),
@@ -481,6 +513,29 @@ def replay_token_lifecycle(
     base_context = _merge_context(scored, candidate, signal_artifact, trade_artifact, position_artifact)
     token_address = token_payload.get("token_address") or base_context.get("token_address") or "unknown_token"
     pair_address = token_payload.get("pair_address") or base_context.get("pair_address")
+    historical_decision = _first_present([base_context, candidate, signal_artifact, trade_artifact, position_artifact], "decision", "entry_decision")
+    historical_regime_decision = _first_present([base_context, candidate, signal_artifact, trade_artifact, position_artifact], "regime_decision")
+    historical_regime_confidence = _first_present([base_context, candidate, signal_artifact, trade_artifact, position_artifact], "regime_confidence")
+    historical_regime_reason_flags = _first_present([base_context, candidate, signal_artifact, trade_artifact, position_artifact], "regime_reason_flags", "reason_flags")
+    historical_regime_blockers = _first_present([base_context, candidate, signal_artifact, trade_artifact, position_artifact], "regime_blockers", "blockers")
+    historical_expected_hold_class = _first_present([base_context, candidate, signal_artifact, trade_artifact, position_artifact], "expected_hold_class")
+
+    if historical_regime_decision is not None:
+        scored["regime_decision"] = historical_regime_decision
+        base_context["regime_decision"] = historical_regime_decision
+    if historical_regime_confidence is not None:
+        scored["regime_confidence"] = historical_regime_confidence
+        base_context["regime_confidence"] = historical_regime_confidence
+    if historical_regime_reason_flags is not None:
+        scored["regime_reason_flags"] = historical_regime_reason_flags
+        base_context["regime_reason_flags"] = historical_regime_reason_flags
+    if historical_regime_blockers is not None:
+        scored["regime_blockers"] = historical_regime_blockers
+        base_context["regime_blockers"] = historical_regime_blockers
+    if historical_expected_hold_class is not None:
+        scored["expected_hold_class"] = historical_expected_hold_class
+        base_context["expected_hold_class"] = historical_expected_hold_class
+
     missing_evidence = []
     if not token_payload.get("price_paths"):
         missing_evidence.append("price_path")
@@ -498,14 +553,14 @@ def replay_token_lifecycle(
         "token_address": token_address,
         "pair_address": pair_address,
         "symbol": base_context.get("symbol"),
-        "decision": entry_decision,
-        "entry_decision": entry_decision,
+        "decision": historical_decision or entry_decision,
+        "entry_decision": historical_decision or entry_decision,
         "decision_reason_codes": entry_reason_codes,
-        "regime_decision": regime.get("regime_decision"),
-        "regime_confidence": regime.get("regime_confidence"),
-        "regime_reason_flags": regime.get("regime_reason_flags"),
-        "regime_blockers": regime.get("regime_blockers"),
-        "expected_hold_class": regime.get("expected_hold_class"),
+        "regime_decision": historical_regime_decision if historical_regime_decision is not None else regime.get("regime_decision"),
+        "regime_confidence": historical_regime_confidence if historical_regime_confidence is not None else regime.get("regime_confidence"),
+        "regime_reason_flags": historical_regime_reason_flags if historical_regime_reason_flags is not None else regime.get("regime_reason_flags"),
+        "regime_blockers": historical_regime_blockers if historical_regime_blockers is not None else regime.get("regime_blockers"),
+        "expected_hold_class": historical_expected_hold_class if historical_expected_hold_class is not None else regime.get("expected_hold_class"),
         "entry_confidence": base_context.get("entry_confidence"),
         "recommended_position_pct": base_context.get("recommended_position_pct"),
         "final_score": base_context.get("final_score"),
@@ -575,6 +630,9 @@ def replay_token_lifecycle(
         "token_address": token_address,
         "pair_address": pair_address,
         "symbol": base_context.get("symbol"),
+        "side": "buy",
+        "decision": historical_decision or entry_decision,
+        "entry_decision": historical_decision or entry_decision,
         "entry_ts": entry["entry_time"],
         "entry_time": entry["entry_time"],
         "entry_price": entry.get("entry_price"),
@@ -588,7 +646,11 @@ def replay_token_lifecycle(
         "hold_sec": exit_payload.get("hold_sec"),
         "gross_pnl_pct": exit_payload.get("gross_pnl_pct"),
         "net_pnl_pct": exit_payload.get("net_pnl_pct"),
-        "regime_decision": regime.get("regime_decision"),
+        "regime_decision": historical_regime_decision if historical_regime_decision is not None else regime.get("regime_decision"),
+        "regime_confidence": historical_regime_confidence if historical_regime_confidence is not None else regime.get("regime_confidence"),
+        "regime_reason_flags": historical_regime_reason_flags if historical_regime_reason_flags is not None else regime.get("regime_reason_flags"),
+        "regime_blockers": historical_regime_blockers if historical_regime_blockers is not None else regime.get("regime_blockers"),
+        "expected_hold_class": historical_expected_hold_class if historical_expected_hold_class is not None else regime.get("expected_hold_class"),
         "replay_input_origin": replay_input_origin,
         "replay_data_status": replay_data_status,
         "replay_resolution_status": replay_resolution_status,
