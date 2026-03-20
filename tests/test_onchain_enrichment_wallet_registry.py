@@ -19,28 +19,71 @@ except ImportError:  # pragma: no cover - optional dependency
 
 
 class DummyRpc:
+    def __init__(self, signature_status_payload=None):
+        self.signature_status_payload = signature_status_payload or {
+            "records": [],
+            "tx_batch_status": "usable",
+            "tx_batch_warning": None,
+            "tx_batch_freshness": "fresh_cache",
+            "tx_batch_origin": "fixture_rpc",
+            "tx_batch_record_count": 0,
+            "tx_fetch_mode": "fresh_cache",
+            "tx_lake_events": [],
+        }
+
     def get_token_largest_accounts(self, token_address):
         return {"value": [{"amount": "500", "address": "acct1"}]}
 
     def get_token_supply(self, token_address):
         return {"value": {"amount": "1000", "decimals": 6, "uiAmount": 1000.0}}
 
+    def get_signatures_for_address_with_status(self, source_addr, limit):
+        return dict(self.signature_status_payload)
+
     def get_signatures_for_address(self, source_addr, limit):
-        return []
+        return self.get_signatures_for_address_with_status(source_addr, limit)["records"]
 
     def get_token_accounts_by_owner(self, owner, mint):
         return {"value": []}
 
 
 class DummyHelius:
+    def __init__(self, address_status_payload=None, signatures_status_payload=None):
+        self.address_status_payload = address_status_payload or {
+            "records": [],
+            "tx_batch_status": "usable",
+            "tx_batch_warning": None,
+            "tx_batch_freshness": "fresh_cache",
+            "tx_batch_origin": "fixture_address",
+            "tx_batch_record_count": 0,
+            "tx_fetch_mode": "fresh_cache",
+            "tx_lake_events": [],
+        }
+        self.signatures_status_payload = signatures_status_payload or {
+            "records": [],
+            "tx_batch_status": "usable",
+            "tx_batch_warning": None,
+            "tx_batch_freshness": "fresh_cache",
+            "tx_batch_origin": "fixture_signature_batch",
+            "tx_batch_record_count": 0,
+            "tx_fetch_mode": "fresh_cache",
+            "tx_lake_events": [],
+        }
+
     def get_asset(self, token_address):
         return {"decimals": 6, "token_info": {"decimals": 6}}
 
+    def get_transactions_by_address_with_status(self, address, limit):
+        return dict(self.address_status_payload)
+
     def get_transactions_by_address(self, address, limit):
-        return []
+        return self.get_transactions_by_address_with_status(address, limit)["records"]
+
+    def get_transactions_by_signatures_with_status(self, signatures):
+        return dict(self.signatures_status_payload)
 
     def get_transactions_by_signatures(self, signatures):
-        return []
+        return self.get_transactions_by_signatures_with_status(signatures)["records"]
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -48,7 +91,14 @@ def _write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
-def _patch_dependencies(monkeypatch, tmp_path: Path):
+def _patch_dependencies(
+    monkeypatch,
+    tmp_path: Path,
+    *,
+    helius_client=None,
+    rpc_client=None,
+    allow_launch_path_heuristics_only=True,
+):
     monkeypatch.setattr(
         smoke,
         "load_settings",
@@ -62,11 +112,11 @@ def _patch_dependencies(monkeypatch, tmp_path: Path):
             SMART_WALLET_HIT_WINDOW_SEC=300,
             HELIUS_TX_ADDR_LIMIT=40,
             HELIUS_TX_SIG_BATCH=25,
-            ALLOW_LAUNCH_PATH_HEURISTICS_ONLY=True,
+            ALLOW_LAUNCH_PATH_HEURISTICS_ONLY=allow_launch_path_heuristics_only,
         ),
     )
-    monkeypatch.setattr(smoke, "SolanaRpcClient", lambda *args, **kwargs: DummyRpc())
-    monkeypatch.setattr(smoke, "HeliusClient", lambda *args, **kwargs: DummyHelius())
+    monkeypatch.setattr(smoke, "SolanaRpcClient", lambda *args, **kwargs: rpc_client or DummyRpc())
+    monkeypatch.setattr(smoke, "HeliusClient", lambda *args, **kwargs: helius_client or DummyHelius())
     monkeypatch.setattr(smoke, "compute_holder_metrics", lambda *args, **kwargs: {
         "top1_holder_share": 0.1,
         "top20_holder_share": 0.2,
@@ -140,10 +190,18 @@ def test_onchain_enrichment_smoke_with_validated_registry(monkeypatch, tmp_path:
     assert token["bundle_tip_efficiency"] == 0.15
     assert token["bundle_failure_retry_pattern"] == 2
     assert token["cross_block_bundle_correlation"] == 0.75
+    assert token["tx_batch_status"] == "usable"
+    assert token["tx_batch_warning"] is None
+    assert token["tx_batch_freshness"] == "fresh_cache"
+    assert token["tx_batch_origin"] == "fixture_address"
+    assert token["tx_fetch_mode"] == "fresh_cache"
+    assert token["tx_batch_record_count"] == 0
+    assert token["tx_lookup_source"] == "address"
 
     event_lines = (tmp_path / "processed" / "onchain_enrichment_events.jsonl").read_text(encoding="utf-8").splitlines()
     assert any('"event": "wallet_registry_loaded"' in line for line in event_lines)
     assert any('"event": "token_wallet_hits_computed"' in line for line in event_lines)
+    assert any('"event": "tx_batch_resolved"' in line for line in event_lines)
 
 
 def test_onchain_enrichment_smoke_degrades_when_registry_missing(monkeypatch, tmp_path: Path):
@@ -201,10 +259,107 @@ def test_enriched_schema_declares_wallet_registry_fields_and_accepts_smoke_recor
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
     token_schema = schema["properties"]["tokens"]["items"]
     required = set(token_schema["required"])
-    assert {"wallet_registry_status", "smart_wallet_score_sum", "smart_wallet_registry_confidence", "net_unique_buyers_60s", "x_author_velocity_5m", "liquidity_shock_recovery_sec"}.issubset(required)
+    assert {
+        "wallet_registry_status",
+        "smart_wallet_score_sum",
+        "smart_wallet_registry_confidence",
+        "net_unique_buyers_60s",
+        "x_author_velocity_5m",
+        "liquidity_shock_recovery_sec",
+        "tx_batch_status",
+        "tx_batch_warning",
+        "tx_batch_freshness",
+        "tx_batch_origin",
+        "tx_fetch_mode",
+        "tx_batch_record_count",
+        "tx_lookup_source",
+    }.issubset(required)
     assert {"bundle_composition_dominant", "bundle_tip_efficiency", "bundle_failure_retry_pattern", "cross_block_bundle_correlation"}.issubset(token_schema["properties"].keys())
 
     if Draft7Validator is not None:
         Draft7Validator(schema).validate(payload)
     else:
         assert required.issubset(token.keys())
+
+
+def test_onchain_enrichment_stale_tx_fallback_degrades_status(monkeypatch, tmp_path: Path):
+    shortlist = tmp_path / "shortlist.json"
+    x_validated = tmp_path / "x_validated.json"
+    _write_json(shortlist, {"shortlist": [{"token_address": "mint1", "pair_created_at": "2026-03-18T11:59:00Z", "pair_address": "pair1"}]})
+    _write_json(x_validated, {"tokens": [{"token_address": "mint1"}]})
+
+    helius = DummyHelius(
+        address_status_payload={
+            "records": [{"signature": "sig-1", "timestamp": 1_710_000_000, "slot": 123, "tokenTransfers": []}],
+            "tx_batch_status": "usable",
+            "tx_batch_warning": "upstream_failed_use_stale",
+            "tx_batch_freshness": "stale_cache_allowed",
+            "tx_batch_origin": "fixture_stale",
+            "tx_batch_record_count": 1,
+            "tx_fetch_mode": "upstream_failed_use_stale",
+            "tx_lake_events": [],
+        },
+    )
+    _patch_dependencies(monkeypatch, tmp_path, helius_client=helius, allow_launch_path_heuristics_only=False)
+
+    payload = smoke.run(shortlist, x_validated)
+    token = payload["tokens"][0]
+
+    assert token["enrichment_status"] == "partial"
+    assert "upstream_failed_use_stale" in token["enrichment_warnings"]
+    assert token["tx_fetch_mode"] == "upstream_failed_use_stale"
+    assert token["tx_batch_freshness"] == "stale_cache_allowed"
+    assert token["tx_batch_origin"] == "fixture_stale"
+
+
+def test_onchain_enrichment_missing_tx_batch_degrades_honestly(monkeypatch, tmp_path: Path):
+    shortlist = tmp_path / "shortlist.json"
+    x_validated = tmp_path / "x_validated.json"
+    _write_json(shortlist, {"shortlist": [{"token_address": "mint1", "pair_created_at": "2026-03-18T11:59:00Z", "pair_address": "pair1"}]})
+    _write_json(x_validated, {"tokens": [{"token_address": "mint1"}]})
+
+    helius = DummyHelius(
+        address_status_payload={
+            "records": [],
+            "tx_batch_status": "missing",
+            "tx_batch_warning": "upstream_fetch_failed_and_no_cached_batch",
+            "tx_batch_freshness": "missing",
+            "tx_batch_origin": "fixture_missing_address",
+            "tx_batch_record_count": 0,
+            "tx_fetch_mode": "missing",
+            "tx_lake_events": [],
+        },
+        signatures_status_payload={
+            "records": [],
+            "tx_batch_status": "missing",
+            "tx_batch_warning": "upstream_fetch_failed_and_no_cached_batch",
+            "tx_batch_freshness": "missing",
+            "tx_batch_origin": "fixture_missing_sig_batch",
+            "tx_batch_record_count": 0,
+            "tx_fetch_mode": "missing",
+            "tx_lake_events": [],
+        },
+    )
+    rpc = DummyRpc(
+        signature_status_payload={
+            "records": [],
+            "tx_batch_status": "missing",
+            "tx_batch_warning": "upstream_fetch_failed_and_no_cached_batch",
+            "tx_batch_freshness": "missing",
+            "tx_batch_origin": "fixture_missing_rpc",
+            "tx_batch_record_count": 0,
+            "tx_fetch_mode": "missing",
+            "tx_lake_events": [],
+        },
+    )
+    _patch_dependencies(monkeypatch, tmp_path, helius_client=helius, rpc_client=rpc, allow_launch_path_heuristics_only=False)
+
+    payload = smoke.run(shortlist, x_validated)
+    token = payload["tokens"][0]
+
+    assert token["enrichment_status"] == "partial"
+    assert "tx batch missing" in token["enrichment_warnings"]
+    assert token["tx_batch_status"] == "missing"
+    assert token["tx_batch_warning"] == "upstream_fetch_failed_and_no_cached_batch; upstream_fetch_failed_and_no_cached_batch"
+    assert token["tx_fetch_mode"] == "missing"
+    assert token["tx_lookup_source"] == "rpc_signatures_missing"

@@ -33,6 +33,79 @@ DEFAULT_VALIDATED_REGISTRY_PATH = Path("data/registry/smart_wallets.validated.js
 DEFAULT_HOT_REGISTRY_PATH = Path("data/registry/hot_wallets.validated.json")
 
 
+def _null_tx_fetch_payload(*, tx_lookup_source: str | None = None) -> dict:
+    return {
+        "records": [],
+        "tx_batch_status": None,
+        "tx_batch_warning": None,
+        "tx_batch_freshness": None,
+        "tx_batch_origin": None,
+        "tx_batch_record_count": None,
+        "tx_fetch_mode": None,
+        "tx_lake_events": [],
+        "tx_lookup_source": tx_lookup_source,
+    }
+
+
+def _tx_warning_reasons(tx_fetch: dict) -> list[str]:
+    reasons: list[str] = []
+    fetch_mode = str(tx_fetch.get("tx_fetch_mode") or "").strip()
+    batch_status = str(tx_fetch.get("tx_batch_status") or "").strip()
+    freshness = str(tx_fetch.get("tx_batch_freshness") or "").strip()
+    batch_warning = str(tx_fetch.get("tx_batch_warning") or "").strip()
+
+    if batch_warning:
+        reasons.append(batch_warning)
+    if fetch_mode in {"stale_cache_allowed", "upstream_failed_use_stale", "missing"}:
+        reasons.append(fetch_mode)
+    if batch_status in {"partial", "malformed", "missing"}:
+        reasons.append(f"tx batch {batch_status}")
+    if freshness in {"stale_cache_allowed", "unknown", "missing"}:
+        reasons.append(f"tx batch freshness {freshness}")
+    return sorted(set(reasons))
+
+
+def _tx_fetch_is_degraded(tx_fetch: dict) -> bool:
+    return bool(_tx_warning_reasons(tx_fetch))
+
+
+def _fetch_token_transactions_with_status(
+    helius: HeliusClient,
+    rpc: SolanaRpcClient,
+    source_addr: str,
+    settings,
+) -> dict:
+    address_fetch = helius.get_transactions_by_address_with_status(source_addr, settings.HELIUS_TX_ADDR_LIMIT)
+    address_events = list(address_fetch.get("tx_lake_events") or [])
+    if address_fetch.get("records"):
+        return {**address_fetch, "tx_lake_events": address_events, "tx_lookup_source": "address"}
+
+    signature_lookup = rpc.get_signatures_for_address_with_status(source_addr, settings.HELIUS_TX_SIG_BATCH)
+    signature_events = address_events + list(signature_lookup.get("tx_lake_events") or [])
+    signatures = [str(item.get("signature") or "") for item in signature_lookup.get("records", []) if item.get("signature")]
+    if not signatures:
+        if signature_lookup.get("tx_fetch_mode") == "missing" or signature_lookup.get("tx_batch_status") == "missing":
+            warning_parts = [
+                str(address_fetch.get("tx_batch_warning") or "").strip(),
+                str(signature_lookup.get("tx_batch_warning") or "").strip(),
+            ]
+            missing_payload = {
+                **signature_lookup,
+                "tx_lake_events": signature_events,
+                "tx_lookup_source": "rpc_signatures_missing",
+                "tx_batch_warning": "; ".join(part for part in warning_parts if part) or None,
+            }
+            return missing_payload
+        return {**address_fetch, "tx_lake_events": signature_events, "tx_lookup_source": "address"}
+
+    signature_tx_fetch = helius.get_transactions_by_signatures_with_status(signatures)
+    return {
+        **signature_tx_fetch,
+        "tx_lake_events": signature_events + list(signature_tx_fetch.get("tx_lake_events") or []),
+        "tx_lookup_source": "signature_batch",
+    }
+
+
 def _validate_record(record: dict) -> None:
     required = {
         "token_address",
@@ -77,6 +150,13 @@ def _validate_record(record: dict) -> None:
         "continuation_coverage_ratio",
         "continuation_inputs_status",
         "continuation_warnings",
+        "tx_batch_status",
+        "tx_batch_warning",
+        "tx_batch_freshness",
+        "tx_batch_origin",
+        "tx_fetch_mode",
+        "tx_batch_record_count",
+        "tx_lookup_source",
         "contract_version",
     }
     missing = sorted(required - set(record.keys()))
@@ -178,6 +258,7 @@ def run(
         )
 
         asset: dict = {}
+        tx_fetch = _null_tx_fetch_payload(tx_lookup_source="helius_disabled")
         txs: list[dict] = []
         if helius:
             asset = helius.get_asset(token_address)
@@ -187,14 +268,26 @@ def run(
                 status = "partial"
                 warnings.append("asset metadata missing")
             source_addr = pair_address or token_address
-            txs = helius.get_transactions_by_address(source_addr, settings.HELIUS_TX_ADDR_LIMIT)
-            if not txs:
-                sigs = rpc.get_signatures_for_address(source_addr, settings.HELIUS_TX_SIG_BATCH)
-                signatures = [str(item.get("signature") or "") for item in sigs if item.get("signature")]
-                txs = helius.get_transactions_by_signatures(signatures)
-                if signatures and not txs:
-                    status = "partial"
-                    warnings.append("enhanced transaction batch fetch failed")
+            tx_fetch = _fetch_token_transactions_with_status(helius, rpc, source_addr, settings)
+            txs = list(tx_fetch.get("records") or [])
+            append_jsonl(
+                events_path,
+                {
+                    "ts": utc_now_iso(),
+                    "event": "tx_batch_resolved",
+                    "token_address": token_address,
+                    "tx_batch_status": tx_fetch.get("tx_batch_status"),
+                    "tx_batch_warning": tx_fetch.get("tx_batch_warning"),
+                    "tx_batch_freshness": tx_fetch.get("tx_batch_freshness"),
+                    "tx_batch_origin": tx_fetch.get("tx_batch_origin"),
+                    "tx_fetch_mode": tx_fetch.get("tx_fetch_mode"),
+                    "tx_batch_record_count": tx_fetch.get("tx_batch_record_count"),
+                    "tx_lookup_source": tx_fetch.get("tx_lookup_source"),
+                },
+            )
+            if _tx_fetch_is_degraded(tx_fetch):
+                status = "partial" if status == "ok" else status
+                warnings.extend(_tx_warning_reasons(tx_fetch))
         else:
             status = "partial"
             warnings.append("helius disabled: tx-derived metrics may be incomplete")
@@ -288,6 +381,13 @@ def run(
             **smart,
             **wallet_bias,
             **continuation,
+            "tx_batch_status": tx_fetch.get("tx_batch_status"),
+            "tx_batch_warning": tx_fetch.get("tx_batch_warning"),
+            "tx_batch_freshness": tx_fetch.get("tx_batch_freshness"),
+            "tx_batch_origin": tx_fetch.get("tx_batch_origin"),
+            "tx_fetch_mode": tx_fetch.get("tx_fetch_mode"),
+            "tx_batch_record_count": tx_fetch.get("tx_batch_record_count"),
+            "tx_lookup_source": tx_fetch.get("tx_lookup_source"),
             "enrichment_status": status,
             "enrichment_warnings": sorted(set(warnings)),
             "enriched_at": utc_now_iso(),

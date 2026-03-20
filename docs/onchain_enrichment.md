@@ -107,9 +107,32 @@ Outputs:
 - `data/processed/onchain_enrichment_events.jsonl`
 - smoke helper: `data/processed/enriched_tokens.smoke.json`
 
+## Tx lake provenance
+On-chain enrichment now uses the provenance-aware transaction helpers instead of the legacy list-only wrappers:
+- `HeliusClient.get_transactions_by_address_with_status(...)`
+- `SolanaRpcClient.get_signatures_for_address_with_status(...)`
+- `HeliusClient.get_transactions_by_signatures_with_status(...)`
+
+Each enriched token now carries explicit tx-batch provenance fields:
+- `tx_batch_status`
+- `tx_batch_warning`
+- `tx_batch_freshness`
+- `tx_batch_origin`
+- `tx_fetch_mode`
+- `tx_batch_record_count`
+- `tx_lookup_source`
+
+Interpretation policy:
+- Fresh usable tx batches remain healthy.
+- `stale_cache_allowed` or `upstream_failed_use_stale` never stay silently healthy; enrichment is degraded to `enrichment_status=partial`.
+- `partial`, `malformed`, or `missing` tx batches also degrade enrichment to `partial`.
+- A genuinely empty fresh batch is distinct from a missing batch, so the artifact keeps explicit provenance instead of collapsing both cases into a plain empty tx list.
+- Enrichment still fail-opens instead of crashing; provenance is surfaced through the artifact and the `tx_batch_resolved` event in `onchain_enrichment_events.jsonl`.
+
 ## Partial/fail-open behavior
 - Missing asset metadata => `enrichment_status=partial`, but holder/dev metrics still computed.
-- Missing/failed enhanced tx batch => `partial`, no crash.
+- Stale tx cache reuse (`stale_cache_allowed`, `upstream_failed_use_stale`) => `partial`, no crash, with explicit tx provenance warnings.
+- Missing/partial/malformed tx batch => `partial`, no crash, with explicit tx provenance fields preserved in output.
 - Unknown launch path => `launch_path_label=unknown` + low confidence + warning.
 - Missing validated wallet registry => degraded registry mode, no crash.
 
