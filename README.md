@@ -123,11 +123,11 @@ python scripts/post_run_analyzer_smoke.py --base-dir data/smoke/post_run
 
 ## PR-SIG-3 continuation enrichment
 
-PR-SIG-3 adds an end-to-end continuation enrichment layer that centralizes short-horizon continuation evidence production and keeps missing-data handling explicit.
+PR-SIG-3 adds the continuation evidence layer that sits between short-horizon helper computations and downstream score/exit consumers. It keeps continuation outputs explicit, additive, and fail-open when tx, X, or wallet-registry evidence is incomplete.
 
-### Continuation outputs
+### Evidence lanes
 
-Transaction-derived:
+Transaction-derived metrics:
 
 - `net_unique_buyers_60s`
 - `liquidity_refill_ratio_120s`
@@ -135,11 +135,11 @@ Transaction-derived:
 - `seller_reentry_ratio`
 - `liquidity_shock_recovery_sec`
 
-X-derived:
+X-derived metrics:
 
 - `x_author_velocity_5m`
 
-Wallet-registry-derived:
+Wallet-registry-derived metrics:
 
 - `smart_wallet_dispersion_score`
 
@@ -154,9 +154,9 @@ Additive provenance/status fields:
 
 ### Missing-evidence policy
 
-- Missing evidence is left missing; it is not silently turned into bullish or bearish continuation.
-- Partial evidence is marked `partial` rather than treated as complete.
-- The scorer can still consume continuation fields, but low-confidence continuation evidence is intentionally damped.
+- Missing evidence remains missing; it is not silently converted into bullish or bearish continuation strength.
+- Partial evidence is labeled `partial`, not treated as complete coverage.
+- Downstream scoring can consume continuation fields, but low-confidence continuation evidence is intentionally damped.
 
 ### Continuation smoke
 
@@ -164,10 +164,10 @@ Additive provenance/status fields:
 python scripts/continuation_smoke.py
 ```
 
-This writes:
+Artifacts written under `data/smoke/`:
 
-- `data/smoke/continuation_enrichment.smoke.json`
-- `data/smoke/continuation_status.json`
-- `data/smoke/continuation_events.jsonl`
+- `continuation_enrichment.smoke.json`
+- `continuation_status.json`
+- `continuation_events.jsonl`
 
-See `docs/continuation_enricher.md` for implementation details.
+See `docs/continuation_enricher.md` for the full contract, provenance semantics, and fallback behavior.
