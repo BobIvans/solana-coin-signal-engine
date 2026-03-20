@@ -49,6 +49,14 @@ The current analyzer writes compact machine-readable groups for:
   - `degraded_x_salvage_cases`
   - `degraded_x_false_positive_rate`
   - `degraded_x_small_size_performance`
+- `evidence_quality`
+  - `partial_evidence_trades`
+  - `low_confidence_evidence_trades`
+  - `evidence_conflict_trades`
+  - `degraded_x_trades`
+  - `degraded_x_salvage_cases`
+  - `linkage_risk_underperformance`
+  - `healthy_evidence_trades`
 - `exit_failure`
   - `cluster_dump_exit_performance`
   - `creator_cluster_exit_risk_performance`
@@ -97,6 +105,29 @@ Each slice aims to expose these machine-readable fields when applicable:
 - `recommendation_hint`
 
 Some comparison slices also include family-specific fields such as `expectancy_gap`, `trend_expectancy`, or `degraded_false_positive_rate`.
+
+## Evidence-quality slice rules
+
+The evidence-quality group is intentionally calibration-only. It reuses existing replay and trade-matrix fields instead of inventing a second parallel quality model.
+
+- `partial_evidence_trades`
+  - direct `partial_evidence_flag=true`, or
+  - any core evidence status already marked `partial` such as `bundle_evidence_status`, `cluster_evidence_status`, `continuation_status`, `linkage_status`, `runtime_signal_status`, or `tx_batch_status`.
+- `low_confidence_evidence_trades`
+  - prefers existing scalar fields such as `evidence_quality_score`, `sizing_confidence`, `continuation_confidence`, or numeric `linkage_confidence`, and
+  - also accepts explicit low-confidence labels or reason codes when those are already present.
+- `evidence_conflict_trades`
+  - direct `evidence_conflict_flag=true` only.
+- `degraded_x_trades`
+  - direct `x_status=degraded`-style states only.
+- `degraded_x_salvage_cases`
+  - subset of degraded-X rows with positive realized `net_pnl_pct`.
+- `linkage_risk_underperformance`
+  - elevated linkage/manipulation risk (`linkage_risk_score` or `creator_link_risk_score` at or above the conservative threshold) plus non-positive realized PnL.
+- `healthy_evidence_trades`
+  - optional comparison baseline that excludes the degraded / partial / conflicting / low-confidence / elevated-linkage-risk-underperformance buckets above.
+
+These rules are designed to stay readable in reviews and reproducible in tests. They do **not** change online score, regime, sizing, or exit behavior.
 
 ## Recommendation policy
 

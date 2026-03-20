@@ -163,6 +163,7 @@ def write_markdown_report(summary: dict[str, Any], recommendations: dict[str, An
     _append_rich_slice_group(lines, "cluster/bundle diagnostics", slice_groups.get("cluster_bundle", {}))
     _append_rich_slice_group(lines, "continuation diagnostics", slice_groups.get("continuation", {}))
     _append_rich_slice_group(lines, "degraded X diagnostics", slice_groups.get("degraded_x", {}))
+    _append_rich_slice_group(lines, "evidence quality diagnostics", slice_groups.get("evidence_quality", analyzer_slices.get("evidence_quality_slices", {})))
     _append_rich_slice_group(lines, "exit/failure diagnostics", slice_groups.get("exit_failure", {}))
 
     lines += [_section("key conservative recommendations")]

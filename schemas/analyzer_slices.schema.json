@@ -25,10 +25,12 @@
         "cluster_bundle": {"$ref": "#/$defs/sliceGroup"},
         "continuation": {"$ref": "#/$defs/sliceGroup"},
         "degraded_x": {"$ref": "#/$defs/sliceGroup"},
+        "evidence_quality": {"$ref": "#/$defs/sliceGroup"},
         "exit_failure": {"$ref": "#/$defs/sliceGroup"}
       },
       "additionalProperties": {"$ref": "#/$defs/sliceGroup"}
     },
+    "evidence_quality_slices": {"$ref": "#/$defs/sliceGroup"},
     "recommendation_inputs": {
       "type": "object",
       "required": ["actionable_slices", "low_sample_slices", "warnings", "manual_only"],
