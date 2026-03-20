@@ -1,109 +1,79 @@
-# solana-memecoin-signal-engine
+# solana-coin-signal-engine
 
-PR-4 extends the engine with an on-chain enrichment layer that merges shortlist + X-validated tokens and computes fast holder/dev/launch-path/smart-wallet metrics.
+This repository contains deterministic scoring, regime-selection, exit, replay, calibration, promotion, and smoke tooling for a Solana memecoin signal engine.
 
-## What PR-4 includes
+## Historical replay harness
 
-- Solana RPC client wrappers (`collectors/solana_rpc_client.py`)
-- Helius client wrappers (`collectors/helius_client.py`)
-- Holder metrics (`analytics/holder_metrics.py`)
-- Dev activity metrics (`analytics/dev_activity.py`)
-- Launch path heuristics (`analytics/launch_path.py`)
-- Smart wallet hit scoring (`analytics/smart_wallet_hits.py`)
-- Schema contract (`schemas/enriched_token.schema.json`)
-- Smoke runner (`scripts/onchain_enrichment_smoke.py`)
-- docs (`docs/onchain_enrichment.md`)
+The replay path is now evidence-first.
 
-## Run on-chain enrichment smoke
+Historical replay uses recorded local artifacts such as scored rows, entry candidates, historical signals/trades/positions, and recorded price paths to reconstruct candidate, entry, position, and exit lifecycles.
 
-```bash
-python scripts/onchain_enrichment_smoke.py \
-  --shortlist data/processed/shortlist.json \
-  --x-validated data/processed/x_validated.json
-```
+### What makes replay historical
 
-## Run tests
+A replay run is historical when it is driven by persisted local artifacts under an artifact directory, typically `data/processed/` or a fixture directory. The harness prefers:
 
-```bash
-pytest -q
-```
+- `scored_tokens.jsonl`
+- `entry_candidates.json` / `entry_candidates.jsonl`
+- `signals.jsonl` / `entry_events.jsonl`
+- `trades.jsonl`
+- `positions.json`
+- `price_paths.json` / `price_paths.jsonl`
+- `universe.json` / `universe.jsonl`
 
-## Data artifacts
+Missing evidence is not silently turned into synthetic outcomes. Instead, rows are labeled as historical, partial, unresolved, or synthetic-smoke-assisted.
 
-Artifacts are created under `data/processed/`:
+### Replay outputs
 
-- `shortlist.json`
-- `x_validated.json`
-- `enriched_tokens.json`
-- `onchain_enrichment_events.jsonl`
+Each replay run writes artifacts under `runs/<run_id>/` by default:
 
-## Metric honesty policy
+- `signals.jsonl`
+- `trades.jsonl`
+- `positions.json`
+- `trade_feature_matrix.jsonl`
+- `replay_summary.json`
+- `replay_summary.md`
+- `manifest.json`
 
-- `top20_holder_share` is exact for top-20 accounts from RPC.
-- `first50_holder_conc_est` and `holder_entropy_est` are **heuristics** by contract.
-- launch-path stays heuristic (`*_est`, `*_score`) in this PR.
+The summary reports:
 
+- historical row count
+- partial row count
+- unresolved row count
+- wallet-weighting mode
+- config hash
+- whether synthetic fallback was used
 
-## PR-5 rug safety engine
-
-PR-5 adds a deterministic rug safety layer over `enriched_tokens.json` and writes:
-
-- `data/processed/rug_assessed_tokens.json`
-- `data/processed/rug_events.jsonl`
-
-Run smoke:
+### Run historical replay
 
 ```bash
-python scripts/rug_engine_smoke.py --enriched data/processed/enriched_tokens.json
+python scripts/replay_7d.py \
+  --run-id example_replay \
+  --config config/replay.default.yaml \
+  --artifact-dir data/processed \
+  --wallet-weighting off \
+  --dry-run
 ```
 
-Policy highlights:
-
-- Burn and lock are separated (`lp_burn_confirmed` vs `lp_locked_flag`).
-- Concentration uses top1/top20 only for MVP honesty.
-- Fail-closed mode prevents partial assessments from defaulting to `PASS`.
-
-
-## PR-6 unified scoring
-
-PR-6 adds the unified scoring layer that merges:
-
-- `shortlist.json`
-- `x_validated.json`
-- `enriched_tokens.json`
-- `rug_assessed_tokens.json`
-
-and produces deterministic outputs:
-
-- `data/processed/scored_tokens.json`
-- `data/processed/score_events.jsonl`
-
-Run smoke:
+### Compare wallet weighting modes
 
 ```bash
-python scripts/unified_score_smoke.py \
-  --shortlist data/processed/shortlist.json \
-  --x-validated data/processed/x_validated.json \
-  --enriched data/processed/enriched_tokens.json \
-  --rug-assessed data/processed/rug_assessed_tokens.json
+python scripts/replay_7d.py --run-id replay_off --artifact-dir data/processed --wallet-weighting off --dry-run
+python scripts/replay_7d.py --run-id replay_on --artifact-dir data/processed --wallet-weighting on --dry-run
 ```
 
-## PR-7 entry selector
-
-Both PR-6 and PR-7 sections are intentionally kept because PR-7 consumes `scored_tokens.json` from PR-6.
-
-PR-7 adds entry routing on top of `scored_tokens.json`:
-
-- decision outputs: `SCALP | TREND | IGNORE`
-- independent `entry_confidence` and `recommended_position_pct`
-- deterministic `entry_snapshot` for PR-8/PR-9
-- append-only events log (`data/processed/entry_events.jsonl`)
-
-Run smoke:
+### Historical replay smoke
 
 ```bash
-python scripts/entry_selector_smoke.py --scored data/processed/scored_tokens.json
+python scripts/historical_replay_smoke.py
 ```
+
+This writes deterministic smoke outputs under `data/smoke/`.
+
+## PR-RUN-1 runtime signal consumption
+
+This repository also contains the runtime promotion loop and related guards/reporting under `scripts/run_promotion_loop.py` and `src/promotion/`.
+
+Runtime consumes local signal artifacts conservatively: missing or incomplete signal evidence should degrade safely and skip unusable rows rather than inventing paper trades. This replay PR does not change runtime promotion behavior, but it keeps the README section that would otherwise conflict when replay and runtime docs are merged together.
 
 ## PR-RUN-1 runtime real signal wiring
 
@@ -255,6 +225,8 @@ Key points:
 - bundle-stage enrichment keeps linkage fields null-filled when evidence is unavailable so downstream contracts stay stable;
 - confidence and provenance are exposed through `linkage_confidence`, `linkage_reason_codes`, `linkage_metric_origin`, and `linkage_status`;
 - this PR does **not** claim identity certainty, and weak evidence stays low-confidence.
+<<<<<<< HEAD
+=======
 
 ## PR-WAL-7 wallet family metadata
 
@@ -315,3 +287,4 @@ Artifacts written by the smoke path:
 
 See `docs/offline_feature_importance.md` for the target definitions, grouping logic, methods, caveats, and honesty policy.
 
+>>>>>>> origin/main

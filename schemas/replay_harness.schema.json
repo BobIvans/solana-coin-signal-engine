@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schemas/replay_harness.schema.json",
+  "title": "Historical Replay Harness Summary",
+  "type": "object",
+  "required": [
+    "contract_version",
+    "run_id",
+    "replay_mode",
+    "input_origin",
+    "wallet_weighting",
+    "config_hash",
+    "historical_rows_used",
+    "partial_rows",
+    "unresolved_rows",
+    "synthetic_fallback_used",
+    "artifacts"
+  ],
+  "properties": {
+    "contract_version": {"type": "string"},
+    "run_id": {"type": "string"},
+    "replay_mode": {"type": "string", "enum": ["historical", "historical_partial", "synthetic_smoke", "mixed"]},
+    "input_origin": {"type": "string", "enum": ["historical", "historical_partial", "synthetic_smoke", "mixed"]},
+    "wallet_weighting": {"type": "string", "enum": ["off", "shadow", "on"]},
+    "config_hash": {"type": "string"},
+    "historical_rows_used": {"type": "integer", "minimum": 0},
+    "partial_rows": {"type": "integer", "minimum": 0},
+    "unresolved_rows": {"type": "integer", "minimum": 0},
+    "ignored_rows": {"type": "integer", "minimum": 0},
+    "synthetic_fallback_used": {"type": "boolean"},
+    "warnings": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "artifacts": {
+      "type": "object",
+      "required": ["signals", "trades", "positions", "trade_feature_matrix", "replay_summary", "replay_summary_md", "manifest"],
+      "properties": {
+        "signals": {"type": "string"},
+        "trades": {"type": "string"},
+        "positions": {"type": "string"},
+        "trade_feature_matrix": {"type": "string"},
+        "replay_summary": {"type": "string"},
+        "replay_summary_md": {"type": "string"},
+        "manifest": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "completeness": {
+      "type": "object",
+      "properties": {
+        "historical_rows": {"type": "integer", "minimum": 0},
+        "partial_rows": {"type": "integer", "minimum": 0},
+        "unresolved_rows": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}
