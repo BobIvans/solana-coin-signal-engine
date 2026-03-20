@@ -28,7 +28,7 @@ def _build_repo_fixture(root: Path) -> None:
         encoding="utf-8",
     )
     (root / "docs" / "contracts.md").write_text(
-        """# Contracts\n\ncore_shortlist\ncore_enriched\nbundle_cluster\ncontinuation\ncore_rug_assessed\ncore_scored\ncore_entry_candidates\nreplay_feature_matrix\npost_run_summary\npost_run_recommendations\n\nArtifacts: `shortlist.json`, `enriched_tokens.json`, `rug_assessed_tokens.json`, `scored_tokens.json`, `entry_candidates.json`, `trade_feature_matrix.jsonl`, `post_run_summary.json`, `post_run_recommendations.json`.\n""",
+        """# Contracts\n\ncore_shortlist\ncore_x_validation\ncore_enriched\nbundle_cluster\nbundle_provenance\ncluster_provenance\nlinkage_evidence\ncontinuation\ncore_rug_assessed\ncore_scored\ncore_entry_candidates\nreplay_feature_matrix\npost_run_summary\npost_run_recommendations\n\nArtifacts: `shortlist.json`, `enriched_tokens.json`, `rug_assessed_tokens.json`, `scored_tokens.json`, `entry_candidates.json`, `trade_feature_matrix.jsonl`, `post_run_summary.json`, `post_run_recommendations.json`.\n""",
         encoding="utf-8",
     )
 
@@ -59,6 +59,32 @@ def _build_repo_fixture(root: Path) -> None:
                     "cluster_concentration_ratio": 0.36,
                     "num_unique_clusters_first_60s": 3,
                     "creator_in_cluster_flag": False,
+                    "bundle_evidence_source": "bundle_layer",
+                    "bundle_evidence_confidence": "high",
+                    "bundle_evidence_warning": "",
+                    "bundle_metric_origin": "raw_bundles",
+                    "cluster_evidence_status": "complete",
+                    "cluster_evidence_source": "graph",
+                    "cluster_evidence_confidence": "high",
+                    "graph_cluster_id_count": 3,
+                    "graph_cluster_coverage_ratio": 0.91,
+                    "creator_cluster_id": "cluster-creator-1",
+                    "dominant_cluster_id": "cluster-dominant-1",
+                    "creator_dev_link_score": 0.10,
+                    "creator_buyer_link_score": 0.08,
+                    "dev_buyer_link_score": 0.04,
+                    "shared_funder_link_score": 0.12,
+                    "creator_cluster_link_score": 0.09,
+                    "cluster_dev_link_score": 0.11,
+                    "linkage_risk_score": 0.18,
+                    "creator_funder_overlap_count": 1,
+                    "buyer_funder_overlap_count": 1,
+                    "funder_overlap_count": 2,
+                    "linkage_reason_codes": ["shared_funder"],
+                    "linkage_confidence": "low",
+                    "linkage_metric_origin": "heuristic",
+                    "linkage_status": "partial",
+                    "linkage_warning": "",
                     "net_unique_buyers_60s": 11,
                     "liquidity_refill_ratio_120s": 1.20,
                     "cluster_sell_concentration_120s": 0.18,
@@ -174,6 +200,15 @@ def test_contract_parity_mismatch_visibility(tmp_path: Path) -> None:
     assert statuses[("bundle_cluster", "enriched_tokens")]["status"] == "mismatch"
     assert "bundle_count_first_60s" in statuses[("bundle_cluster", "enriched_tokens")]["missing_required_fields"]
     assert "mystery_extra_field" in statuses[("bundle_cluster", "enriched_tokens")]["extra_fields"]
+
+    assert statuses[("bundle_provenance", "enriched_tokens")]["status"] == "mismatch"
+    assert "bundle_evidence_status" in statuses[("bundle_provenance", "enriched_tokens")]["missing_required_fields"]
+
+    assert statuses[("cluster_provenance", "enriched_tokens")]["status"] == "mismatch"
+    assert "cluster_metric_origin" in statuses[("cluster_provenance", "enriched_tokens")]["missing_required_fields"]
+
+    assert statuses[("linkage_evidence", "enriched_tokens")]["status"] in {"ok", "warning"}
+    assert statuses[("linkage_evidence", "enriched_tokens")]["missing_required_fields"] == []
 
     assert statuses[("core_x_validation", "x_validated")]["status"] == "missing"
     assert statuses[("core_rug_assessed", "rug_assessed_tokens")]["status"] == "malformed"
