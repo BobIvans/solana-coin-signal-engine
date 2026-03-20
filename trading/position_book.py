@@ -10,6 +10,7 @@ from trading.pnl_engine import (
     compute_unrealized_pnl,
 )
 from utils.clock import utc_now_iso
+from utils.wallet_family_contract_fields import copy_wallet_family_contract_fields
 
 
 def _next_id(prefix: str, counter: int) -> str:
@@ -74,6 +75,7 @@ def open_position(fill_ctx: dict[str, Any], signal_ctx: dict[str, Any], state: d
         "unrealized_pnl_sol": 0.0,
         "fees_paid_sol": float(fill_ctx.get("priority_fee_sol") or 0.0),
         "entry_snapshot": signal_ctx.get("entry_snapshot") or {},
+        **copy_wallet_family_contract_fields(signal_ctx),
         "last_mark_price_usd": float(fill_ctx.get("executed_price_usd") or 0.0),
         "last_updated_at": now,
         "contract_version": signal_ctx.get("contract_version"),

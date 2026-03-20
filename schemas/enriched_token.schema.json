@@ -71,7 +71,18 @@
           "enrichment_status",
           "smart_wallet_tier3_hits",
           "continuation_status",
-          "holder_entropy_est"
+          "holder_entropy_est",
+          "smart_wallet_family_ids",
+          "smart_wallet_independent_family_ids",
+          "smart_wallet_family_origins",
+          "smart_wallet_family_statuses",
+          "smart_wallet_family_reason_codes",
+          "smart_wallet_family_unique_count",
+          "smart_wallet_independent_family_unique_count",
+          "smart_wallet_family_confidence_max",
+          "smart_wallet_family_member_count_max",
+          "smart_wallet_family_shared_funder_flag",
+          "smart_wallet_family_creator_link_flag"
         ],
         "properties": {
           "token_address": {
@@ -446,6 +457,59 @@
             "items": {
               "type": "string"
             }
+          },
+          "smart_wallet_family_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "smart_wallet_independent_family_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "smart_wallet_family_origins": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "smart_wallet_family_statuses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "smart_wallet_family_reason_codes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "smart_wallet_family_unique_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "smart_wallet_independent_family_unique_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "smart_wallet_family_confidence_max": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "smart_wallet_family_member_count_max": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "smart_wallet_family_shared_funder_flag": {
+            "type": "boolean"
+          },
+          "smart_wallet_family_creator_link_flag": {
+            "type": "boolean"
           }
         }
       }

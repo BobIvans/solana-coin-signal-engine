@@ -324,3 +324,25 @@ def test_analytics_unified_score_is_wallet_neutral():
     out = score_token(token, settings)
     assert out["wallet_adjustment"]["wallet_bonus_score"] > 0
     assert out["final_score"] == out["final_score_pre_wallet"]
+
+
+def test_unified_score_propagates_wallet_family_summary_fields():
+    settings = load_settings()
+    token = {
+        **_base_token(),
+        "smart_wallet_family_ids": ["fam_a"],
+        "smart_wallet_independent_family_ids": ["ifam_a"],
+        "smart_wallet_family_origins": ["graph_evidence"],
+        "smart_wallet_family_statuses": ["ok"],
+        "smart_wallet_family_reason_codes": ["shared_cluster"],
+        "smart_wallet_family_unique_count": 1,
+        "smart_wallet_independent_family_unique_count": 1,
+        "smart_wallet_family_confidence_max": 0.84,
+        "smart_wallet_family_member_count_max": 4,
+        "smart_wallet_family_shared_funder_flag": True,
+        "smart_wallet_family_creator_link_flag": False,
+    }
+    out = score_token(token, settings)
+    assert out["smart_wallet_family_ids"] == ["fam_a"]
+    assert out["smart_wallet_family_confidence_max"] == 0.84
+    assert out["smart_wallet_family_shared_funder_flag"] is True

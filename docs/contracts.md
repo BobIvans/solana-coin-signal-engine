@@ -195,6 +195,31 @@ Required continuation provenance/status fields:
 
 These checks validate presence and visibility. They do not claim that continuation signals are complete or non-heuristic.
 
+### wallet_family_summary
+Artifact(s):
+- `data/processed/enriched_tokens.json`
+- `data/processed/scored_tokens.json`
+- `data/processed/entry_candidates.json`
+- `trade_feature_matrix.jsonl`
+
+Required token-facing wallet-family summary fields come from:
+- `utils/wallet_family_contract_fields.py`
+
+Required fields:
+- `smart_wallet_family_ids`
+- `smart_wallet_independent_family_ids`
+- `smart_wallet_family_origins`
+- `smart_wallet_family_statuses`
+- `smart_wallet_family_reason_codes`
+- `smart_wallet_family_unique_count`
+- `smart_wallet_independent_family_unique_count`
+- `smart_wallet_family_confidence_max`
+- `smart_wallet_family_member_count_max`
+- `smart_wallet_family_shared_funder_flag`
+- `smart_wallet_family_creator_link_flag`
+
+These fields are aggregated token-facing summaries of matched smart-wallet families. They must stay null-safe and must not be replaced with a fake singular token-level `wallet_family_id`.
+
 High-level continuation semantics:
 - tx-derived continuation metrics are success-gated (`success is True`)
 - LP/pool/router/vault/system-like actors must not silently count as organic buyers or sellers

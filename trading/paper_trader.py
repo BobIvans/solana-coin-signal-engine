@@ -16,6 +16,7 @@ from trading.position_book import (
 )
 from trading.trade_logger_v2 import log_signal, log_trade
 from utils.clock import utc_now_iso
+from utils.wallet_family_contract_fields import copy_wallet_family_contract_fields
 
 
 def _market_index(market_states: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -33,6 +34,7 @@ def process_exit_signals(exit_signals: list[dict[str, Any]], market_states: list
     paths = state["paths"]
 
     for signal in exit_signals:
+        position = get_open_position_by_id(state, str(signal.get("position_id") or ""))
         log_signal(
             {
                 "ts": utc_now_iso(),
@@ -41,6 +43,7 @@ def process_exit_signals(exit_signals: list[dict[str, Any]], market_states: list
                 "position_id": signal.get("position_id"),
                 "decision": signal.get("exit_decision"),
                 "reason": signal.get("exit_reason"),
+                **copy_wallet_family_contract_fields(signal, fallback=position or {}),
                 "contract_version": settings.PAPER_CONTRACT_VERSION,
             },
             paths,
@@ -49,7 +52,6 @@ def process_exit_signals(exit_signals: list[dict[str, Any]], market_states: list
         if signal.get("exit_decision") == "HOLD":
             continue
 
-        position = get_open_position_by_id(state, str(signal.get("position_id") or ""))
         if not position:
             continue
         market = markets.get(position["token_address"], {})
@@ -67,6 +69,7 @@ def process_exit_signals(exit_signals: list[dict[str, Any]], market_states: list
                     "side": "SELL",
                     "tx_failed": True,
                     "failure_reason": fill.get("failure_reason"),
+                    **copy_wallet_family_contract_fields(position),
                     "contract_version": settings.PAPER_CONTRACT_VERSION,
                 },
                 paths,
@@ -87,6 +90,7 @@ def process_exit_signals(exit_signals: list[dict[str, Any]], market_states: list
                 "side": "SELL",
                 **fill,
                 "reason": signal.get("exit_reason"),
+                **copy_wallet_family_contract_fields(signal, fallback=position),
                 "contract_version": settings.PAPER_CONTRACT_VERSION,
             },
             paths,
@@ -111,6 +115,7 @@ def process_entry_signals(entry_signals: list[dict[str, Any]], market_states: li
                 "confidence": signal.get("entry_confidence"),
                 "recommended_position_pct": signal.get("recommended_position_pct"),
                 "reason": signal.get("entry_reason"),
+                **copy_wallet_family_contract_fields(signal),
                 "contract_version": settings.PAPER_CONTRACT_VERSION,
             },
             paths,
@@ -131,6 +136,7 @@ def process_entry_signals(entry_signals: list[dict[str, Any]], market_states: li
                     "token_address": signal.get("token_address"),
                     "decision": decision,
                     "reason": "duplicate_or_capital_limit",
+                    **copy_wallet_family_contract_fields(signal),
                     "contract_version": settings.PAPER_CONTRACT_VERSION,
                 },
                 paths,
@@ -152,6 +158,7 @@ def process_entry_signals(entry_signals: list[dict[str, Any]], market_states: li
                     "side": "BUY",
                     "tx_failed": True,
                     "failure_reason": fill.get("failure_reason"),
+                    **copy_wallet_family_contract_fields(signal),
                     "contract_version": settings.PAPER_CONTRACT_VERSION,
                 },
                 paths,
@@ -171,6 +178,7 @@ def process_entry_signals(entry_signals: list[dict[str, Any]], market_states: li
                 **fill,
                 "regime": signal.get("entry_decision"),
                 "reason": "entry_signal_filled",
+                **copy_wallet_family_contract_fields(signal, fallback=pos),
                 "contract_version": settings.PAPER_CONTRACT_VERSION,
             },
             paths,
