@@ -14,7 +14,7 @@ from src.replay.replay_input_loader import load_replay_inputs
 from src.replay.replay_state_machine import ReplayStateMachine
 from trading.exit_rules import evaluate_hard_exit, evaluate_scalp_exit, evaluate_trend_exit
 from trading.regime_rules import decide_regime
-from utils.bundle_contract_fields import copy_bundle_contract_fields
+from utils.bundle_contract_fields import copy_bundle_contract_fields, copy_linkage_contract_fields
 from utils.io import ensure_dir, write_json
 from utils.logger import log_info, log_warning
 from utils.short_horizon_contract_fields import (
@@ -368,6 +368,30 @@ def _resolve_exit(base_context: dict[str, Any], entry: dict[str, Any], token_pay
     }
 
 
+def _build_replay_contract_fields(
+    *,
+    base_context: dict[str, Any],
+    signal_artifact: dict[str, Any] | None = None,
+    trade_artifact: dict[str, Any] | None = None,
+    position_artifact: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    features = _safe_dict(base_context.get("features"))
+    entry_snapshot = _safe_dict(base_context.get("entry_snapshot"))
+    fallback = {
+        **_safe_dict(signal_artifact),
+        **_safe_dict(trade_artifact),
+        **_safe_dict(position_artifact),
+        **features,
+        **entry_snapshot,
+    }
+    return {
+        **copy_bundle_contract_fields(base_context, fallback=fallback),
+        **copy_linkage_contract_fields(base_context, fallback=fallback),
+        **copy_short_horizon_contract_fields(base_context, fallback=fallback),
+        **copy_continuation_metadata_fields(base_context, fallback=fallback),
+    }
+
+
 def _build_trade_feature_row(
     *,
     run_id: str,
@@ -385,10 +409,12 @@ def _build_trade_feature_row(
     features = _safe_dict(base_context.get("features"))
     entry_snapshot = _safe_dict(base_context.get("entry_snapshot"))
     wallet_features = _safe_wallet_features(base_context, signal, trade)
-    short_horizon_fields = copy_short_horizon_contract_fields(base_context, fallback={**entry_snapshot, **features})
-    continuation_metadata = copy_continuation_metadata_fields(base_context, fallback={**entry_snapshot, **features})
-    bundle_fields = copy_bundle_contract_fields(base_context, fallback=entry_snapshot)
-    sources = [trade, signal, base_context, features, entry_snapshot, wallet_features, short_horizon_fields, continuation_metadata, bundle_fields]
+    contract_fields = _build_replay_contract_fields(
+        base_context=base_context,
+        signal_artifact=signal,
+        trade_artifact=trade,
+    )
+    sources = [trade, signal, base_context, features, entry_snapshot, wallet_features, contract_fields]
     calibration_metrics = derive_outcome_metrics(base_context, signal, trade, entry_snapshot, features)
     row = {field: None for field in _TRADE_FEATURE_MATRIX_FIELDS}
     row.update({
@@ -478,9 +504,7 @@ def _build_trade_feature_row(
         "net_pnl_pct": _first_present(sources, "net_pnl_pct"),
         "mfe_pct": _first_present(sources, "mfe_pct"),
         "mae_pct": _first_present(sources, "mae_pct"),
-        **short_horizon_fields,
-        **continuation_metadata,
-        **bundle_fields,
+        **contract_fields,
         **calibration_metrics,
         "wallet_weighting": wallet_weighting,
         "dry_run": dry_run,
@@ -547,6 +571,12 @@ def replay_token_lifecycle(
     regime = decide_regime({**base_context, "token_address": token_address, "pair_address": pair_address}, settings)
     entry_decision, entry_reason_codes = _entry_decision(base_context, regime, token_payload)
 
+    signal_contract_fields = _build_replay_contract_fields(
+        base_context=base_context,
+        signal_artifact=signal_artifact,
+        trade_artifact=trade_artifact,
+        position_artifact=position_artifact,
+    )
     signal = {
         "run_id": run_id,
         "ts": _first_present([base_context, signal_artifact, trade_artifact, position_artifact], "ts", "timestamp", "entry_time", "entry_ts") or _DEFAULT_TS,
@@ -567,6 +597,7 @@ def replay_token_lifecycle(
         "x_status": base_context.get("x_status"),
         "x_validation_score": base_context.get("x_validation_score"),
         "x_validation_delta": base_context.get("x_validation_delta"),
+        **signal_contract_fields,
         "features": _safe_dict(base_context.get("features")) or {k: v for k, v in base_context.items() if k not in {"wallet_features", "entry_snapshot", "price_path"}},
         "wallet_features": _safe_wallet_features(base_context, signal_artifact, trade_artifact),
         "replay_input_origin": replay_input_origin,
@@ -624,6 +655,12 @@ def replay_token_lifecycle(
         replay_data_status = "historical_partial" if missing_evidence or exit_payload.get("replay_data_status") == "historical_partial" else "historical"
     replay_resolution_status = exit_payload.get("resolution_status", "unresolved")
 
+    trade_contract_fields = _build_replay_contract_fields(
+        base_context=base_context,
+        signal_artifact=signal_artifact,
+        trade_artifact=trade_artifact,
+        position_artifact=position_artifact,
+    )
     trade = {
         "run_id": run_id,
         "trade_id": f"{run_id}:{token_address}",
@@ -651,6 +688,7 @@ def replay_token_lifecycle(
         "regime_reason_flags": historical_regime_reason_flags if historical_regime_reason_flags is not None else regime.get("regime_reason_flags"),
         "regime_blockers": historical_regime_blockers if historical_regime_blockers is not None else regime.get("regime_blockers"),
         "expected_hold_class": historical_expected_hold_class if historical_expected_hold_class is not None else regime.get("expected_hold_class"),
+        **trade_contract_fields,
         "replay_input_origin": replay_input_origin,
         "replay_data_status": replay_data_status,
         "replay_resolution_status": replay_resolution_status,
