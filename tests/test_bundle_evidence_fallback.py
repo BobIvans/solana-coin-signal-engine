@@ -18,7 +18,7 @@ class DummySettings:
     HELIUS_TX_ADDR_LIMIT = 40
 
 
-def test_sparse_evidence_requires_heuristic_fallback():
+def test_sparse_evidence_requires_heuristic_evidence():
     pair = {
         "pair_created_at_ts": 1_000,
         "pair_address": "pair-1",
@@ -36,7 +36,7 @@ def test_sparse_evidence_requires_heuristic_fallback():
 
     result = detect_bundle_metrics_for_pair(pair, now_ts=1_040, settings=DummySettings())
 
-    assert result["bundle_metric_origin"] == "heuristic_fallback"
+    assert result["bundle_metric_origin"] == "heuristic_evidence"
     assert result["bundle_evidence_status"] in {"partial", "ok"}
     assert result["bundle_count_first_60s"] == 2
     assert result["bundle_enrichment_status"] == "ok"
@@ -106,6 +106,6 @@ def test_discovery_status_reports_real_fallback_and_missing(monkeypatch, tmp_pat
     result = run_discovery_once()
     status = result["status"]["bundle_enrichment"]
 
-    assert status["origin_counts"]["real_evidence"] == 1
-    assert status["origin_counts"]["heuristic_fallback"] == 1
+    assert status["origin_counts"]["direct_evidence"] == 1
+    assert status["origin_counts"]["heuristic_evidence"] == 1
     assert status["origin_counts"]["missing"] == 1

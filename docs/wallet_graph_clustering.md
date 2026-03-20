@@ -54,4 +54,11 @@ Additive provenance fields now exposed when available:
 
 ## Provenance honesty
 
+Canonical emitted `cluster_metric_origin` values are:
+
+- `graph_evidence`
+- `heuristic_evidence`
+- `missing`
+
+
 This PR intentionally does **not** claim complete institutional wallet intelligence. The graph is only as strong as the explicit local evidence that exists in the launch payloads. Weak evidence falls back to heuristics instead of inventing stronger relationships.

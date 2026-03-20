@@ -34,6 +34,7 @@ This layer is conservative by design:
 - stronger risk requires multiple evidence types,
 - `creator_in_cluster_flag` from linkage is only derived when cluster-style overlap is both present and confident,
 - outputs reflect whether evidence came from graph-style overlap, heuristic hints, or both.
+- emitted `linkage_metric_origin` values are canonicalized to `graph_evidence`, `heuristic_evidence`, `mixed_evidence`, or `missing`.
 
 ## Status fields
 

@@ -286,7 +286,7 @@ def test_detect_bundle_metrics_keeps_heuristics_but_degrades_stale_tx_source(mon
     pair = {"pair_created_at_ts": 1_000, "pair_address": "pair-1", "token_address": "mint-1"}
     result = detect_bundle_metrics_for_pair(pair, now_ts=1_120, settings=ProvenanceSettings())
 
-    assert result["bundle_metric_origin"] == "heuristic_fallback"
+    assert result["bundle_metric_origin"] == "heuristic_evidence"
     assert result["bundle_count_first_60s"] == 1
     assert result["bundle_size_value"] == 150.0
     assert result["bundle_enrichment_status"] == "partial"

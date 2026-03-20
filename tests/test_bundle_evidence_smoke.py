@@ -22,7 +22,7 @@ def test_bundle_evidence_smoke_script(tmp_path):
         text=True,
     )
     payload = json.loads(run.stdout.strip().splitlines()[-1])
-    assert payload["bundle_metric_origin"] == "real_evidence"
+    assert payload["bundle_metric_origin"] == "direct_evidence"
     assert (tmp_path / "smoke" / "bundle_evidence.smoke.json").exists()
     assert (tmp_path / "smoke" / "bundle_evidence_status.json").exists()
     assert (tmp_path / "smoke" / "bundle_evidence_events.jsonl").exists()

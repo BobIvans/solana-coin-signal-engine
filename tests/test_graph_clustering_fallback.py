@@ -81,17 +81,17 @@ def test_fixture_3_creator_linked_buyers_sets_creator_flag_from_graph():
     assert metrics["cluster_evidence_confidence"] <= 0.95
 
 
-def test_fixture_4_sparse_graph_uses_heuristic_fallback():
+def test_fixture_4_sparse_graph_uses_heuristic_evidence():
     metrics = compute_wallet_clustering_metrics(SPARSE, participant_wallets=[item["wallet"] for item in SPARSE], settings=DummySettings())
 
-    assert metrics["cluster_metric_origin"] == "heuristic_fallback"
+    assert metrics["cluster_metric_origin"] == "heuristic_evidence"
     assert metrics["cluster_evidence_source"] == "heuristic_keys"
 
 
 def test_fixture_5_malformed_inputs_degrade_safely_without_exception():
     metrics = compute_wallet_clustering_metrics(MALFORMED, participant_wallets=["wallet_a", "wallet_b"], settings=DummySettings())
 
-    assert metrics["cluster_metric_origin"] in {"heuristic_fallback", "missing"}
+    assert metrics["cluster_metric_origin"] in {"heuristic_evidence", "missing"}
     assert metrics["bundle_wallet_clustering_score"] is None
 
 
@@ -205,7 +205,7 @@ def test_windowed_heuristic_fallback_ignores_late_out_of_window_wallets():
         artifact_scope={"bundle_window_anchor_ts": 1000, "bundle_window_sec": 60},
     )
 
-    assert metrics["cluster_metric_origin"] == "heuristic_fallback"
+    assert metrics["cluster_metric_origin"] == "heuristic_evidence"
     assert metrics["cluster_evidence_source"] == "heuristic_keys"
     assert metrics["cluster_concentration_ratio"] == 1.0
     assert metrics["num_unique_clusters_first_60s"] == 1

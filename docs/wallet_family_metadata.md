@@ -45,7 +45,7 @@ Wallet registry and validated-registry rows can now carry:
 - `wallet_family_creator_link_flag`
 - `wallet_family_status`
 
-Allowed origins are:
+Allowed origins are canonical emitted provenance values:
 
 - `graph_evidence`
 - `linkage_evidence`

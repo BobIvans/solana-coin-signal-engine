@@ -92,6 +92,22 @@ Required bundle/cluster fields:
 - `creator_in_cluster_flag`
 
 
+## Canonical emitted provenance vocabulary
+
+Bundle / cluster / linkage / wallet-family artifacts now share one canonical emitted vocabulary where applicable:
+
+- `direct_evidence`
+- `graph_evidence`
+- `heuristic_evidence`
+- `registry_evidence`
+- `linkage_evidence`
+- `mixed_evidence`
+- `missing`
+
+Legacy aliases such as `real_evidence` and `heuristic_fallback` may be normalized internally at ingestion boundaries, but fresh artifact outputs must emit only canonical values.
+
+`continuation_metric_origin` is intentionally excluded from this unification and keeps its existing composition-oriented vocabulary.
+
 ### bundle_provenance
 Artifact:
 - `data/processed/enriched_tokens.json`

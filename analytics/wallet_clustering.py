@@ -11,6 +11,7 @@ from analytics.cluster_store import build_and_persist_wallet_clusters
 from analytics.linkage_scorer import score_creator_dev_funder_linkage
 from analytics.wallet_graph_builder import build_wallet_graph, derive_wallet_clusters
 from utils.logger import log_info, log_warning
+from utils.provenance_enums import HEURISTIC_EVIDENCE_ORIGIN
 
 _CLUSTER_SCORE_MAX_UNIQUE = 5
 _FUNDING_KEYS = (
@@ -701,7 +702,7 @@ def resolve_wallet_cluster_assignments(
             "clusters": {},
             "evidence_status": "heuristic_fallback",
             "evidence_source": "heuristic_keys",
-            "metric_origin": "heuristic_fallback",
+            "metric_origin": HEURISTIC_EVIDENCE_ORIGIN,
             "evidence_confidence": 0.35,
             "coverage_ratio": round(len(heuristic_cluster_ids) / len(wallets), 6),
             "graph_cluster_id_count": 0,

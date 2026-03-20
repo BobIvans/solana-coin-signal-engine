@@ -8,10 +8,13 @@ from typing import Any
 
 from analytics.wallet_clustering import compute_wallet_clustering_metrics
 from utils.logger import log_info, log_warning
+from utils.provenance_enums import (
+    DIRECT_EVIDENCE_ORIGIN,
+    HEURISTIC_EVIDENCE_ORIGIN,
+    MISSING_PROVENANCE_ORIGIN,
+)
 
-REAL_EVIDENCE_ORIGIN = "real_evidence"
-HEURISTIC_FALLBACK_ORIGIN = "heuristic_fallback"
-MISSING_BUNDLE_ORIGIN = "missing"
+MISSING_BUNDLE_ORIGIN = MISSING_PROVENANCE_ORIGIN
 
 _EVIDENCE_STATUS_VALUES = {"landed", "failed", "unknown"}
 _SIDE_KEYS = ("side", "direction", "swap_direction", "action", "action_label", "flow")
@@ -609,7 +612,7 @@ def compute_bundle_metrics_from_evidence(normalized_evidence: dict[str, Any], *,
             "bundle_tip_efficiency": _compute_tip_efficiency(records, bundle_size_value),
             "bundle_failure_retry_pattern": _compute_retry_pattern(records),
             "cross_block_bundle_correlation": _compute_cross_block_correlation(records),
-            "bundle_metric_origin": REAL_EVIDENCE_ORIGIN,
+            "bundle_metric_origin": DIRECT_EVIDENCE_ORIGIN,
         }
     )
     payload.update(_clustering_metrics(pair, records))

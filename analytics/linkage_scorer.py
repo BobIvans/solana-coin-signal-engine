@@ -6,6 +6,7 @@ from collections import defaultdict
 from typing import Any
 
 from utils.logger import log_error, log_info, log_warning
+from utils.provenance_enums import LINKAGE_PROVENANCE_ORIGINS, validate_provenance_origin
 
 LINKAGE_REASON_DIRECT_CREATOR_BUYER = "creator_buyer_direct_link"
 LINKAGE_REASON_DIRECT_DEV_BUYER = "dev_buyer_direct_link"
@@ -99,12 +100,14 @@ def _score_count(count: int, *, cap: int = 3) -> float:
 
 def _metric_origin(*, graph_present: bool, heuristic_present: bool) -> str:
     if graph_present and heuristic_present:
-        return "mixed_evidence"
-    if graph_present:
-        return "graph_evidence"
-    if heuristic_present:
-        return "heuristic_evidence"
-    return "missing"
+        origin = "mixed_evidence"
+    elif graph_present:
+        origin = "graph_evidence"
+    elif heuristic_present:
+        origin = "heuristic_evidence"
+    else:
+        origin = "missing"
+    return validate_provenance_origin(origin, allowed=LINKAGE_PROVENANCE_ORIGINS)
 
 
 def derive_linkage_evidence(
