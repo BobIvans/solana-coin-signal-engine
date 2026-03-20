@@ -433,3 +433,216 @@ __all__ = [
     "compute_smart_wallet_dispersion_score",
     "compute_x_author_velocity_5m",
 ]
+
+# --- PR-FIX-3 compatibility overrides: normalized snake_case first, camelCase fallback ---
+
+def _iter_token_transfers(tx: dict[str, Any]) -> list[dict[str, Any]]:
+    transfers = tx.get("token_transfers")
+    if not isinstance(transfers, list):
+        transfers = tx.get("tokenTransfers")
+    return [item for item in transfers if isinstance(item, dict)] if isinstance(transfers, list) else []
+
+
+def _transfer_party(transfer: dict[str, Any], role: str) -> str | None:
+    if role == "buyer":
+        value = (
+            transfer.get("to_user_account")
+            or transfer.get("toUserAccount")
+            or transfer.get("toUser")
+            or transfer.get("buyer")
+        )
+    elif role == "seller":
+        value = (
+            transfer.get("from_user_account")
+            or transfer.get("fromUserAccount")
+            or transfer.get("fromUser")
+            or transfer.get("seller")
+        )
+    else:
+        raise ValueError(f"unsupported transfer role: {role}")
+    return _normalize_wallet(value)
+
+
+def _transfer_amount(transfer: dict[str, Any]) -> float | None:
+    for key in ("token_amount", "tokenAmount", "amount", "uiAmount"):
+        value = transfer.get(key)
+        if value in (None, ""):
+            continue
+        try:
+            amount = float(value)
+        except (TypeError, ValueError):
+            continue
+        if amount > 0:
+            return amount
+    return None
+
+
+def compute_net_unique_buyers_60s(*, pair_created_ts: int, txs: list[dict[str, Any]]) -> int | None:
+    buyers: set[str] = set()
+    sellers: set[str] = set()
+    saw_side_evidence = False
+
+    for tx in _window_successful_transactions(txs, pair_created_ts, _SHORT_WINDOW_60S):
+        for transfer in _iter_token_transfers(tx):
+            amount = _transfer_amount(transfer)
+            if amount is None:
+                continue
+            buyer = _transfer_party(transfer, "buyer")
+            seller = _transfer_party(transfer, "seller")
+            if buyer:
+                buyers.add(buyer)
+                saw_side_evidence = True
+            if seller:
+                sellers.add(seller)
+                saw_side_evidence = True
+
+    if not saw_side_evidence:
+        return None
+    return len(buyers) - len(sellers)
+
+
+def compute_seller_reentry_ratio(*, pair_created_ts: int, txs: list[dict[str, Any]], window_sec: int = _SHORT_WINDOW_120S) -> float | None:
+    lifecycle: dict[str, list[tuple[int, str]]] = defaultdict(list)
+    saw_transfer = False
+
+    for tx in _window_successful_transactions(txs, pair_created_ts, window_sec):
+        ts = int(tx.get("_parsed_ts") or 0)
+        for transfer in _iter_token_transfers(tx):
+            amount = _transfer_amount(transfer)
+            if amount is None:
+                continue
+            buyer = _transfer_party(transfer, "buyer")
+            seller = _transfer_party(transfer, "seller")
+            if buyer:
+                lifecycle[buyer].append((ts, "buy"))
+                saw_transfer = True
+            if seller:
+                lifecycle[seller].append((ts, "sell"))
+                saw_transfer = True
+
+    if not saw_transfer:
+        return None
+
+    seller_population = 0
+    seller_reentries = 0
+    for wallet, events in lifecycle.items():
+        ordered = sorted(events)
+        first_sell_idx = next((idx for idx, (_, side) in enumerate(ordered) if side == "sell"), None)
+        if first_sell_idx is None:
+            continue
+        if not any(side == "buy" for _, side in ordered[:first_sell_idx]):
+            continue
+        seller_population += 1
+        if any(side == "buy" for _, side in ordered[first_sell_idx + 1 :]):
+            seller_reentries += 1
+
+    if seller_population == 0:
+        return None
+    return round(seller_reentries / seller_population, 6)
+
+# --- PR-FIX-3 continuation flow narrowing overrides ---
+
+def _is_pool_wallet(wallet: str | None) -> bool:
+    return str(wallet or "").strip() == "lp_pool"
+
+
+def _is_ambiguous_or_technical_wallet(wallet: str | None) -> bool:
+    value = str(wallet or "").strip().lower()
+    if not value:
+        return True
+    if value in {"lp_pool", "amm_pool", "system_program", "router_vault"}:
+        return True
+    if value.startswith("unknown_"):
+        return True
+    if value.startswith("router_"):
+        return True
+    return False
+
+
+def _extract_flow_counterparty(transfer: dict[str, Any], side: str) -> str | None:
+    seller = _transfer_party(transfer, "seller")
+    buyer = _transfer_party(transfer, "buyer")
+
+    if side == "buy":
+        if not _is_pool_wallet(seller):
+            return None
+        if _is_ambiguous_or_technical_wallet(buyer):
+            return None
+        return buyer
+
+    if side == "sell":
+        if not _is_pool_wallet(buyer):
+            return None
+        if _is_ambiguous_or_technical_wallet(seller):
+            return None
+        return seller
+
+    raise ValueError(f"unsupported flow side: {side}")
+
+
+def compute_net_unique_buyers_60s(*, pair_created_ts: int, txs: list[dict[str, Any]]) -> int | None:
+    buyers: set[str] = set()
+    sellers: set[str] = set()
+    saw_side_evidence = False
+
+    for tx in _window_successful_transactions(txs, pair_created_ts, _SHORT_WINDOW_60S):
+        for transfer in _iter_token_transfers(tx):
+            amount = _transfer_amount(transfer)
+            if amount is None:
+                continue
+
+            buy_wallet = _extract_flow_counterparty(transfer, "buy")
+            sell_wallet = _extract_flow_counterparty(transfer, "sell")
+
+            if buy_wallet:
+                buyers.add(buy_wallet)
+                saw_side_evidence = True
+            if sell_wallet:
+                sellers.add(sell_wallet)
+                saw_side_evidence = True
+
+    if not saw_side_evidence:
+        return None
+    return len(buyers) - len(sellers)
+
+
+def compute_seller_reentry_ratio(*, pair_created_ts: int, txs: list[dict[str, Any]], window_sec: int = _SHORT_WINDOW_120S) -> float | None:
+    lifecycle: dict[str, list[tuple[int, str]]] = defaultdict(list)
+    saw_transfer = False
+
+    for tx in _window_successful_transactions(txs, pair_created_ts, window_sec):
+        ts = int(tx.get("_parsed_ts") or 0)
+        for transfer in _iter_token_transfers(tx):
+            amount = _transfer_amount(transfer)
+            if amount is None:
+                continue
+
+            buy_wallet = _extract_flow_counterparty(transfer, "buy")
+            sell_wallet = _extract_flow_counterparty(transfer, "sell")
+
+            if buy_wallet:
+                lifecycle[buy_wallet].append((ts, "buy"))
+                saw_transfer = True
+            if sell_wallet:
+                lifecycle[sell_wallet].append((ts, "sell"))
+                saw_transfer = True
+
+    if not saw_transfer:
+        return None
+
+    seller_population = 0
+    seller_reentries = 0
+    for wallet, events in lifecycle.items():
+        ordered = sorted(events)
+        first_sell_idx = next((idx for idx, (_, side) in enumerate(ordered) if side == "sell"), None)
+        if first_sell_idx is None:
+            continue
+        if not any(side == "buy" for _, side in ordered[:first_sell_idx]):
+            continue
+        seller_population += 1
+        if any(side == "buy" for _, side in ordered[first_sell_idx + 1 :]):
+            seller_reentries += 1
+
+    if seller_population == 0:
+        return None
+    return round(seller_reentries / seller_population, 6)

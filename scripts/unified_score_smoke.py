@@ -1,132 +1,128 @@
+"""Smoke runner for the current unified scoring architecture."""
+
 from __future__ import annotations
 
-from pathlib import Path
+import json
 import sys
+from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scoring.unified_score import main as _pr_sw5_main
-
-if __name__ == "__main__":
-    raise SystemExit(_pr_sw5_main())
-
-"""Smoke runner for unified scoring contract (PR-6)."""
-
-
-import argparse
-import json
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from analytics.unified_score import score_tokens
 from config.settings import load_settings
-from utils.clock import utc_now_iso
-from utils.io import append_jsonl, read_json
+from scoring.unified_score import score_token, score_tokens
+from utils.io import write_json
 
 
-def _extract_tokens(payload: dict | list | None) -> list[dict]:
-    if payload is None:
-        return []
-    if isinstance(payload, list):
-        return [item for item in payload if isinstance(item, dict)]
-    if isinstance(payload, dict):
-        raw = payload.get("tokens", [])
-        return [item for item in raw if isinstance(item, dict)] if isinstance(raw, list) else []
-    return []
+def _base_token() -> dict:
+    return {
+        "mint": "smoke_mint_1",
+        "token_id": "smoke_mint_1",
+        "token_address": "smoke_mint_1",
+        "symbol": "SMOKE",
+        "x_score": 80,
+        "liquidity_usd": 50000,
+        "buy_pressure": 0.70,
+        "holder_growth_5m": 20,
+        "rug_status": "pass",
+        "wallet_registry_status": "validated",
+        "smart_wallet_score_sum": 12.0,
+        "smart_wallet_tier1_hits": 1,
+        "smart_wallet_tier2_hits": 0,
+        "smart_wallet_tier3_hits": 0,
+        "smart_wallet_early_entry_hits": 1,
+        "smart_wallet_active_hits": 1,
+        "smart_wallet_watch_hits": 0,
+        "smart_wallet_conviction_bonus": 1.0,
+        "smart_wallet_registry_confidence": "high",
+        "timestamp": "2026-03-20T00:00:00Z",
+    }
 
 
-def _merge_by_address(*datasets: list[dict]) -> list[dict]:
-    merged: dict[str, dict] = {}
-    for data in datasets:
-        for token in data:
-            addr = str(token.get("token_address") or "")
-            if not addr:
-                continue
-            merged.setdefault(addr, {"token_address": addr})
-            merged[addr].update(token)
-    return [merged[key] for key in sorted(merged.keys())]
-
-
-def _validate_scored(record: dict) -> None:
+def _validate_mode(record: dict, mode: str) -> None:
     required = {
-        "token_address",
-        "onchain_core",
-        "early_signal_bonus",
-        "x_validation_bonus",
-        "rug_penalty",
-        "spam_penalty",
-        "confidence_adjustment",
+        "final_score_pre_wallet",
         "final_score",
-        "regime_candidate",
+        "wallet_score_component_raw",
+        "wallet_score_component_applied",
+        "wallet_weighting_mode",
+        "wallet_weighting_effective_mode",
     }
     missing = sorted(required - set(record.keys()))
     if missing:
-        raise ValueError(f"schema violation: missing {missing}")
-    if record["regime_candidate"] not in {"IGNORE", "WATCHLIST", "ENTRY_CANDIDATE"}:
-        raise ValueError("impossible routing state")
+        raise ValueError(f"{mode}: missing score fields {missing}")
+    if record["wallet_weighting_mode"] != mode:
+        raise ValueError(f"{mode}: unexpected wallet_weighting_mode {record['wallet_weighting_mode']}")
+    if mode == "off":
+        if record["final_score"] != record["final_score_pre_wallet"]:
+            raise ValueError("off: final_score must equal final_score_pre_wallet")
+        if record["wallet_score_component_applied"] != 0.0:
+            raise ValueError("off: wallet_score_component_applied must be zero")
+    elif mode == "shadow":
+        if record["final_score"] != record["final_score_pre_wallet"]:
+            raise ValueError("shadow: final_score must equal final_score_pre_wallet")
+        if record["wallet_score_component_raw"] <= 0.0:
+            raise ValueError("shadow: wallet_score_component_raw must be positive")
+        if record["wallet_score_component_applied"] != 0.0:
+            raise ValueError("shadow: wallet_score_component_applied must stay zero")
+    elif mode == "on":
+        expected = round(float(record["final_score_pre_wallet"]) + float(record["wallet_score_component_applied"]), 6)
+        if round(float(record["final_score"]), 6) != expected:
+            raise ValueError("on: final_score must equal pre-wallet plus applied wallet component")
+        if record["wallet_score_component_applied"] <= 0.0:
+            raise ValueError("on: wallet_score_component_applied must be positive")
 
 
-def run(shortlist: Path, x_validated: Path, enriched: Path, rug_assessed: Path) -> dict:
+def run() -> dict:
     settings = load_settings()
-    tokens = _merge_by_address(
-        _extract_tokens(read_json(shortlist, default={})),
-        _extract_tokens(read_json(x_validated, default={})),
-        _extract_tokens(read_json(enriched, default={})),
-        _extract_tokens(read_json(rug_assessed, default={})),
+    token = _base_token()
+
+    off = score_token(token, wallet_weighting_mode="off")
+    shadow = score_token(token, wallet_weighting_mode="shadow")
+    on = score_token(token, wallet_weighting_mode="on")
+
+    for mode, record in (("off", off), ("shadow", shadow), ("on", on)):
+        _validate_mode(record, mode)
+
+    batch_scored, batch_events = score_tokens(
+        shortlist=[token],
+        x_validated=[],
+        enriched=[],
+        rug_assessed=[],
+        wallet_weighting_mode="shadow",
     )
+    if len(batch_scored) != 1 or len(batch_events) != 1:
+        raise ValueError("batch scoring smoke must emit one scored token and one event row")
 
-    events_path = settings.PROCESSED_DATA_DIR / "score_events.jsonl"
-    append_jsonl(events_path, {"ts": utc_now_iso(), "event": "score_started", "tokens": len(tokens)})
-
-    scored = []
-    for token in tokens:
-        append_jsonl(events_path, {"ts": utc_now_iso(), "event": "score_started", "token_address": token.get("token_address", "")})
-        item = score_tokens([token], settings)[0]
-        append_jsonl(
-            events_path,
-            {
-                "ts": utc_now_iso(),
-                "event": "score_components_computed",
-                "token_address": item["token_address"],
-                "onchain_core": item["onchain_core"],
-                "early_signal_bonus": item["early_signal_bonus"],
-                "x_validation_bonus": item["x_validation_bonus"],
-                "rug_penalty": item["rug_penalty"],
-                "spam_penalty": item["spam_penalty"],
-                "confidence_adjustment": item["confidence_adjustment"],
-            },
-        )
-        append_jsonl(events_path, {"ts": utc_now_iso(), "event": "score_routed", "token_address": item["token_address"], "regime_candidate": item["regime_candidate"], "final_score": item["final_score"]})
-        if "hard_rug_override" in item.get("score_flags", []):
-            append_jsonl(events_path, {"ts": utc_now_iso(), "event": "score_hard_override", "token_address": item["token_address"]})
-        if any(w.startswith("entry_downgraded") for w in item.get("score_warnings", [])):
-            append_jsonl(events_path, {"ts": utc_now_iso(), "event": "score_downgraded", "token_address": item["token_address"]})
-        append_jsonl(events_path, {"ts": utc_now_iso(), "event": "score_completed", "token_address": item["token_address"]})
-        _validate_scored(item)
-        scored.append(item)
-
-    payload = {"contract_version": settings.UNIFIED_SCORE_CONTRACT_VERSION, "generated_at": utc_now_iso(), "tokens": scored}
-    out = settings.PROCESSED_DATA_DIR / "scored_tokens.json"
-    smoke_out = settings.PROCESSED_DATA_DIR / "scored_tokens.smoke.json"
-    out.write_text(json.dumps(payload, sort_keys=True, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    smoke_out.write_text(json.dumps(payload, sort_keys=True, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return payload
+    summary = {
+        "off": {
+            "final_score_pre_wallet": off["final_score_pre_wallet"],
+            "final_score": off["final_score"],
+            "wallet_score_component_applied": off["wallet_score_component_applied"],
+        },
+        "shadow": {
+            "final_score_pre_wallet": shadow["final_score_pre_wallet"],
+            "final_score": shadow["final_score"],
+            "wallet_score_component_raw": shadow["wallet_score_component_raw"],
+            "wallet_score_component_applied": shadow["wallet_score_component_applied"],
+        },
+        "on": {
+            "final_score_pre_wallet": on["final_score_pre_wallet"],
+            "final_score": on["final_score"],
+            "wallet_score_component_applied": on["wallet_score_component_applied"],
+        },
+        "batch_event_count": len(batch_events),
+        "batch_event_wallet_mode": batch_events[0]["wallet_weighting_mode"],
+    }
+    out_path = settings.SMOKE_DIR / "unified_score_smoke_summary.json"
+    write_json(out_path, summary)
+    summary["summary_path"] = str(out_path)
+    return summary
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--shortlist", default="data/processed/shortlist.json")
-    parser.add_argument("--x-validated", default="data/processed/x_validated.json")
-    parser.add_argument("--enriched", default="data/processed/enriched_tokens.json")
-    parser.add_argument("--rug-assessed", default="data/processed/rug_assessed_tokens.json")
-    args = parser.parse_args()
-
-    payload = run(Path(args.shortlist), Path(args.x_validated), Path(args.enriched), Path(args.rug_assessed))
-    print(json.dumps(payload.get("tokens", [{}])[0] if payload.get("tokens") else {}, sort_keys=True, ensure_ascii=False))
+    print(json.dumps(run(), sort_keys=True, ensure_ascii=False))
     return 0
 
 
