@@ -27,8 +27,11 @@ def _fixture() -> dict:
             "name": "SmokeToken",
         },
         "txs": [
+            # Continuation smoke intentionally uses explicit success=True because
+            # tx-derived continuation metrics are gated on clearly successful txs.
             {
                 "timestamp": 1000,
+                "success": True,
                 "liquidity_usd": 100.0,
                 "participants": [
                     {"wallet": "buyer_a", "funder": "shared_a"},
@@ -43,6 +46,8 @@ def _fixture() -> dict:
             },
             {
                 "timestamp": 1025,
+                "success": True,
+                "success": True,
                 "liquidity_usd": 60.0,
                 "tokenTransfers": [
                     {"fromUserAccount": "buyer_a", "toUserAccount": "lp_pool", "tokenAmount": 18},
@@ -51,6 +56,8 @@ def _fixture() -> dict:
             },
             {
                 "timestamp": 1050,
+                "success": True,
+                "success": True,
                 "liquidity_usd": 100.0,
                 "tokenTransfers": [
                     {"fromUserAccount": "lp_pool", "toUserAccount": "buyer_a", "tokenAmount": 4}
