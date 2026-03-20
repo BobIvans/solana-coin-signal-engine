@@ -182,8 +182,6 @@ Key points:
 - confidence and provenance are exposed through `linkage_confidence`, `linkage_reason_codes`, `linkage_metric_origin`, and `linkage_status`;
 - this PR does **not** claim identity certainty, and weak evidence stays low-confidence.
 
-The shared smoke-script/docs index below is intentionally retained when replay changes are merged with branches that do not edit the README tail.
-
 ## Other smoke scripts
 
 ```bash
