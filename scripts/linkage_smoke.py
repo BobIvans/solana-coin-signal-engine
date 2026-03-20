@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import sys
+import argparse
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -13,7 +14,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from analytics.linkage_scorer import score_creator_dev_funder_linkage
 from utils.clock import utc_now_iso
-from utils.io import append_jsonl, ensure_dir, write_json
+from utils.io import ensure_dir, write_json
 
 
 def _fixture() -> dict[str, object]:
@@ -39,7 +40,23 @@ def _fixture() -> dict[str, object]:
     }
 
 
+def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> Path:
+    path.write_text(
+        "\n".join(json.dumps(row, sort_keys=True, ensure_ascii=False) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--output-dir",
+        default=str(REPO_ROOT / "data" / "smoke"),
+        help="Directory for linkage smoke artifacts.",
+    )
+    args = parser.parse_args()
+
     fixture = _fixture()
     scored = score_creator_dev_funder_linkage(
         fixture["participants"],
@@ -51,7 +68,7 @@ def main() -> int:
         pair_address=fixture["pair_address"],
     )
     timestamp = utc_now_iso()
-    smoke_dir = ensure_dir(REPO_ROOT / "data" / "smoke")
+    smoke_dir = ensure_dir(Path(args.output_dir))
     score_path = smoke_dir / "linkage_score.smoke.json"
     status_path = smoke_dir / "linkage_status.json"
     events_path = smoke_dir / "linkage_events.jsonl"
@@ -86,13 +103,9 @@ def main() -> int:
             "reason_codes": scored.get("linkage_reason_codes"),
         },
     )
-    for event_name in (
-        "linkage_scoring_started",
-        "linkage_score_computed",
-        "linkage_completed",
-    ):
-        append_jsonl(
-            events_path,
+    _write_jsonl(
+        events_path,
+        [
             {
                 "ts": timestamp,
                 "event": event_name,
@@ -102,8 +115,14 @@ def main() -> int:
                 "linkage_confidence": scored.get("linkage_confidence"),
                 "overlap_count": scored.get("funder_overlap_count"),
                 "warning": scored.get("linkage_warning"),
-            },
-        )
+            }
+            for event_name in (
+                "linkage_scoring_started",
+                "linkage_score_computed",
+                "linkage_completed",
+            )
+        ],
+    )
     print(json.dumps({
         "token_address": fixture["token_address"],
         "pair_address": fixture["pair_address"],
