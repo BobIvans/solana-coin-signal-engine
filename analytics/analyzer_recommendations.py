@@ -35,12 +35,17 @@ def _add_if_confident(recommendations: list[dict[str, Any]], rec: dict[str, Any]
 
 
 def generate_recommendations(
-    summary: dict[str, Any], correlations: list[dict[str, Any]], slices: dict[str, Any], settings: Settings
+    summary: dict[str, Any],
+    correlations: list[dict[str, Any]],
+    slices: dict[str, Any],
+    settings: Settings,
+    analyzer_slices: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     min_sample = int(settings.POST_RUN_MIN_SAMPLE_FOR_RECOMMENDATION)
     confidence_min = float(settings.POST_RUN_RECOMMENDATION_CONFIDENCE_MIN)
 
     recommendations: list[dict[str, Any]] = []
+    analyzer_slices = analyzer_slices or {}
 
     total_closed = int(summary.get("total_positions_closed", 0))
     if total_closed < min_sample:
@@ -265,5 +270,33 @@ def generate_recommendations(
                     "high-confidence regime calls outperform low-confidence calls in matrix slices",
                 )
             )
+
+    slice_inputs = analyzer_slices.get("recommendation_inputs", {})
+    for item in slice_inputs.get("actionable_slices", []):
+        sample_size = int(item.get("sample_size", 0))
+        if sample_size < min_sample:
+            continue
+        confidence_label = str(item.get("confidence", "low"))
+        confidence = {"low": 0.56, "medium": 0.64, "high": 0.74}.get(confidence_label, 0.58)
+        recommendations.append(
+            _mk_rec(
+                "slice_manual_review",
+                item.get("slice_name", "unknown_slice"),
+                "manual_review_only",
+                confidence,
+                f"{item.get('recommendation_hint')} (sample={sample_size}; manual-only)",
+            )
+        )
+
+    for slice_name in slice_inputs.get("low_sample_slices", [])[:4]:
+        recommendations.append(
+            _mk_rec(
+                "slice_sample_warning",
+                slice_name,
+                "observe_only",
+                1.0,
+                "slice evidence is below the minimum sample threshold; keep conclusions conservative",
+            )
+        )
 
     return recommendations
