@@ -10,6 +10,7 @@ from collectors.wallet_registry_loader import (
     WALLET_REGISTRY_STATUS_MISSING,
     WALLET_REGISTRY_STATUS_VALIDATED,
 )
+from utils.wallet_family_contract_fields import default_wallet_family_contract_fields
 
 ACTIVE_TIER_WEIGHTS: dict[str, float] = {
     "tier_1": 1.00,
@@ -58,6 +59,10 @@ def _confidence_for_hits(*, active_tier12_hits: int, active_hits: int, watch_hit
 
 
 
+def _normalize_string_list(values: list[Any] | tuple[Any, ...] | None) -> list[str]:
+    return sorted({str(value or "").strip() for value in (values or []) if str(value or "").strip()})
+
+
 def default_wallet_registry_bias(
     *,
     wallet_registry_status: str,
@@ -81,10 +86,7 @@ def default_wallet_registry_bias(
         "smart_wallet_conviction_bonus": 0.0,
         "smart_wallet_registry_confidence": "low",
         "smart_wallet_dispersion_score": None,
-        "smart_wallet_family_ids": [],
-        "smart_wallet_independent_family_ids": [],
-        "smart_wallet_family_unique_count": 0,
-        "smart_wallet_independent_family_unique_count": 0,
+        **default_wallet_family_contract_fields(),
     }
 
 
@@ -130,10 +132,27 @@ def compute_wallet_registry_bias(raw_hit_wallets: list[str] | tuple[str, ...] | 
         watch_hits=watch_hits,
     )
 
-    family_ids = sorted({str(record.get("wallet_family_id") or "") for record in matched_records if record.get("wallet_family_id")})
+    family_records = [
+        record
+        for record in matched_records
+        if record.get("wallet_family_id") or record.get("independent_family_id")
+    ]
+    family_ids = sorted({str(record.get("wallet_family_id") or "") for record in family_records if record.get("wallet_family_id")})
     independent_family_ids = sorted(
-        {str(record.get("independent_family_id") or "") for record in matched_records if record.get("independent_family_id")}
+        {str(record.get("independent_family_id") or "") for record in family_records if record.get("independent_family_id")}
     )
+    family_origins = sorted({str(record.get("wallet_family_origin") or "") for record in family_records if record.get("wallet_family_origin")})
+    family_statuses = sorted({str(record.get("wallet_family_status") or "") for record in family_records if record.get("wallet_family_status")})
+    family_reason_codes = _normalize_string_list(
+        [reason_code for record in family_records for reason_code in (record.get("wallet_family_reason_codes") or [])]
+    )
+    family_confidence_max = round(
+        max((float(record.get("wallet_family_confidence") or 0.0) for record in family_records), default=0.0),
+        6,
+    )
+    family_member_count_max = max((int(record.get("wallet_family_member_count") or 0) for record in family_records), default=0)
+    family_shared_funder_flag = any(bool(record.get("wallet_family_shared_funder_flag", False)) for record in family_records)
+    family_creator_link_flag = any(bool(record.get("wallet_family_creator_link_flag", False)) for record in family_records)
 
     return {
         **defaults,
@@ -151,8 +170,15 @@ def compute_wallet_registry_bias(raw_hit_wallets: list[str] | tuple[str, ...] | 
         "smart_wallet_dispersion_score": compute_smart_wallet_dispersion_score(raw_hit_wallets, lookup),
         "smart_wallet_family_ids": family_ids,
         "smart_wallet_independent_family_ids": independent_family_ids,
+        "smart_wallet_family_origins": family_origins,
+        "smart_wallet_family_statuses": family_statuses,
+        "smart_wallet_family_reason_codes": family_reason_codes,
         "smart_wallet_family_unique_count": len(family_ids),
         "smart_wallet_independent_family_unique_count": len(independent_family_ids),
+        "smart_wallet_family_confidence_max": family_confidence_max,
+        "smart_wallet_family_member_count_max": family_member_count_max,
+        "smart_wallet_family_shared_funder_flag": family_shared_funder_flag,
+        "smart_wallet_family_creator_link_flag": family_creator_link_flag,
     }
 
 

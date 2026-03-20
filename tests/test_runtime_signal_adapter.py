@@ -76,3 +76,37 @@ def test_adapter_batch_accepts_mixed_rows():
     assert len(batch) == 2
     assert batch[0]["runtime_signal_status"] == "partial"
     assert batch[1]["runtime_signal_status"] == "invalid"
+
+
+def test_adapter_preserves_wallet_family_summary_with_null_safe_defaults():
+    signal = adapt_runtime_signal(
+        {
+            "token_address": "So333",
+            "entry_decision": "SCALP",
+            "regime": "SCALP",
+            "regime_confidence": 0.66,
+            "recommended_position_pct": 0.2,
+            "smart_wallet_family_ids": ["fam_a", "fam_b"],
+            "smart_wallet_independent_family_ids": "ifam_a",
+            "smart_wallet_family_origins": ["graph_evidence"],
+            "smart_wallet_family_statuses": ["ok"],
+            "smart_wallet_family_reason_codes": ["shared_funder"],
+            "smart_wallet_family_unique_count": 2,
+            "smart_wallet_independent_family_unique_count": 1,
+            "smart_wallet_family_confidence_max": 0.91,
+            "smart_wallet_family_member_count_max": 5,
+            "smart_wallet_family_shared_funder_flag": True,
+            "smart_wallet_family_creator_link_flag": False,
+        },
+        runtime_signal_origin="entry_candidates",
+    )
+
+    assert signal["smart_wallet_family_ids"] == ["fam_a", "fam_b"]
+    assert signal["smart_wallet_independent_family_ids"] == ["ifam_a"]
+    assert signal["smart_wallet_family_origins"] == ["graph_evidence"]
+    assert signal["smart_wallet_family_reason_codes"] == ["shared_funder"]
+    assert signal["smart_wallet_family_unique_count"] == 2
+    assert signal["smart_wallet_family_confidence_max"] == 0.91
+    assert signal["smart_wallet_family_member_count_max"] == 5
+    assert signal["smart_wallet_family_shared_funder_flag"] is True
+    assert signal["smart_wallet_family_creator_link_flag"] is False

@@ -10,6 +10,7 @@ from trading.regime_rules import decide_regime
 from utils.bundle_contract_fields import copy_bundle_contract_fields, copy_linkage_contract_fields
 from utils.clock import utc_now_iso
 from utils.short_horizon_contract_fields import copy_short_horizon_contract_fields
+from utils.wallet_family_contract_fields import copy_wallet_family_contract_fields
 
 _ALLOWED_DECISIONS = {"SCALP", "TREND", "IGNORE"}
 
@@ -36,6 +37,7 @@ def decide_entry(token_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
         **copy_bundle_contract_fields(token_ctx),
         **copy_linkage_contract_fields(token_ctx),
         **copy_short_horizon_contract_fields(token_ctx),
+        **copy_wallet_family_contract_fields(token_ctx),
         "entry_decision": regime["regime_decision"],
         "entry_reason": regime["reason"],
         "entry_flags": _dedupe([*regime_reason_flags, *regime_blockers]),

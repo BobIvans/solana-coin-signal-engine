@@ -21,6 +21,7 @@ from src.wallets.scoring import compute_wallet_score_adjustment
 from utils.bundle_contract_fields import copy_bundle_contract_fields, copy_linkage_contract_fields
 from utils.clock import utc_now_iso
 from utils.short_horizon_contract_fields import copy_short_horizon_contract_fields
+from utils.wallet_family_contract_fields import copy_wallet_family_contract_fields
 
 
 def _clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
@@ -138,6 +139,7 @@ def score_token(token_ctx: dict, settings: Any) -> dict:
         **copy_bundle_contract_fields(token_ctx),
         **copy_linkage_contract_fields(token_ctx),
         **copy_short_horizon_contract_fields(token_ctx),
+        **copy_wallet_family_contract_fields(token_ctx),
         "onchain_core": round(float(onchain["onchain_core"]), 4),
         "early_signal_bonus": round(float(early["early_signal_bonus"]), 4),
         "bundle_aggression_bonus": round(
