@@ -35,6 +35,7 @@ This layer is conservative by design:
 - `creator_in_cluster_flag` from linkage is only derived when cluster-style overlap is both present and confident,
 - outputs reflect whether evidence came from graph-style overlap, heuristic hints, or both.
 - emitted `linkage_metric_origin` values are canonicalized to `graph_evidence`, `heuristic_evidence`, `mixed_evidence`, or `missing`.
+- legacy `heuristic` may be normalized only at ingestion boundaries; it is not allowed as fresh emitted output.
 
 ## Status fields
 

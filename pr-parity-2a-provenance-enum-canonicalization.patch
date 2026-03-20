@@ -1,0 +1,91 @@
+diff --git a/docs/bundle_evidence.md b/docs/bundle_evidence.md
+index c2dd707..f4980b9 100644
+--- a/docs/bundle_evidence.md
++++ b/docs/bundle_evidence.md
+@@ -88,7 +88,7 @@ Allowed `bundle_metric_origin` values:
+ - `heuristic_evidence`
+ - `missing`
+ 
+-Legacy aliases may still be normalized internally during migration, but fresh emitted artifacts must not use `real_evidence` or `heuristic_fallback`.
++Legacy aliases such as `real_evidence`, `raw_bundles`, and `heuristic_fallback` may still be normalized internally during migration at ingestion boundaries, but fresh emitted artifacts must not use those aliases. Fresh emitted `bundle_metric_origin` values remain canonical-only.
+ 
+ ## Smoke artifacts
+ 
+diff --git a/docs/contracts.md b/docs/contracts.md
+index d5b6725..f9d9c14 100644
+--- a/docs/contracts.md
++++ b/docs/contracts.md
+@@ -104,7 +104,7 @@ Bundle / cluster / linkage / wallet-family artifacts now share one canonical emi
+ - `mixed_evidence`
+ - `missing`
+ 
+-Legacy aliases such as `real_evidence` and `heuristic_fallback` may be normalized internally at ingestion boundaries, but fresh artifact outputs must emit only canonical values.
++Legacy aliases such as `real_evidence`, `raw_bundles`, `graph_backed`, `heuristic`, and `heuristic_fallback` may be normalized internally at ingestion boundaries, but fresh artifact outputs must emit only canonical values. These aliases are ingestion-only migration shims and are not valid fresh emitted output.
+ 
+ `continuation_metric_origin` is intentionally excluded from this unification and keeps its existing composition-oriented vocabulary.
+ 
+diff --git a/docs/linkage_scorer.md b/docs/linkage_scorer.md
+index e3c86f8..624fbd1 100644
+--- a/docs/linkage_scorer.md
++++ b/docs/linkage_scorer.md
+@@ -35,6 +35,7 @@ This layer is conservative by design:
+ - `creator_in_cluster_flag` from linkage is only derived when cluster-style overlap is both present and confident,
+ - outputs reflect whether evidence came from graph-style overlap, heuristic hints, or both.
+ - emitted `linkage_metric_origin` values are canonicalized to `graph_evidence`, `heuristic_evidence`, `mixed_evidence`, or `missing`.
++- legacy `heuristic` may be normalized only at ingestion boundaries; it is not allowed as fresh emitted output.
+ 
+ ## Status fields
+ 
+diff --git a/docs/wallet_graph_clustering.md b/docs/wallet_graph_clustering.md
+index bc19760..8e77be0 100644
+--- a/docs/wallet_graph_clustering.md
++++ b/docs/wallet_graph_clustering.md
+@@ -60,5 +60,7 @@ Canonical emitted `cluster_metric_origin` values are:
+ - `heuristic_evidence`
+ - `missing`
+ 
++Legacy alias `graph_backed` may be normalized at ingestion boundaries for migration, but fresh emitted `cluster_metric_origin` must use canonical `graph_evidence`.
++
+ 
+ This PR intentionally does **not** claim complete institutional wallet intelligence. The graph is only as strong as the explicit local evidence that exists in the launch payloads. Weak evidence falls back to heuristics instead of inventing stronger relationships.
+diff --git a/scripts/contract_parity_smoke.py b/scripts/contract_parity_smoke.py
+index 69e7a81..2a64602 100644
+--- a/scripts/contract_parity_smoke.py
++++ b/scripts/contract_parity_smoke.py
+@@ -63,11 +63,11 @@ def _enriched_row() -> dict:
+         "bundle_evidence_source": "bundle_layer",
+         "bundle_evidence_confidence": "high",
+         "bundle_evidence_warning": "",
+-        "bundle_metric_origin": "raw_bundles",
++        "bundle_metric_origin": "direct_evidence",
+         "cluster_evidence_status": "complete",
+         "cluster_evidence_source": "graph",
+         "cluster_evidence_confidence": "high",
+-        "cluster_metric_origin": "graph_backed",
++        "cluster_metric_origin": "graph_evidence",
+         "graph_cluster_id_count": 3,
+         "graph_cluster_coverage_ratio": 0.91,
+         "creator_cluster_id": "cluster-creator-1",
+@@ -84,7 +84,7 @@ def _enriched_row() -> dict:
+         "funder_overlap_count": 2,
+         "linkage_reason_codes": ["shared_funder"],
+         "linkage_confidence": "low",
+-        "linkage_metric_origin": "heuristic",
++        "linkage_metric_origin": "heuristic_evidence",
+         "linkage_status": "partial",
+         "linkage_warning": "",
+         "net_unique_buyers_60s": 11,
+diff --git a/utils/provenance_enums.py b/utils/provenance_enums.py
+index 8a3eac4..83432bf 100644
+--- a/utils/provenance_enums.py
++++ b/utils/provenance_enums.py
+@@ -26,6 +26,9 @@ CANONICAL_PROVENANCE_ORIGINS = frozenset(
+ 
+ LEGACY_PROVENANCE_ALIASES = {
+     "real_evidence": DIRECT_EVIDENCE_ORIGIN,
++    "raw_bundles": DIRECT_EVIDENCE_ORIGIN,
++    "graph_backed": GRAPH_EVIDENCE_ORIGIN,
++    "heuristic": HEURISTIC_EVIDENCE_ORIGIN,
+     "heuristic_fallback": HEURISTIC_EVIDENCE_ORIGIN,
+ }
+ 

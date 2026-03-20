@@ -104,7 +104,7 @@ Bundle / cluster / linkage / wallet-family artifacts now share one canonical emi
 - `mixed_evidence`
 - `missing`
 
-Legacy aliases such as `real_evidence` and `heuristic_fallback` may be normalized internally at ingestion boundaries, but fresh artifact outputs must emit only canonical values.
+Legacy aliases such as `real_evidence`, `raw_bundles`, `graph_backed`, `heuristic`, and `heuristic_fallback` may be normalized internally at ingestion boundaries, but fresh artifact outputs must emit only canonical values. These aliases are ingestion-only migration shims and are not valid fresh emitted output.
 
 `continuation_metric_origin` is intentionally excluded from this unification and keeps its existing composition-oriented vocabulary.
 

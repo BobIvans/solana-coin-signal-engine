@@ -26,6 +26,9 @@ CANONICAL_PROVENANCE_ORIGINS = frozenset(
 
 LEGACY_PROVENANCE_ALIASES = {
     "real_evidence": DIRECT_EVIDENCE_ORIGIN,
+    "raw_bundles": DIRECT_EVIDENCE_ORIGIN,
+    "graph_backed": GRAPH_EVIDENCE_ORIGIN,
+    "heuristic": HEURISTIC_EVIDENCE_ORIGIN,
     "heuristic_fallback": HEURISTIC_EVIDENCE_ORIGIN,
 }
 

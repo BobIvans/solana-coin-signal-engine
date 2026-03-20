@@ -88,7 +88,7 @@ Allowed `bundle_metric_origin` values:
 - `heuristic_evidence`
 - `missing`
 
-Legacy aliases may still be normalized internally during migration, but fresh emitted artifacts must not use `real_evidence` or `heuristic_fallback`.
+Legacy aliases such as `real_evidence`, `raw_bundles`, and `heuristic_fallback` may still be normalized internally during migration at ingestion boundaries, but fresh emitted artifacts must not use those aliases. Fresh emitted `bundle_metric_origin` values remain canonical-only.
 
 ## Smoke artifacts
 
