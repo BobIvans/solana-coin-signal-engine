@@ -30,7 +30,7 @@ def _build_logger() -> logging.Logger:
     if logger.handlers:
         return logger
     logger.setLevel(logging.DEBUG)
-    handler = logging.StreamHandler(sys.stdout)
+    handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(_UtcJsonFormatter())
     logger.addHandler(handler)
     logger.propagate = False
