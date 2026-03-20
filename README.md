@@ -2,6 +2,31 @@
 
 This repository contains deterministic scoring, regime-selection, exit, replay, calibration, promotion, and smoke tooling for a Solana memecoin signal engine.
 
+## PR-7 entry selector
+
+PR-7 adds the deterministic entry-selection layer that turns `scored_tokens.json` into machine-readable entry decisions for downstream runtime, replay, and analyzer consumers.
+
+Highlights:
+
+- emits `SCALP`, `TREND`, or `IGNORE`
+- keeps degraded-X and partial-data handling explicit instead of silently fabricating confidence
+- produces compact `entry_snapshot` payloads for downstream consumers
+- writes conservative decision and sizing outputs without bypassing hard blockers
+
+Primary artifacts:
+
+- `data/processed/entry_candidates.json`
+- `data/processed/entry_candidates.smoke.json`
+- `data/processed/entry_events.jsonl`
+
+Run smoke:
+
+```bash
+python scripts/entry_selector_smoke.py --scored data/processed/scored_tokens.json
+```
+
+See `docs/entry_selector.md` for regime rules, confidence logic, degraded/partial handling, and the entry snapshot contract.
+
 ## Historical replay harness
 
 The replay path is now evidence-first.
