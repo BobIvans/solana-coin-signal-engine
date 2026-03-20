@@ -78,7 +78,7 @@ def test_runtime_loop_opens_paper_position_from_real_signal(tmp_path):
 
     run_dir = tmp_path / "runs" / run_id
     summary = read_json(run_dir / "daily_summary.json", default={})
-    positions = read_json(run_dir / "positions_snapshot.json", default={})
+    positions = read_json(run_dir / "positions.json", default={})
     assert summary["runtime_signal_origin"] == "entry_candidates"
     assert summary["total_opened"] == 1
     assert positions["open_positions"][0]["token_address"] == "SoReal111"
@@ -136,3 +136,37 @@ def test_runtime_loop_respects_mode_guards_for_real_signal(tmp_path):
     assert "regime_not_allowed" in decisions
     assert summary["total_opened"] == 0
     assert summary["total_rejected"] == 1
+
+
+def test_runtime_loop_does_not_self_inject_captcha_cooldown(tmp_path):
+    processed = tmp_path / "processed"
+    processed.mkdir(parents=True, exist_ok=True)
+    config_path = _config(tmp_path, mode="expanded_paper")
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    payload["runtime"]["seed"] = 31
+    payload["x_protection"]["captcha_cooldown_trigger_count"] = 1
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    run_id = "no_synthetic_captcha"
+    cmd = [
+        sys.executable,
+        "scripts/run_promotion_loop.py",
+        "--config",
+        str(config_path),
+        "--mode",
+        "expanded_paper",
+        "--run-id",
+        run_id,
+        "--max-loops",
+        "1",
+        "--signals-dir",
+        str(processed),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
+
+    run_dir = tmp_path / "runs" / run_id
+    event_log = (run_dir / "event_log.jsonl").read_text(encoding="utf-8")
+    summary = read_json(run_dir / "daily_summary.json", default={})
+    assert '"event": "cooldown_started"' not in event_log
+    assert summary["x_cooldown_active"] is False

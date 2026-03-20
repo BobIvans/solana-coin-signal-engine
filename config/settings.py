@@ -36,6 +36,10 @@ class Settings:
     X_MAX_CONCURRENCY: int
     X_CACHE_TTL_SEC: int
 
+    DISCOVERY_MAX_AGE_SEC: int
+    DISCOVERY_MIN_LIQUIDITY_USD: float
+    DISCOVERY_MIN_TXNS_M5: int
+
     LOCAL_OPENCLAW_ONLY: bool
     OPENCLAW_BROWSER_PROFILE: str
     OPENCLAW_BROWSER_TARGET: str
@@ -325,6 +329,15 @@ def load_settings() -> Settings:
         ),
         X_CACHE_TTL_SEC=_as_positive_int(
             _get_env(merged, "X_CACHE_TTL_SEC", "600"), key="X_CACHE_TTL_SEC"
+        ),
+        DISCOVERY_MAX_AGE_SEC=_as_positive_int(
+            _get_env(merged, "DISCOVERY_MAX_AGE_SEC", "600"), key="DISCOVERY_MAX_AGE_SEC"
+        ),
+        DISCOVERY_MIN_LIQUIDITY_USD=_as_positive_float(
+            _get_env(merged, "DISCOVERY_MIN_LIQUIDITY_USD", "20000"), key="DISCOVERY_MIN_LIQUIDITY_USD"
+        ),
+        DISCOVERY_MIN_TXNS_M5=_as_positive_int(
+            _get_env(merged, "DISCOVERY_MIN_TXNS_M5", "20"), key="DISCOVERY_MIN_TXNS_M5"
         ),
         LOCAL_OPENCLAW_ONLY=_as_bool(
             _get_env(merged, "LOCAL_OPENCLAW_ONLY", "true"), key="LOCAL_OPENCLAW_ONLY"

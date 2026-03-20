@@ -25,7 +25,7 @@ def test_promotion_shadow_smoke():
     assert (run_dir / "runtime_manifest.json").exists()
     assert (run_dir / "event_log.jsonl").exists()
     assert (run_dir / "decisions.jsonl").exists()
-    assert (run_dir / "positions_snapshot.json").exists()
+    assert (run_dir / "positions.json").exists()
     assert (run_dir / "daily_summary.json").exists()
     assert (run_dir / "daily_summary.md").exists()
     assert (run_dir / "session_state.json").exists()
