@@ -283,3 +283,35 @@ Artifacts written by default:
 - `data/smoke/wallet_family_summary.json`
 
 See `docs/wallet_family_metadata.md` for the evidence model, the difference between broad vs strict family ids, and the fallback policy.
+
+## PR-ML-1 offline feature importance
+
+PR-ML-1 adds an offline feature importance layer over replay-derived trade matrices such as `trade_feature_matrix.jsonl`.
+
+Highlights:
+
+- computes offline-only feature importance for explicit replay targets
+- emits grouped and per-feature rankings
+- reports sample size, missingness, malformed rows, and exclusions
+- writes machine-readable JSON plus markdown summaries
+- keeps outputs analysis-only and not for online decisioning
+
+Supported offline targets:
+
+- `profitable_trade_flag`
+- `trend_success_flag`
+- `fast_failure_flag`
+
+Run the deterministic smoke path:
+
+```bash
+python scripts/offline_feature_importance_smoke.py
+```
+
+Artifacts written by the smoke path:
+
+- `data/smoke/offline_feature_importance.json`
+- `data/smoke/offline_feature_importance_summary.md`
+
+See `docs/offline_feature_importance.md` for the target definitions, grouping logic, methods, caveats, and honesty policy.
+
