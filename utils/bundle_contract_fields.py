@@ -20,6 +20,25 @@ BUNDLE_CONTRACT_FIELDS = [
     "creator_in_cluster_flag",
 ]
 
+BUNDLE_PROVENANCE_FIELDS = [
+    "bundle_evidence_status",
+    "bundle_evidence_source",
+    "bundle_evidence_confidence",
+    "bundle_evidence_warning",
+    "bundle_metric_origin",
+]
+
+CLUSTER_PROVENANCE_FIELDS = [
+    "cluster_evidence_status",
+    "cluster_evidence_source",
+    "cluster_evidence_confidence",
+    "cluster_metric_origin",
+    "graph_cluster_id_count",
+    "graph_cluster_coverage_ratio",
+    "creator_cluster_id",
+    "dominant_cluster_id",
+]
+
 LINKAGE_CONTRACT_FIELDS = [
     "creator_dev_link_score",
     "creator_buyer_link_score",
@@ -71,7 +90,42 @@ def copy_linkage_contract_fields(
     return _copy_fields(LINKAGE_CONTRACT_FIELDS, source, fallback)
 
 
-ALL_BUNDLE_LINKAGE_CONTRACT_FIELDS = [*BUNDLE_CONTRACT_FIELDS, *LINKAGE_CONTRACT_FIELDS]
+def copy_bundle_provenance_fields(
+    source: dict[str, Any],
+    *,
+    fallback: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Copy additive bundle provenance fields with optional fallback lookup."""
+
+    fallback = fallback or {}
+    return _copy_fields(BUNDLE_PROVENANCE_FIELDS, source, fallback)
+
+
+def copy_cluster_provenance_fields(
+    source: dict[str, Any],
+    *,
+    fallback: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Copy additive cluster provenance fields with optional fallback lookup."""
+
+    fallback = fallback or {}
+    return _copy_fields(CLUSTER_PROVENANCE_FIELDS, source, fallback)
+
+
+ALL_BUNDLE_EVIDENCE_FIELDS = [*BUNDLE_CONTRACT_FIELDS, *BUNDLE_PROVENANCE_FIELDS]
+ALL_CLUSTER_EVIDENCE_FIELDS = [
+    "bundle_wallet_clustering_score",
+    "cluster_concentration_ratio",
+    "num_unique_clusters_first_60s",
+    "creator_in_cluster_flag",
+    *CLUSTER_PROVENANCE_FIELDS,
+]
+ALL_BUNDLE_LINKAGE_CONTRACT_FIELDS = [
+    *BUNDLE_CONTRACT_FIELDS,
+    *BUNDLE_PROVENANCE_FIELDS,
+    *CLUSTER_PROVENANCE_FIELDS,
+    *LINKAGE_CONTRACT_FIELDS,
+]
 
 
 def copy_bundle_and_linkage_contract_fields(
