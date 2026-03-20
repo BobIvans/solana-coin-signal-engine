@@ -179,6 +179,11 @@ Required continuation provenance/status fields:
 
 These checks validate presence and visibility. They do not claim that continuation signals are complete or non-heuristic.
 
+High-level continuation semantics:
+- tx-derived continuation metrics are success-gated (`success is True`)
+- LP/pool/router/vault/system-like actors must not silently count as organic buyers or sellers
+- ambiguous same-tx role attribution should degrade continuation honesty rather than inflate strength
+
 ### core_rug_assessed
 Artifact:
 - `data/processed/rug_assessed_tokens.json`

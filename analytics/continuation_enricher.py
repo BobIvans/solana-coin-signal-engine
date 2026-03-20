@@ -172,11 +172,15 @@ def compute_continuation_metrics(
         )
         metrics["seller_reentry_ratio"] = compute_seller_reentry_ratio(pair_created_ts=pair_ts, txs=txs)
         metrics["liquidity_shock_recovery_sec"] = compute_liquidity_shock_recovery_sec(pair_created_ts=pair_ts, txs=txs)
+        tx_metric_count = sum(metrics[field] is not None for field in _TX_METRIC_FIELDS)
         for field in _TX_METRIC_FIELDS:
             if metrics[field] is not None:
                 metric_sources[field] = "tx"
-        if not any(metrics[field] is not None for field in _TX_METRIC_FIELDS):
+        if tx_metric_count == 0:
             warnings.append("tx_evidence_present_but_continuation_metrics_unresolved")
+            inputs_status["tx"] = "partial"
+        elif tx_metric_count < len(_TX_METRIC_FIELDS):
+            warnings.append("tx_continuation_metrics_partially_resolved")
             inputs_status["tx"] = "partial"
         events.append(
             {
