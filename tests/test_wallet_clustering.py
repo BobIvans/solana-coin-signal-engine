@@ -89,6 +89,7 @@ def test_missing_evidence_fixture_returns_none_safe_outputs():
     assert metrics["num_unique_clusters_first_60s"] is None
     assert metrics["creator_in_cluster_flag"] is None
     assert metrics["cluster_metric_origin"] == "missing"
+    assert metrics["linkage_status"] in {"partial", "missing"}
 
 
 def test_cluster_key_assignment_is_deterministic_for_repeated_group_pairs():

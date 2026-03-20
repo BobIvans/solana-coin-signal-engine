@@ -28,6 +28,7 @@ class DummySettings:
     ENTRY_REGIME_CONFIDENCE_FLOOR_TREND = 0.55
     ENTRY_REGIME_CONFIDENCE_FLOOR_SCALP = 0.40
     RUG_DEV_SELL_PRESSURE_HARD = 0.25
+    LINKAGE_HIGH_RISK_THRESHOLD = 0.70
 
 
 def _base_token():
@@ -155,3 +156,26 @@ def test_decide_regime_returns_ignore_when_evidence_is_insufficient():
     assert result["expected_hold_class"] == "none"
     assert result["regime_confidence"] == 0
     assert result["regime_blockers"]
+
+
+def test_decide_regime_blocks_trend_on_high_confidence_linkage_risk():
+    token = _base_token()
+    token.update({
+        "linkage_risk_score": 0.81,
+        "linkage_confidence": 0.72,
+        "creator_buyer_link_score": 0.78,
+        "shared_funder_link_score": 0.74,
+        "linkage_status": "ok",
+    })
+
+    result = decide_regime(token, DummySettings())
+    assert result["regime_decision"] == "SCALP"
+    assert "trend_linkage_risk_high" in result["regime_blockers"]
+
+
+def test_decide_regime_warns_when_linkage_evidence_is_incomplete():
+    token = _base_token()
+    token.update({"linkage_status": "partial", "linkage_confidence": 0.18})
+
+    result = decide_regime(token, DummySettings())
+    assert "trend_linkage_evidence_incomplete" in result["warnings"]

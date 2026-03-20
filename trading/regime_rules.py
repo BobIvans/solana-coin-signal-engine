@@ -354,6 +354,20 @@ def _assess_trend_evidence(token_ctx: dict[str, Any], settings: Any, trend: dict
     else:
         warnings.append("trend_creator_cluster_evidence_missing")
 
+    linkage_risk = _to_float(token_ctx.get("linkage_risk_score"), default=-1.0)
+    linkage_confidence = _to_float(token_ctx.get("linkage_confidence"), default=0.0)
+    if linkage_risk >= 0 and linkage_confidence >= 0.55:
+        if linkage_risk >= float(_setting(settings, "LINKAGE_HIGH_RISK_THRESHOLD", 0.70)) and (
+            _to_float(token_ctx.get("creator_buyer_link_score"), default=0.0) >= 0.65
+            or _to_float(token_ctx.get("dev_buyer_link_score"), default=0.0) >= 0.65
+            or _to_float(token_ctx.get("shared_funder_link_score"), default=0.0) >= 0.70
+        ):
+            blockers.append("trend_linkage_risk_high")
+        elif linkage_risk >= 0.35:
+            warnings.append("trend_linkage_risk_watch")
+    elif token_ctx.get("linkage_status") in {"partial", "missing", "failed"}:
+        warnings.append("trend_linkage_evidence_incomplete")
+
     retry_pattern = token_ctx.get("bundle_failure_retry_pattern")
     if retry_pattern is not None:
         available_optional += 1
@@ -485,6 +499,8 @@ def _assess_scalp_evidence(token_ctx: dict[str, Any], settings: Any, scalp: dict
 
     if token_ctx.get("creator_in_cluster_flag") is True:
         reason_flags.append("creator_cluster_risk_present")
+    if _to_float(token_ctx.get("linkage_risk_score"), default=0.0) >= 0.35:
+        warnings.append("scalp_linkage_risk_present")
 
     blocker_penalty = 0.10 * len(set(blockers))
     missing_penalty = 0.02 * missing_optional

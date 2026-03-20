@@ -11,7 +11,7 @@ from collectors.bundle_detector import compute_advanced_bundle_fields
 from collectors.bundle_detector import detect_bundle_metrics_for_pair, safe_null_bundle_metrics
 from collectors.dexscreener_client import fetch_latest_solana_pairs, normalize_pair
 from config.settings import load_settings
-from utils.bundle_contract_fields import copy_bundle_contract_fields
+from utils.bundle_contract_fields import copy_bundle_contract_fields, copy_linkage_contract_fields
 from utils.clock import utc_now_iso, utc_now_ts
 from utils.io import append_jsonl, ensure_dir, write_json
 from utils.logger import log_warning
@@ -73,6 +73,7 @@ def build_shortlist(candidates: list[dict[str, Any]], top_k: int) -> list[dict[s
                 "volume_mcap_ratio": row.get("volume_mcap_ratio", 0.0),
                 "source": row.get("source", "dexscreener"),
                 **copy_bundle_contract_fields(row),
+                **copy_linkage_contract_fields(row),
             }
         )
     return shortlist

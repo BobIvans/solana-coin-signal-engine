@@ -7,6 +7,7 @@ from math import ceil
 from typing import Any
 
 from analytics.cluster_store import build_and_persist_wallet_clusters
+from analytics.linkage_scorer import score_creator_dev_funder_linkage
 from analytics.wallet_graph_builder import build_wallet_graph, derive_wallet_clusters
 from utils.logger import log_info, log_warning
 
@@ -568,4 +569,20 @@ def compute_wallet_clustering_metrics(
             "dominant_cluster_id": resolved["dominant_cluster_id"],
         }
     )
+
+    linkage = score_creator_dev_funder_linkage(
+        participants,
+        creator_wallet=creator_wallet,
+        dev_wallet=locals().get("dev_wallet"),
+        early_buyer_wallets=wallets,
+        cluster_ids_by_wallet=cluster_ids,
+        token_address=locals().get("token_address"),
+        pair_address=locals().get("pair_address"),
+    )
+    if linkage.get("creator_in_cluster_flag") is None:
+        linkage["creator_in_cluster_flag"] = creator_flag
+
+    out.update(linkage)
+    if out.get("creator_in_cluster_flag") is None:
+        out["creator_in_cluster_flag"] = creator_flag
     return out

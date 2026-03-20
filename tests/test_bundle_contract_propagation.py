@@ -14,7 +14,7 @@ from analytics.unified_score import score_token
 from collectors.discovery_engine import build_shortlist
 from config.settings import load_settings
 from trading.entry_logic import decide_entry
-from utils.bundle_contract_fields import BUNDLE_CONTRACT_FIELDS
+from utils.bundle_contract_fields import BUNDLE_CONTRACT_FIELDS, LINKAGE_CONTRACT_FIELDS
 from utils.short_horizon_contract_fields import SHORT_HORIZON_SIGNAL_FIELDS
 
 
@@ -57,6 +57,27 @@ def _bundle_values() -> dict[str, object]:
         "creator_in_cluster_flag": True,
     }
 
+
+
+
+def _linkage_values() -> dict[str, object]:
+    return {
+        "creator_dev_link_score": 0.31,
+        "creator_buyer_link_score": 0.74,
+        "dev_buyer_link_score": 0.58,
+        "shared_funder_link_score": 0.71,
+        "creator_cluster_link_score": 0.62,
+        "cluster_dev_link_score": 0.54,
+        "linkage_risk_score": 0.49,
+        "creator_funder_overlap_count": 1,
+        "buyer_funder_overlap_count": 2,
+        "funder_overlap_count": 2,
+        "linkage_reason_codes": ["creator_buyer_same_funder"],
+        "linkage_confidence": 0.66,
+        "linkage_metric_origin": "mixed_evidence",
+        "linkage_status": "ok",
+        "linkage_warning": None,
+    }
 
 def _short_horizon_values() -> dict[str, object]:
     return {
@@ -123,6 +144,7 @@ def test_bundle_fields_propagate_from_shortlist_to_scored_token_to_entry_snapsho
         "freeze_revoked": True,
         "lp_burn_confirmed": True,
         **_bundle_values(),
+        **_linkage_values(),
         **_short_horizon_values(),
     }
 
@@ -137,8 +159,10 @@ def test_bundle_fields_propagate_from_shortlist_to_scored_token_to_entry_snapsho
         assert scored[field] == value
     for field, value in _short_horizon_values().items():
         assert scored[field] == value
+    for field, value in _linkage_values().items():
+        assert scored[field] == value
 
-    entry = decide_entry({**_base_scored_token(), **_bundle_values(), **_short_horizon_values()}, DummyEntrySettings())
+    entry = decide_entry({**_base_scored_token(), **_bundle_values(), **_linkage_values(), **_short_horizon_values()}, DummyEntrySettings())
     for field, value in _bundle_values().items():
         assert entry[field] == value
         assert entry["entry_snapshot"][field] == value

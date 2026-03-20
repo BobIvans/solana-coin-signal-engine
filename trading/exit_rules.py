@@ -440,6 +440,44 @@ def detect_creator_cluster_exit_risk(position_ctx: dict[str, Any], current_ctx: 
     return {"severity": "none", "flags": [], "warnings": []}
 
 
+def detect_linkage_exit_risk(position_ctx: dict[str, Any], current_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
+    linkage_risk = _to_float(
+        _current_or_entry(position_ctx, current_ctx, "linkage_risk_score_now", "linkage_risk_score"),
+        default=-1.0,
+    )
+    if linkage_risk < 0:
+        return {"severity": "none", "flags": [], "warnings": []}
+
+    linkage_confidence = _to_float(_current_or_entry(position_ctx, current_ctx, "linkage_confidence"), default=0.0)
+    creator_buyer = _to_float(_current_or_entry(position_ctx, current_ctx, "creator_buyer_link_score_now", "creator_buyer_link_score"), default=0.0)
+    dev_buyer = _to_float(_current_or_entry(position_ctx, current_ctx, "dev_buyer_link_score_now", "dev_buyer_link_score"), default=0.0)
+    shared_funder = _to_float(_current_or_entry(position_ctx, current_ctx, "shared_funder_link_score_now", "shared_funder_link_score"), default=0.0)
+    cluster_dev = _to_float(_current_or_entry(position_ctx, current_ctx, "cluster_dev_link_score_now", "cluster_dev_link_score"), default=0.0)
+    sell_concentration = _to_float(_current_or_entry(position_ctx, current_ctx, "cluster_sell_concentration_120s"), default=-1.0)
+    retry_now = _to_float(_current_or_entry(position_ctx, current_ctx, "bundle_failure_retry_pattern_now", "bundle_failure_retry_pattern"), default=0.0)
+
+    threshold = float(_setting(settings, "EXIT_LINKAGE_RISK_HARD", getattr(settings, "EXIT_CREATOR_CLUSTER_RISK_HARD", 0.75)))
+    support_signal = creator_buyer >= 0.65 or dev_buyer >= 0.65 or shared_funder >= 0.70 or cluster_dev >= 0.60
+    distribution_signal = sell_concentration >= float(_setting(settings, "EXIT_CLUSTER_SELL_CONCENTRATION_WARN", getattr(settings, "EXIT_CLUSTER_CONCENTRATION_SELL_THRESHOLD", 0.65)))
+    retry_signal = retry_now >= float(_setting(settings, "EXIT_BUNDLE_FAILURE_SPIKE_THRESHOLD", 2.0))
+
+    if linkage_confidence >= 0.55 and linkage_risk >= threshold and support_signal and (distribution_signal or retry_signal):
+        return {
+            "severity": "exit",
+            "flags": ["linkage_exit_risk"],
+            "warnings": [],
+        }
+
+    if linkage_confidence >= 0.45 and linkage_risk >= threshold * 0.75 and support_signal:
+        return {
+            "severity": "warn",
+            "flags": [],
+            "warnings": ["linkage_exit_risk"],
+        }
+
+    return {"severity": "none", "flags": [], "warnings": []}
+
+
 def evaluate_hard_exit(position_ctx: dict, current_ctx: dict, settings: Any) -> dict:
     dev_sell = _to_float(current_ctx.get("dev_sell_pressure_now", current_ctx.get("dev_sell_pressure_5m")))
     if bool(settings.EXIT_DEV_SELL_HARD) and dev_sell > 0:
@@ -457,8 +495,12 @@ def evaluate_hard_exit(position_ctx: dict, current_ctx: dict, settings: Any) -> 
         return _full("retry_manipulation_detected", retry_manipulation["flags"])
 
     creator_risk = detect_creator_cluster_exit_risk(position_ctx, current_ctx, settings)
+    linkage_risk = detect_linkage_exit_risk(position_ctx, current_ctx, settings)
     if creator_risk["severity"] == "hard":
         return _full("creator_cluster_exit_risk", creator_risk["flags"])
+
+    if linkage_risk["severity"] == "exit":
+        return _full("linkage_exit_risk", linkage_risk["flags"])
 
     return _hold()
 
@@ -475,6 +517,7 @@ def evaluate_scalp_exit(position_ctx: dict, current_ctx: dict, settings: Any) ->
     bundle_failure = detect_bundle_failure_spike(position_ctx, current_ctx, settings)
     retry_manipulation = detect_retry_manipulation(position_ctx, current_ctx, settings)
     creator_risk = detect_creator_cluster_exit_risk(position_ctx, current_ctx, settings)
+    linkage_risk = detect_linkage_exit_risk(position_ctx, current_ctx, settings)
     warnings = [
         *cluster_dump["warnings"],
         *cluster_distribution["warnings"],
@@ -484,6 +527,7 @@ def evaluate_scalp_exit(position_ctx: dict, current_ctx: dict, settings: Any) ->
         *bundle_failure["warnings"],
         *retry_manipulation["warnings"],
         *creator_risk["warnings"],
+        *linkage_risk["warnings"],
     ]
 
     if cluster_dump["severity"] in {"hard", "exit"}:
@@ -508,6 +552,9 @@ def evaluate_scalp_exit(position_ctx: dict, current_ctx: dict, settings: Any) ->
 
     if creator_risk["severity"] == "exit":
         return _full("creator_cluster_exit_risk", creator_risk["flags"], warnings=warnings)
+
+    if linkage_risk["severity"] == "exit":
+        return _full("linkage_exit_risk", linkage_risk["flags"], warnings=warnings)
 
     if bundle_failure["severity"] == "exit" and (pnl_pct <= 0 or hold_sec >= int(settings.EXIT_SCALP_RECHECK_SEC)):
         return _full("bundle_failure_spike", bundle_failure["flags"], warnings=warnings)
@@ -579,6 +626,7 @@ def evaluate_trend_exit(position_ctx: dict, current_ctx: dict, settings: Any) ->
     bundle_failure = detect_bundle_failure_spike(position_ctx, current_ctx, settings)
     retry_manipulation = detect_retry_manipulation(position_ctx, current_ctx, settings)
     creator_risk = detect_creator_cluster_exit_risk(position_ctx, current_ctx, settings)
+    linkage_risk = detect_linkage_exit_risk(position_ctx, current_ctx, settings)
     warnings = [
         *cluster_dump["warnings"],
         *cluster_distribution["warnings"],
@@ -588,6 +636,7 @@ def evaluate_trend_exit(position_ctx: dict, current_ctx: dict, settings: Any) ->
         *bundle_failure["warnings"],
         *retry_manipulation["warnings"],
         *creator_risk["warnings"],
+        *linkage_risk["warnings"],
     ]
 
     if cluster_dump["severity"] in {"hard", "exit"}:
@@ -621,6 +670,9 @@ def evaluate_trend_exit(position_ctx: dict, current_ctx: dict, settings: Any) ->
 
     if creator_risk["severity"] in {"hard", "exit"}:
         return _full("creator_cluster_exit_risk", creator_risk["flags"], warnings=warnings)
+
+    if linkage_risk["severity"] == "exit":
+        return _full("linkage_exit_risk", linkage_risk["flags"], warnings=warnings)
 
     if retry_manipulation["severity"] == "hard":
         return _full("retry_manipulation_detected", retry_manipulation["flags"], warnings=warnings)

@@ -52,6 +52,8 @@ BUNDLE_COMPONENT_KEYS = {
     "organic_multi_cluster_bonus",
     "single_cluster_penalty",
     "creator_cluster_penalty",
+    "cluster_dev_link_penalty",
+    "shared_funder_penalty",
     "bundle_sell_heavy_penalty",
     "retry_manipulation_penalty",
 }
@@ -290,3 +292,19 @@ def test_score_payload_contract_includes_new_component_keys():
         assert key in token
     for key in CONTINUATION_COMPONENT_KEYS:
         assert key in token
+
+
+def test_linkage_penalties_apply_conservatively_when_confident():
+    settings = load_settings()
+    token = {
+        **_base_token(),
+        "creator_cluster_link_score": 0.72,
+        "cluster_dev_link_score": 0.66,
+        "shared_funder_link_score": 0.74,
+        "linkage_confidence": 0.68,
+        "linkage_status": "ok",
+    }
+    out = score_token(token, settings)
+    assert out["cluster_dev_link_penalty"] > 0
+    assert out["shared_funder_penalty"] > 0
+    assert "shared_funder_penalty" in out["score_flags"]

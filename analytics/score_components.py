@@ -235,8 +235,31 @@ def compute_cluster_quality_adjustment(token_ctx: dict, settings: Any) -> dict:
     )
 
     creator_cluster_penalty = 0.0
+    creator_cluster_link = _f(token_ctx.get("creator_cluster_link_score"))
+    linkage_confidence = _f(token_ctx.get("linkage_confidence")) or 0.0
+    shared_funder_link = _f(token_ctx.get("shared_funder_link_score"))
+    cluster_dev_link = _f(token_ctx.get("cluster_dev_link_score"))
+
     if token_ctx.get("creator_in_cluster_flag") is True:
         creator_cluster_penalty = float(settings.UNIFIED_SCORE_CREATOR_CLUSTER_PENALTY)
+    elif creator_cluster_link is not None and creator_cluster_link >= 0.65 and linkage_confidence >= 0.55:
+        creator_cluster_penalty = float(settings.UNIFIED_SCORE_CREATOR_CLUSTER_PENALTY) * 0.75
+
+    cluster_dev_link_penalty = 0.0
+    if cluster_dev_link is not None and linkage_confidence >= 0.45:
+        cluster_dev_link_penalty = (
+            max(0.0, min(1.0, cluster_dev_link))
+            * max(0.0, min(1.0, linkage_confidence))
+            * float(getattr(settings, "UNIFIED_SCORE_CLUSTER_DEV_LINK_PENALTY_MAX", 3.0))
+        )
+
+    shared_funder_penalty = 0.0
+    if shared_funder_link is not None and linkage_confidence >= 0.45:
+        shared_funder_penalty = (
+            max(0.0, min(1.0, shared_funder_link))
+            * max(0.0, min(1.0, linkage_confidence))
+            * float(getattr(settings, "UNIFIED_SCORE_SHARED_FUNDER_PENALTY_MAX", 2.5))
+        )
 
     flags: list[str] = []
     if organic_bonus >= float(settings.UNIFIED_SCORE_MULTI_CLUSTER_BONUS_MAX) * 0.4:
@@ -248,11 +271,17 @@ def compute_cluster_quality_adjustment(token_ctx: dict, settings: Any) -> dict:
         flags.append("single_cluster_concentration")
     if creator_cluster_penalty > 0:
         flags.append("creator_cluster_linked")
+    if cluster_dev_link_penalty > 0:
+        flags.append("cluster_dev_link_penalty")
+    if shared_funder_penalty > 0:
+        flags.append("shared_funder_penalty")
 
     return {
         "organic_multi_cluster_bonus": round(organic_bonus, 4),
         "single_cluster_penalty": round(single_cluster_penalty, 4),
         "creator_cluster_penalty": round(creator_cluster_penalty, 4),
+        "cluster_dev_link_penalty": round(cluster_dev_link_penalty, 4),
+        "shared_funder_penalty": round(shared_funder_penalty, 4),
         "flags": flags,
         "warnings": [],
     }

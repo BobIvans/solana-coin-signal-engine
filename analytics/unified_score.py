@@ -21,7 +21,7 @@ from src.wallets.scoring import (
     apply_wallet_adjustment_to_final_score,
     compute_wallet_score_adjustment,
 )
-from utils.bundle_contract_fields import copy_bundle_contract_fields
+from utils.bundle_contract_fields import copy_bundle_contract_fields, copy_linkage_contract_fields
 from utils.clock import utc_now_iso
 from utils.short_horizon_contract_fields import copy_short_horizon_contract_fields
 
@@ -75,6 +75,8 @@ def score_token(token_ctx: dict, settings: Any) -> dict:
         + float(x_bonus["x_validation_bonus"])
         - float(cluster_adjustment["single_cluster_penalty"])
         - float(cluster_adjustment["creator_cluster_penalty"])
+        - float(cluster_adjustment["cluster_dev_link_penalty"])
+        - float(cluster_adjustment["shared_funder_penalty"])
         - float(continuation_quality["cluster_distribution_risk_penalty"])
         - float(bundle_risk["bundle_sell_heavy_penalty"])
         - float(bundle_risk["retry_manipulation_penalty"])
@@ -137,6 +139,7 @@ def score_token(token_ctx: dict, settings: Any) -> dict:
         "name": str(token_ctx.get("name") or ""),
         "fast_prescore": float(token_ctx.get("fast_prescore") or 0.0),
         **copy_bundle_contract_fields(token_ctx),
+        **copy_linkage_contract_fields(token_ctx),
         **copy_short_horizon_contract_fields(token_ctx),
         "onchain_core": round(float(onchain["onchain_core"]), 4),
         "early_signal_bonus": round(float(early["early_signal_bonus"]), 4),
@@ -151,6 +154,12 @@ def score_token(token_ctx: dict, settings: Any) -> dict:
         ),
         "creator_cluster_penalty": round(
             float(cluster_adjustment["creator_cluster_penalty"]), 4
+        ),
+        "cluster_dev_link_penalty": round(
+            float(cluster_adjustment["cluster_dev_link_penalty"]), 4
+        ),
+        "shared_funder_penalty": round(
+            float(cluster_adjustment["shared_funder_penalty"]), 4
         ),
         "organic_buyer_flow_bonus": round(
             float(continuation_quality["organic_buyer_flow_bonus"]), 4

@@ -7,7 +7,7 @@ from typing import Any
 from trading.entry_sizing import compute_entry_confidence, compute_recommended_position_pct
 from trading.entry_snapshot import build_entry_snapshot
 from trading.regime_rules import decide_regime
-from utils.bundle_contract_fields import copy_bundle_contract_fields
+from utils.bundle_contract_fields import copy_bundle_contract_fields, copy_linkage_contract_fields
 from utils.clock import utc_now_iso
 from utils.short_horizon_contract_fields import copy_short_horizon_contract_fields
 
@@ -34,6 +34,7 @@ def decide_entry(token_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
         "symbol": token_ctx.get("symbol"),
         "name": token_ctx.get("name"),
         **copy_bundle_contract_fields(token_ctx),
+        **copy_linkage_contract_fields(token_ctx),
         **copy_short_horizon_contract_fields(token_ctx),
         "entry_decision": regime["regime_decision"],
         "entry_reason": regime["reason"],

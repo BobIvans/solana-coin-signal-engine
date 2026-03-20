@@ -175,6 +175,19 @@ See `docs/continuation_enricher.md` for the full contract, provenance semantics,
 =======
 
 <<<<<<< HEAD
+## PR-CL-3 linkage scorer
+
+PR-CL-3 adds a creator/dev/funder linkage layer that keeps the existing cluster heuristics but emits explicit evidence-backed linkage outputs for downstream scoring, regime checks, exits, replay, and future analyzer work.
+
+Key points:
+
+- linkage uses shared funders, shared cluster ids, shared launch groups, and direct creator/dev-linked participation hints;
+- outputs remain additive and fail-open when creator/dev/funder evidence is missing or malformed;
+- bundle-stage enrichment keeps linkage fields null-filled when evidence is unavailable so downstream contracts stay stable;
+- confidence and provenance are exposed through `linkage_confidence`, `linkage_reason_codes`, `linkage_metric_origin`, and `linkage_status`;
+- this PR does **not** claim identity certainty, and weak evidence stays low-confidence.
+=======
+<<<<<<< HEAD
 ## PR-CL-2 wallet graph clustering foundation
 
 PR-CL-2 adds a graph-backed wallet clustering layer while preserving the original heuristic fallback.
@@ -192,10 +205,15 @@ Produced artifacts:
 - `data/processed/wallet_graph.json`
 - `data/processed/wallet_clusters.json`
 - `data/processed/wallet_graph_events.jsonl`
+>>>>>>> origin/main
 
 Run smoke:
 
 ```bash
+<<<<<<< HEAD
+python scripts/linkage_smoke.py
+```
+=======
 python scripts/wallet_graph_smoke.py
 ```
 

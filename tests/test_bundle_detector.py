@@ -80,6 +80,8 @@ def test_detect_bundle_metrics_uses_first_window_fixture_transactions():
     assert result["num_unique_clusters_first_60s"] == 2
     assert result["bundle_wallet_clustering_score"] == 0.45
     assert result["creator_in_cluster_flag"] is None
+    assert result["shared_funder_link_score"] > 0
+    assert result["linkage_status"] in {"ok", "partial"}
 
 
 def test_detect_bundle_metrics_is_honest_when_anchor_missing():
