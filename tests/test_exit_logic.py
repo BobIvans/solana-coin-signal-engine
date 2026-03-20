@@ -44,6 +44,7 @@ def _position(entry_decision="SCALP"):
         "entry_time": "2026-03-15T12:30:41Z",
         "entry_price_usd": 1.0,
         "entry_snapshot": {
+            "buy_pressure": 0.81,
             "volume_velocity": 4.8,
             "x_validation_score": 71.4,
             "bundle_cluster_score": 0.66,
@@ -51,6 +52,9 @@ def _position(entry_decision="SCALP"):
             "bundle_count_first_60s": 2,
             "bundle_composition_dominant": "buy-only",
             "creator_in_cluster_flag": True,
+            "dev_sell_pressure_5m": 0.0,
+            "x_status": "ok",
+            "rug_flag": False,
         },
     }
 
@@ -70,11 +74,43 @@ def _current():
     }
 
 
-def test_failclosed_missing_current_state_forces_safe_exit():
-    out = decide_exit(_position(), {"price_usd_now": 1.0}, DummySettings())
+def test_missing_price_still_failcloses():
+    current = _current()
+    current.pop("price_usd_now")
+    out = decide_exit(_position(), current, DummySettings())
     assert out["exit_decision"] == "FULL_EXIT"
     assert out["exit_reason"] == "missing_current_state_failclosed"
     assert out["exit_status"] == "partial"
+    assert "missing_critical_price_usd_now" in out["exit_warnings"]
+
+
+def test_missing_degradable_fields_use_sticky_fallback_without_failclose():
+    current = _current()
+    current.pop("x_validation_score_now")
+    current.pop("bundle_cluster_score_now")
+    current.pop("dev_sell_pressure_now")
+    out = decide_exit(_position(), current, DummySettings())
+    assert out["exit_decision"] == "HOLD"
+    assert out["exit_reason"] == "hold_conditions_intact"
+    assert out["exit_status"] == "partial"
+    assert "degraded_current_state_fields" in out["exit_warnings"]
+    assert "fallback_x_validation_score_now" in out["exit_warnings"]
+    assert "fallback_bundle_cluster_score_now" in out["exit_warnings"]
+    assert "fallback_dev_sell_pressure_now" in out["exit_warnings"]
+    assert "missing_current_state_failclosed" not in out["exit_reason"]
+
+
+def test_unresolved_degradable_fields_mark_partial_without_failclose():
+    current = _current()
+    current.pop("x_status_now")
+    position = _position()
+    position["entry_snapshot"].pop("x_status")
+    out = decide_exit(position, current, DummySettings())
+    assert out["exit_decision"] == "HOLD"
+    assert out["exit_reason"] == "hold_conditions_intact"
+    assert out["exit_status"] == "partial"
+    assert "degraded_current_state_fields" in out["exit_warnings"]
+    assert "missing_degradable_x_status_now" in out["exit_warnings"]
 
 
 def test_valid_hold_stays_hold():

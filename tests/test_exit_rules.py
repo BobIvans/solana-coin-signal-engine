@@ -40,6 +40,20 @@ def test_hard_exit_rug_takes_precedence():
     assert out["exit_reason"] == "rug_flag_triggered"
 
 
+def test_hard_exit_dev_sell_uses_entry_fallback():
+    position = {"entry_snapshot": {"dev_sell_pressure_5m": 0.2}}
+    out = evaluate_hard_exit(position, {}, DummySettings())
+    assert out["exit_decision"] == "FULL_EXIT"
+    assert out["exit_reason"] == "dev_sell_detected"
+
+
+def test_hard_exit_rug_uses_entry_fallback():
+    position = {"entry_snapshot": {"rug_flag": True}}
+    out = evaluate_hard_exit(position, {}, DummySettings())
+    assert out["exit_decision"] == "FULL_EXIT"
+    assert out["exit_reason"] == "rug_flag_triggered"
+
+
 def test_scalp_recheck_momentum_decay_full_exit():
     position = {"entry_snapshot": {"volume_velocity": 5.0, "x_validation_score": 70}}
     current = {
