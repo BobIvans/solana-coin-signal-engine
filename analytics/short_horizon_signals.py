@@ -12,6 +12,14 @@ from datetime import datetime
 from math import log
 from typing import Any
 
+from analytics.continuation_participants import (
+    ContinuationActorClass,
+    build_continuation_participant_context,
+    classify_continuation_participant,
+    extract_tx_role_sides,
+    normalize_continuation_transfer_role,
+    participant_wallet,
+)
 from analytics.wallet_clustering import resolve_wallet_cluster_assignments
 
 _SHORT_WINDOW_60S = 60
@@ -98,13 +106,17 @@ def compute_net_unique_buyers_60s(*, pair_created_ts: int, txs: list[dict[str, A
     sellers: set[str] = set()
     saw_side_evidence = False
 
-    for tx in _window_successful_transactions(txs, pair_created_ts, _SHORT_WINDOW_60S):
+    window_txs = _window_successful_transactions(txs, pair_created_ts, _SHORT_WINDOW_60S)
+    context = build_continuation_participant_context(window_txs)
+    for tx in window_txs:
+        tx_role_sides = extract_tx_role_sides(tx)
         for transfer in _iter_token_transfers(tx):
             amount = _transfer_amount(transfer)
             if amount is None:
                 continue
-            buyer = _normalize_wallet(transfer.get("toUserAccount") or transfer.get("toUser") or transfer.get("buyer"))
-            seller = _normalize_wallet(transfer.get("fromUserAccount") or transfer.get("fromUser") or transfer.get("seller"))
+            roles = normalize_continuation_transfer_role(transfer, context=context, tx_role_sides=tx_role_sides)
+            buyer = roles["buyer"]
+            seller = roles["seller"]
             if buyer:
                 buyers.add(buyer)
                 saw_side_evidence = True
@@ -211,8 +223,17 @@ def compute_cluster_sell_concentration_120s(
     if not participants:
         return None
 
+    context = build_continuation_participant_context(window_txs, creator_wallet=creator_wallet)
+    organic_participants = [
+        participant
+        for participant in participants
+        if classify_continuation_participant(participant_wallet(participant), context=context) == ContinuationActorClass.ORGANIC
+    ]
+    if not organic_participants:
+        return None
+
     resolved = resolve_wallet_cluster_assignments(
-        participants,
+        organic_participants,
         creator_wallet=creator_wallet,
     )
     cluster_ids_by_wallet = resolved["cluster_ids_by_wallet"]
@@ -223,8 +244,10 @@ def compute_cluster_sell_concentration_120s(
     cluster_sell_volume: dict[str, float] = defaultdict(float)
     uncovered_volume = 0.0
     for tx in window_txs:
+        tx_role_sides = extract_tx_role_sides(tx)
         for transfer in _iter_token_transfers(tx):
-            seller = _normalize_wallet(transfer.get("fromUserAccount") or transfer.get("fromUser") or transfer.get("seller"))
+            roles = normalize_continuation_transfer_role(transfer, context=context, tx_role_sides=tx_role_sides)
+            seller = roles["seller"]
             amount = _transfer_amount(transfer)
             if not seller or amount is None:
                 continue
@@ -336,14 +359,18 @@ def compute_x_author_velocity_5m(snapshots: list[dict[str, Any]]) -> float | Non
 def compute_seller_reentry_ratio(*, pair_created_ts: int, txs: list[dict[str, Any]], window_sec: int = _SHORT_WINDOW_120S) -> float | None:
     lifecycle: dict[str, list[tuple[int, str]]] = defaultdict(list)
     saw_transfer = False
-    for tx in _window_successful_transactions(txs, pair_created_ts, window_sec):
+    window_txs = _window_successful_transactions(txs, pair_created_ts, window_sec)
+    context = build_continuation_participant_context(window_txs)
+    for tx in window_txs:
         ts = int(tx.get("_parsed_ts") or 0)
+        tx_role_sides = extract_tx_role_sides(tx)
         for transfer in _iter_token_transfers(tx):
             amount = _transfer_amount(transfer)
             if amount is None:
                 continue
-            buyer = _normalize_wallet(transfer.get("toUserAccount") or transfer.get("toUser") or transfer.get("buyer"))
-            seller = _normalize_wallet(transfer.get("fromUserAccount") or transfer.get("fromUser") or transfer.get("seller"))
+            roles = normalize_continuation_transfer_role(transfer, context=context, tx_role_sides=tx_role_sides)
+            buyer = roles["buyer"]
+            seller = roles["seller"]
             if buyer:
                 lifecycle[buyer].append((ts, "buy"))
                 saw_transfer = True

@@ -31,6 +31,8 @@ These are still calculated by helper logic in `analytics/short_horizon_signals.p
 
 Transfer-derived continuation metrics use **only explicitly successful transactions** (`success is True`). Failed, reverted, or unknown-success transactions are intentionally ignored so the layer does not fabricate organic buyer flow, cluster distribution, or seller re-entry from unconfirmed execution attempts.
 
+Transaction-side participant roles are also filtered through continuation participant hygiene. LP/pool/router/vault/system-like actors do not count as organic buyers or sellers by default, and wallets that appear on both sides of the same transaction are treated conservatively as ambiguous for that transaction instead of silently boosting continuation strength.
+
 ### X-derived
 
 Computed when usable X snapshot/card timestamps are present:
@@ -93,6 +95,7 @@ Instead it:
 - emits explicit warnings/status
 - lowers confidence when evidence is sparse
 - preserves downstream contract compatibility
+- prefers honest partial evidence over counting ambiguous or technical transfer actors as organic continuation
 
 ## Artifacts
 
