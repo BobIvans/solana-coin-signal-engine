@@ -17,7 +17,12 @@ if str(REPO_ROOT) not in sys.path:
 from src.replay.calibration_metrics import derive_outcome_metrics
 from utils.io import ensure_dir, read_json, write_json
 from utils.bundle_contract_fields import copy_bundle_contract_fields
-from utils.short_horizon_contract_fields import SHORT_HORIZON_SIGNAL_FIELDS, copy_short_horizon_contract_fields
+from utils.short_horizon_contract_fields import (
+    CONTINUATION_METADATA_FIELDS,
+    SHORT_HORIZON_SIGNAL_FIELDS,
+    copy_continuation_metadata_fields,
+    copy_short_horizon_contract_fields,
+)
 
 _DEFAULT_WALLET_FEATURES = {
     "smart_wallet_hits": 0,
@@ -68,6 +73,7 @@ _TRADE_FEATURE_MATRIX_FIELDS = [
     "holder_growth_5m_entry",
     "smart_wallet_hits_entry",
     *SHORT_HORIZON_SIGNAL_FIELDS,
+    *CONTINUATION_METADATA_FIELDS,
     "x_status",
     "x_validation_score_entry",
     "x_validation_delta_entry",
@@ -128,6 +134,12 @@ def _safe_short_horizon_fields(item: dict[str, Any]) -> dict[str, Any]:
     return copy_short_horizon_contract_fields(item, fallback={**entry_snapshot, **features})
 
 
+def _safe_continuation_metadata_fields(item: dict[str, Any]) -> dict[str, Any]:
+    entry_snapshot = item.get("entry_snapshot") if isinstance(item.get("entry_snapshot"), dict) else {}
+    features = item.get("features") if isinstance(item.get("features"), dict) else {}
+    return copy_continuation_metadata_fields(item, fallback={**entry_snapshot, **features})
+
+
 def _safe_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
@@ -172,6 +184,7 @@ def build_trade_feature_row(
     entry_snapshot = _safe_dict(item.get("entry_snapshot"))
     wallet_features = _safe_wallet_features(item)
     short_horizon_fields = _safe_short_horizon_fields(item)
+    continuation_metadata = _safe_continuation_metadata_fields(item)
     wallet_adjustment = _normalize_wallet_adjustment(
         _first_present(
             [_safe_dict(trade.get("wallet_adjustment")), _safe_dict(signal.get("wallet_adjustment")), _safe_dict(item.get("wallet_adjustment"))],
@@ -194,6 +207,7 @@ def build_trade_feature_row(
         entry_snapshot,
         wallet_features,
         short_horizon_fields,
+        continuation_metadata,
     ]
     calibration_metrics = derive_outcome_metrics(item, signal, trade, entry_snapshot, features)
 
@@ -243,6 +257,15 @@ def build_trade_feature_row(
             "x_author_velocity_5m": _first_present(sources, "x_author_velocity_5m"),
             "seller_reentry_ratio": _first_present(sources, "seller_reentry_ratio"),
             "liquidity_shock_recovery_sec": _first_present(sources, "liquidity_shock_recovery_sec"),
+            "continuation_status": _first_present(sources, "continuation_status"),
+            "continuation_warning": _first_present(sources, "continuation_warning"),
+            "continuation_confidence": _first_present(sources, "continuation_confidence"),
+            "continuation_metric_origin": _first_present(sources, "continuation_metric_origin"),
+            "continuation_coverage_ratio": _first_present(sources, "continuation_coverage_ratio"),
+            "continuation_inputs_status": _first_present(sources, "continuation_inputs_status"),
+            "continuation_warnings": _first_present(sources, "continuation_warnings"),
+            "continuation_available_evidence": _first_present(sources, "continuation_available_evidence"),
+            "continuation_missing_evidence": _first_present(sources, "continuation_missing_evidence"),
             "x_status": _first_present(sources, "x_status"),
             "x_validation_score_entry": _first_present(sources, "x_validation_score_entry", "x_validation_score"),
             "x_validation_delta_entry": _first_present(sources, "x_validation_delta_entry", "x_validation_delta"),
@@ -358,6 +381,7 @@ def main() -> int:
         pair_address = str(item.get("pair_address") or f"pair_{idx}")
         wallet_features = _safe_wallet_features(item)
         short_horizon_fields = _safe_short_horizon_fields(item)
+        continuation_metadata = _safe_continuation_metadata_fields(item)
         ts = args.start_ts or args.end_ts or _DEFAULT_TS
         signal = {
             "run_id": args.run_id,
@@ -372,6 +396,7 @@ def main() -> int:
             "wallet_weighting": args.wallet_weighting,
             **_safe_bundle_fields(item),
             **short_horizon_fields,
+            **continuation_metadata,
         }
         trade = {
             "run_id": args.run_id,
@@ -384,6 +409,7 @@ def main() -> int:
             "wallet_features": wallet_features,
             **_safe_bundle_fields(item),
             **short_horizon_fields,
+            **continuation_metadata,
         }
         universe.append({"run_id": args.run_id, "token_address": token_address, "pair_address": pair_address})
         backfill.append({"run_id": args.run_id, "token_address": token_address, "status": "synthetic"})

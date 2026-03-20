@@ -1,4 +1,9 @@
-"""Deterministic short-horizon continuation-quality enrichment helpers."""
+"""Deterministic short-horizon continuation metric helpers.
+
+This module intentionally stays focused on pure feature computation.
+Continuation orchestration, provenance, and fallback handling live in
+`analytics.continuation_enricher`.
+"""
 
 from __future__ import annotations
 

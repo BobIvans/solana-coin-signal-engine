@@ -9,17 +9,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from analytics.continuation_enricher import compute_continuation_metrics
 from analytics.dev_activity import compute_dev_sell_pressure_5m, infer_dev_wallet
 from analytics.holder_metrics import compute_holder_metrics
 from analytics.launch_path import estimate_launch_path
-from analytics.short_horizon_signals import (
-    _parse_ts,
-    compute_cluster_sell_concentration_120s,
-    compute_liquidity_refill_ratio_120s,
-    compute_liquidity_shock_recovery_sec,
-    compute_net_unique_buyers_60s,
-    compute_seller_reentry_ratio,
-)
+from analytics.short_horizon_signals import _parse_ts
 from analytics.smart_wallet_hits import compute_smart_wallet_hits
 from analytics.wallet_registry_bias import compute_wallet_registry_bias
 from collectors.helius_client import HeliusClient
@@ -32,13 +26,11 @@ from collectors.wallet_registry_loader import (
 from config.settings import load_settings
 from utils.bundle_contract_fields import copy_bundle_contract_fields
 from utils.clock import utc_now_iso
-from utils.short_horizon_contract_fields import copy_short_horizon_contract_fields
 from utils.io import append_jsonl, read_json, write_json
 
 CONTRACT_VERSION = "onchain_enrichment_v1"
 DEFAULT_VALIDATED_REGISTRY_PATH = Path("data/registry/smart_wallets.validated.json")
 DEFAULT_HOT_REGISTRY_PATH = Path("data/registry/hot_wallets.validated.json")
-
 
 
 def _validate_record(record: dict) -> None:
@@ -78,12 +70,18 @@ def _validate_record(record: dict) -> None:
         "x_author_velocity_5m",
         "seller_reentry_ratio",
         "liquidity_shock_recovery_sec",
+        "continuation_status",
+        "continuation_warning",
+        "continuation_confidence",
+        "continuation_metric_origin",
+        "continuation_coverage_ratio",
+        "continuation_inputs_status",
+        "continuation_warnings",
         "contract_version",
     }
     missing = sorted(required - set(record.keys()))
     if missing:
         raise ValueError(f"enriched schema violation: missing keys {missing}")
-
 
 
 def _load_tokens(shortlist_path: Path, x_validated_path: Path) -> list[dict]:
@@ -105,11 +103,9 @@ def _load_tokens(shortlist_path: Path, x_validated_path: Path) -> list[dict]:
     return merged
 
 
-
 def _extract_decimals_from_asset(asset: dict) -> int:
     token_info = asset.get("token_info", {}) if isinstance(asset.get("token_info"), dict) else {}
     return int(token_info.get("decimals") or asset.get("decimals") or 0)
-
 
 
 def _default_registry_paths(
@@ -120,7 +116,6 @@ def _default_registry_paths(
         validated_registry_path or DEFAULT_VALIDATED_REGISTRY_PATH,
         hot_registry_path or DEFAULT_HOT_REGISTRY_PATH,
     )
-
 
 
 def run(
@@ -205,9 +200,16 @@ def run(
             warnings.append("helius disabled: tx-derived metrics may be incomplete")
 
         token_ctx = {
+            "token_address": token_address,
+            "pair_address": pair_address,
             "pair_created_at": token.get("pair_created_at"),
             "creator_wallet": token.get("creator_wallet"),
             "mint_authority": token.get("mint_authority"),
+            "symbol": token.get("symbol"),
+            "name": token.get("name"),
+            "x_status": token.get("x_status"),
+            "x_snapshots": token.get("x_snapshots") or token.get("x_snapshot_payloads") or token.get("x_snapshot_history"),
+            "cards": token.get("cards"),
         }
         dev_wallet = infer_dev_wallet(token_ctx, txs)
         dev_metrics = compute_dev_sell_pressure_5m(dev_wallet.get("dev_wallet_est", ""), token_ctx, txs)
@@ -236,17 +238,17 @@ def run(
             },
         )
         wallet_bias = compute_wallet_registry_bias(smart.get("smart_wallet_hit_wallets") or [], wallet_lookup)
-        short_horizon = {
-            "net_unique_buyers_60s": compute_net_unique_buyers_60s(pair_created_ts=_parse_ts(token.get("pair_created_at")), txs=txs),
-            "liquidity_refill_ratio_120s": compute_liquidity_refill_ratio_120s(pair_created_ts=_parse_ts(token.get("pair_created_at")), txs=txs),
-            "cluster_sell_concentration_120s": compute_cluster_sell_concentration_120s(
-                pair_created_ts=_parse_ts(token.get("pair_created_at")),
-                txs=txs,
-                creator_wallet=str(token.get("creator_wallet") or "") or None,
-            ),
-            "seller_reentry_ratio": compute_seller_reentry_ratio(pair_created_ts=_parse_ts(token.get("pair_created_at")), txs=txs),
-            "liquidity_shock_recovery_sec": compute_liquidity_shock_recovery_sec(pair_created_ts=_parse_ts(token.get("pair_created_at")), txs=txs),
-        }
+        continuation = compute_continuation_metrics(
+            token_ctx=token_ctx,
+            txs=txs,
+            wallet_lookup=wallet_lookup,
+            hit_wallets=smart.get("smart_wallet_hit_wallets") or [],
+            pair_created_ts=_parse_ts(token.get("pair_created_at")),
+            creator_wallet=str(token.get("creator_wallet") or "") or None,
+        )
+        for event in continuation.pop("continuation_events", []):
+            append_jsonl(events_path, event)
+
         append_jsonl(
             events_path,
             {
@@ -266,6 +268,11 @@ def run(
             warnings.append("launch path unknown")
         if settings.ALLOW_LAUNCH_PATH_HEURISTICS_ONLY:
             status = "partial" if status == "ok" else status
+        if continuation["continuation_status"] in {"partial", "missing"}:
+            status = "partial" if status == "ok" else status
+            if continuation["continuation_warning"]:
+                warnings.append(continuation["continuation_warning"])
+        warnings.extend(continuation.get("continuation_warnings") or [])
 
         enriched = {
             "token_address": token_address,
@@ -279,9 +286,8 @@ def run(
             **dev_metrics,
             **launch,
             **smart,
-            **copy_short_horizon_contract_fields(token),
             **wallet_bias,
-            **short_horizon,
+            **continuation,
             "enrichment_status": status,
             "enrichment_warnings": sorted(set(warnings)),
             "enriched_at": utc_now_iso(),
@@ -303,7 +309,6 @@ def run(
     write_json(settings.PROCESSED_DATA_DIR / "enriched_tokens.json", payload)
     write_json(settings.PROCESSED_DATA_DIR / "enriched_tokens.smoke.json", payload)
     return payload
-
 
 
 def main() -> int:

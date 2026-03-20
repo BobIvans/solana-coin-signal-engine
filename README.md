@@ -120,3 +120,54 @@ Run smoke:
 ```bash
 python scripts/post_run_analyzer_smoke.py --base-dir data/smoke/post_run
 ```
+
+## PR-SIG-3 continuation enrichment
+
+PR-SIG-3 adds an end-to-end continuation enrichment layer that centralizes short-horizon continuation evidence production and keeps missing-data handling explicit.
+
+### Continuation outputs
+
+Transaction-derived:
+
+- `net_unique_buyers_60s`
+- `liquidity_refill_ratio_120s`
+- `cluster_sell_concentration_120s`
+- `seller_reentry_ratio`
+- `liquidity_shock_recovery_sec`
+
+X-derived:
+
+- `x_author_velocity_5m`
+
+Wallet-registry-derived:
+
+- `smart_wallet_dispersion_score`
+
+Additive provenance/status fields:
+
+- `continuation_status`
+- `continuation_warning`
+- `continuation_confidence`
+- `continuation_metric_origin`
+- `continuation_coverage_ratio`
+- `continuation_inputs_status`
+
+### Missing-evidence policy
+
+- Missing evidence is left missing; it is not silently turned into bullish or bearish continuation.
+- Partial evidence is marked `partial` rather than treated as complete.
+- The scorer can still consume continuation fields, but low-confidence continuation evidence is intentionally damped.
+
+### Continuation smoke
+
+```bash
+python scripts/continuation_smoke.py
+```
+
+This writes:
+
+- `data/smoke/continuation_enrichment.smoke.json`
+- `data/smoke/continuation_status.json`
+- `data/smoke/continuation_events.jsonl`
+
+See `docs/continuation_enricher.md` for implementation details.
