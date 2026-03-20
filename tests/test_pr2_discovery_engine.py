@@ -7,7 +7,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from collectors.discovery_engine import build_shortlist, filter_pair, run_discovery_once
-from utils.bundle_contract_fields import BUNDLE_CONTRACT_FIELDS
+from utils.bundle_contract_fields import BUNDLE_CONTRACT_FIELDS, CLUSTER_PROVENANCE_FIELDS
 
 
 def _sample_pair(**overrides):
@@ -83,6 +83,38 @@ def test_shortlist_sorted_by_fast_prescore_desc():
     shortlist = build_shortlist(candidates, top_k=2)
 
     assert [item["pair_address"] for item in shortlist] == ["1", "3"]
+
+
+def test_build_shortlist_preserves_cluster_provenance_fields():
+    candidates = [
+        {
+            "pair_address": "pair_1",
+            "token_address": "tok_1",
+            "symbol": "TOK",
+            "name": "Token",
+            "fast_prescore": 88,
+            "volume_m5": 100,
+            "cluster_metric_origin": "graph_evidence",
+            "cluster_evidence_status": "graph_backed",
+            "cluster_evidence_source": "inline_graph_builder",
+            "cluster_evidence_confidence": 0.91,
+            "graph_cluster_id_count": 3,
+            "graph_cluster_coverage_ratio": 1.0,
+            "creator_cluster_id": "cluster_a",
+            "dominant_cluster_id": "cluster_b",
+            **{field: None for field in BUNDLE_CONTRACT_FIELDS},
+        }
+    ]
+
+    shortlist = build_shortlist(candidates, top_k=1)
+
+    assert len(shortlist) == 1
+    row = shortlist[0]
+    for field in CLUSTER_PROVENANCE_FIELDS:
+        assert field in row
+    assert row["cluster_metric_origin"] == "graph_evidence"
+    assert row["cluster_evidence_status"] == "graph_backed"
+    assert row["dominant_cluster_id"] == "cluster_b"
 
 
 def test_discovery_smoke_with_bundle_enrichment_disabled(monkeypatch, discovery_tmp):
