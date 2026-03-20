@@ -35,6 +35,9 @@ def test_settings_load_and_validate(monkeypatch):
     assert settings.X_MAX_TOKENS_PER_CYCLE > 0
     assert settings.X_MAX_CONCURRENCY > 0
     assert settings.X_CACHE_TTL_SEC > 0
+    assert settings.DISCOVERY_MAX_AGE_SEC > 0
+    assert settings.DISCOVERY_MIN_LIQUIDITY_USD > 0
+    assert settings.DISCOVERY_MIN_TXNS_M5 > 0
     assert settings.UNIFIED_SCORING_ENABLED is True
     assert settings.UNIFIED_SCORING_FAILOPEN is False
     assert settings.UNIFIED_SCORING_REQUIRE_X is False

@@ -21,7 +21,7 @@ from utils.io import append_jsonl, ensure_dir, write_json
 from utils.logger import log_warning
 
 
-def filter_pair(pair: dict[str, Any], now_ts: int) -> tuple[bool, str]:
+def filter_pair(pair: dict[str, Any], now_ts: int, settings: Any) -> tuple[bool, str]:
     if pair.get("chain") != "solana":
         return False, "non_solana_chain"
 
@@ -30,17 +30,17 @@ def filter_pair(pair: dict[str, Any], now_ts: int) -> tuple[bool, str]:
         return False, "missing_pair_created_at"
 
     age_sec = now_ts - created_ts
-    if age_sec >= 600:
+    if age_sec >= int(settings.DISCOVERY_MAX_AGE_SEC):
         return False, "age_too_high"
 
-    if float(pair.get("liquidity_usd", 0.0) or 0.0) < 20_000:
+    if float(pair.get("liquidity_usd", 0.0) or 0.0) < float(settings.DISCOVERY_MIN_LIQUIDITY_USD):
         return False, "low_liquidity"
 
     if float(pair.get("fdv", 0.0) or 0.0) <= 0 and float(pair.get("market_cap", 0.0) or 0.0) <= 0:
         return False, "missing_fdv_and_market_cap"
 
     txns_m5_total = int(pair.get("txns_m5_buys", 0) or 0) + int(pair.get("txns_m5_sells", 0) or 0)
-    if txns_m5_total < 20:
+    if txns_m5_total < int(settings.DISCOVERY_MIN_TXNS_M5):
         return False, "low_txns_m5"
 
     if bool(pair.get("paid_order_flag", False)):
@@ -117,7 +117,7 @@ def run_discovery_once() -> dict[str, Any]:
     bundle_warnings: list[str] = []
     for raw_pair in raw_pairs:
         normalized = normalize_pair(raw_pair)
-        accepted, reason = filter_pair(normalized, now_ts)
+        accepted, reason = filter_pair(normalized, now_ts, settings)
         if not accepted:
             continue
 

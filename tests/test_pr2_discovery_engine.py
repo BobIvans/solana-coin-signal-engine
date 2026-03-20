@@ -7,6 +7,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from collectors.discovery_engine import build_shortlist, filter_pair, run_discovery_once
+from config.settings import load_settings
 from utils.bundle_contract_fields import BUNDLE_CONTRACT_FIELDS, CLUSTER_PROVENANCE_FIELDS
 
 
@@ -55,20 +56,32 @@ def discovery_tmp(monkeypatch, tmp_path):
     return tmp_path
 
 
-def test_filter_pair_accepts_fresh_liquid_pair():
-    accepted, reason = filter_pair(_sample_pair(), now_ts=1_000)
+def test_filter_pair_accepts_fresh_liquid_pair(monkeypatch):
+    monkeypatch.setenv("DISCOVERY_MAX_AGE_SEC", "600")
+    monkeypatch.setenv("DISCOVERY_MIN_LIQUIDITY_USD", "20000")
+    monkeypatch.setenv("DISCOVERY_MIN_TXNS_M5", "20")
+    settings = load_settings()
+    accepted, reason = filter_pair(_sample_pair(), now_ts=1_000, settings=settings)
     assert accepted is True
     assert reason == "ok"
 
 
-def test_filter_pair_rejects_old_pair():
-    accepted, reason = filter_pair(_sample_pair(pair_created_at_ts=200), now_ts=1_000)
+def test_filter_pair_rejects_old_pair(monkeypatch):
+    monkeypatch.setenv("DISCOVERY_MAX_AGE_SEC", "600")
+    monkeypatch.setenv("DISCOVERY_MIN_LIQUIDITY_USD", "20000")
+    monkeypatch.setenv("DISCOVERY_MIN_TXNS_M5", "20")
+    settings = load_settings()
+    accepted, reason = filter_pair(_sample_pair(pair_created_at_ts=200), now_ts=1_000, settings=settings)
     assert accepted is False
     assert reason == "age_too_high"
 
 
-def test_filter_pair_rejects_paid_order():
-    accepted, reason = filter_pair(_sample_pair(paid_order_flag=True), now_ts=1_000)
+def test_filter_pair_rejects_paid_order(monkeypatch):
+    monkeypatch.setenv("DISCOVERY_MAX_AGE_SEC", "600")
+    monkeypatch.setenv("DISCOVERY_MIN_LIQUIDITY_USD", "20000")
+    monkeypatch.setenv("DISCOVERY_MIN_TXNS_M5", "20")
+    settings = load_settings()
+    accepted, reason = filter_pair(_sample_pair(paid_order_flag=True), now_ts=1_000, settings=settings)
     assert accepted is False
     assert reason == "paid_order"
 
@@ -253,3 +266,35 @@ def test_discovery_bundle_enrichment_failure_keeps_candidate(monkeypatch, discov
     for field in BUNDLE_CONTRACT_FIELDS[:5]:
         assert candidate[field] is None
         assert shortlist_item[field] is None
+
+
+def test_filter_pair_respects_permissive_settings_over_old_hardcodes(monkeypatch):
+    monkeypatch.setenv("DISCOVERY_MAX_AGE_SEC", "900")
+    monkeypatch.setenv("DISCOVERY_MIN_LIQUIDITY_USD", "15000")
+    monkeypatch.setenv("DISCOVERY_MIN_TXNS_M5", "10")
+    settings = load_settings()
+
+    accepted, reason = filter_pair(
+        _sample_pair(pair_created_at_ts=350, liquidity_usd=18_000, txns_m5_buys=6, txns_m5_sells=6),
+        now_ts=1_000,
+        settings=settings,
+    )
+
+    assert accepted is True
+    assert reason == "ok"
+
+
+def test_filter_pair_respects_stricter_settings(monkeypatch):
+    monkeypatch.setenv("DISCOVERY_MAX_AGE_SEC", "300")
+    monkeypatch.setenv("DISCOVERY_MIN_LIQUIDITY_USD", "50000")
+    monkeypatch.setenv("DISCOVERY_MIN_TXNS_M5", "40")
+    settings = load_settings()
+
+    accepted, reason = filter_pair(
+        _sample_pair(pair_created_at_ts=750, liquidity_usd=25_000, txns_m5_buys=25, txns_m5_sells=20),
+        now_ts=1_000,
+        settings=settings,
+    )
+
+    assert accepted is False
+    assert reason == "low_liquidity"

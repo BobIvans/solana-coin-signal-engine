@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import random
 import sys
 import time
 from pathlib import Path
@@ -13,7 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.promotion.cooldowns import is_x_cooldown_active, register_x_error
+from src.promotion.cooldowns import is_x_cooldown_active
 from src.promotion.counters import roll_daily_state_if_needed, update_trade_counters
 from src.promotion.guards import compute_position_sizing, evaluate_entry_guards, should_block_entry
 from src.promotion.io import append_jsonl, write_json
@@ -229,7 +228,6 @@ def main() -> int:
     print(f"[promotion] state_restored resumed={str(args.resume).lower()} open_positions={len(state.get('open_positions', []))}")
     print(f"[promotion] loop_started interval_sec={cfg.get('runtime', {}).get('loop_interval_sec', 30)}")
 
-    rng = random.Random(cfg.get("runtime", {}).get("seed", 42))
     total_opened = 0
     total_rejected = 0
     total_invalid = 0
@@ -243,11 +241,6 @@ def main() -> int:
         opened = 0
         rejected = 0
 
-        if rng.random() < 0.05:
-            maybe_event = register_x_error("captcha", state, cfg)
-            if maybe_event:
-                append_jsonl(event_log, {"ts": utc_now_iso(), **maybe_event})
-                print("[promotion] cooldown_started type=captcha duration_min=30")
 
         for signal in signals:
             append_jsonl(
@@ -558,7 +551,7 @@ def main() -> int:
         if not args.dry_run:
             time.sleep(cfg.get("runtime", {}).get("loop_interval_sec", 30))
 
-    write_json(run_dir / "positions_snapshot.json", {"open_positions": state.get("open_positions", [])})
+    write_json(run_dir / "positions.json", {"open_positions": state.get("open_positions", [])})
     summary = {
         "run_id": args.run_id,
         "mode": args.mode,
