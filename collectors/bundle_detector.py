@@ -278,6 +278,8 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
             clustering_participants,
             creator_wallet=creator_wallet,
             participant_wallets=participant_wallets,
+            token_address=str(pair.get("token_address") or "") or None,
+            pair_address=str(pair.get("pair_address") or "") or None,
             settings=settings,
             persist_artifacts=True,
             artifact_scope=_clustering_artifact_scope(pair),
