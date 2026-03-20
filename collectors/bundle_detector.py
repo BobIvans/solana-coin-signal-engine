@@ -7,6 +7,12 @@ from typing import Any
 
 from analytics.wallet_clustering import compute_wallet_clustering_metrics
 from collectors.helius_client import HeliusClient
+from collectors.bundle_evidence_collector import (
+    HEURISTIC_FALLBACK_ORIGIN,
+    MISSING_BUNDLE_ORIGIN,
+    collect_bundle_evidence_for_pair,
+    compute_bundle_metrics_from_evidence,
+)
 from utils.bundle_contract_fields import BUNDLE_CONTRACT_FIELDS
 from utils.logger import log_warning
 from utils.rate_limit import acquire
@@ -28,11 +34,20 @@ def safe_null_bundle_metrics(
     *,
     status: str,
     warning: str | None = None,
+    evidence_status: str | None = None,
+    evidence_source: str | None = None,
+    evidence_confidence: float | None = None,
+    metric_origin: str = MISSING_BUNDLE_ORIGIN,
 ) -> dict[str, Any]:
     payload = {
         **_null_bundle_metrics(),
         "bundle_enrichment_status": status,
         "bundle_enrichment_warning": warning,
+        "bundle_evidence_status": evidence_status or status,
+        "bundle_evidence_source": evidence_source,
+        "bundle_evidence_warning": warning,
+        "bundle_evidence_confidence": evidence_confidence,
+        "bundle_metric_origin": metric_origin,
     }
     for field in BUNDLE_CONTRACT_FIELDS:
         payload.setdefault(field, None)
@@ -169,27 +184,53 @@ def _load_bundle_transactions(pair: dict[str, Any], settings: Any) -> tuple[list
 
 
 def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: Any) -> dict[str, Any]:
-    """Infer first-window bundle metrics from available transaction data.
+    """Infer first-window bundle metrics with evidence-first fallback semantics.
 
-    This MVP uses a conservative heuristic: transactions in the first configured
-    window are grouped by slot when present, otherwise by exact second. Only
-    groups with at least 2 transactions are treated as inferred bundles.
+    Order:
+    1. Try real bundle evidence collector.
+    2. If real evidence is sufficient, return real_evidence metrics.
+    3. If evidence is sparse/partial, fall back to heuristic tx grouping.
+    4. If neither path is usable, return missing.
     """
 
     if not getattr(settings, "BUNDLE_ENRICHMENT_ENABLED", True):
-        return safe_null_bundle_metrics(status="disabled", warning="bundle enrichment disabled")
+        return safe_null_bundle_metrics(
+            status="disabled",
+            warning="bundle enrichment disabled",
+            metric_origin=MISSING_BUNDLE_ORIGIN,
+        )
 
     anchor_ts = _extract_anchor_ts(pair)
     if anchor_ts is None:
-        return safe_null_bundle_metrics(status="unavailable", warning="missing liquidity/pair creation anchor")
+        return safe_null_bundle_metrics(
+            status="unavailable",
+            warning="missing liquidity/pair creation anchor",
+            metric_origin=MISSING_BUNDLE_ORIGIN,
+        )
 
     if now_ts < anchor_ts:
-        return safe_null_bundle_metrics(status="unavailable", warning="anchor timestamp is in the future")
+        return safe_null_bundle_metrics(
+            status="unavailable",
+            warning="anchor timestamp is in the future",
+            metric_origin=MISSING_BUNDLE_ORIGIN,
+        )
 
     try:
+        normalized_evidence = collect_bundle_evidence_for_pair(pair, now_ts, settings)
+        evidence_metrics = compute_bundle_metrics_from_evidence(normalized_evidence, pair=pair)
+
+        if evidence_metrics.get("bundle_metric_origin") == "real_evidence":
+            return evidence_metrics
+
         txs, source_warning = _load_bundle_transactions(pair, settings)
         if source_warning and not txs:
-            return safe_null_bundle_metrics(status="unavailable", warning=source_warning)
+            return {
+                **evidence_metrics,
+                "bundle_metric_origin": MISSING_BUNDLE_ORIGIN,
+                "bundle_enrichment_status": evidence_metrics.get("bundle_enrichment_status") or "unavailable",
+                "bundle_enrichment_warning": evidence_metrics.get("bundle_enrichment_warning") or source_warning,
+                "bundle_evidence_warning": evidence_metrics.get("bundle_evidence_warning") or source_warning,
+            }
 
         window_sec = max(int(getattr(settings, "BUNDLE_ENRICHMENT_WINDOW_SEC", 60) or 60), 1)
         window_end = anchor_ts + window_sec
@@ -206,29 +247,31 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
                     "wallets": _extract_wallets(tx),
                     "value": _extract_value(tx),
                     "success": _extract_success(tx),
-                    "funder": str(tx.get("funder") or tx.get("funding_source") or tx.get("funded_by") or "").strip() or None,
+                    "funder": str(tx.get("funder") or tx.get("funding_source") or tx.get("funded_by") or "").strip()
+                    or None,
                 }
             )
 
         if not first_window:
-            return safe_null_bundle_metrics(status="ok", warning="no first-window transactions found")
+            return {
+                **evidence_metrics,
+                "bundle_metric_origin": MISSING_BUNDLE_ORIGIN,
+                "bundle_enrichment_warning": (
+                    evidence_metrics.get("bundle_enrichment_warning")
+                    or "no first-window transactions found"
+                ),
+                "bundle_evidence_warning": (
+                    evidence_metrics.get("bundle_evidence_warning")
+                    or "no first-window transactions found"
+                ),
+            }
 
         grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for tx in first_window:
             grouped[tx["group_key"]].append(tx)
 
         inferred_bundles = [group for group in grouped.values() if len(group) >= 2]
-        if not inferred_bundles:
-            return {
-                **safe_null_bundle_metrics(status="ok", warning="no inferred bundles detected in first window"),
-                "bundle_count_first_60s": 0,
-            }
 
-        bundle_count = len(inferred_bundles)
-        wallet_counts: list[int] = []
-        bundle_values: list[float] = []
-        bundle_offsets_min: list[float] = []
-        success_values: list[float] = []
         clustering_participants, participant_wallets, creator_wallet = _extract_clustering_participants(pair, first_window)
         clustering_metrics = compute_wallet_clustering_metrics(
             clustering_participants,
@@ -238,6 +281,25 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
             persist_artifacts=True,
             artifact_scope=_clustering_artifact_scope(pair),
         )
+
+        if not inferred_bundles:
+            return {
+                **evidence_metrics,
+                **clustering_metrics,
+                "bundle_count_first_60s": 0,
+                "bundle_metric_origin": HEURISTIC_FALLBACK_ORIGIN,
+                "bundle_enrichment_status": "ok",
+                "bundle_enrichment_warning": (
+                    evidence_metrics.get("bundle_enrichment_warning")
+                    or "no inferred bundles detected in first window"
+                ),
+            }
+
+        bundle_count = len(inferred_bundles)
+        wallet_counts: list[int] = []
+        bundle_values: list[float] = []
+        bundle_offsets_min: list[float] = []
+        success_values: list[float] = []
 
         for bundle in inferred_bundles:
             wallets = {wallet for tx in bundle for wallet in tx["wallets"]}
@@ -255,14 +317,16 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
                 success_values.extend(1.0 if flag else 0.0 for flag in successes)
 
         return {
-            **safe_null_bundle_metrics(status="ok"),
+            **evidence_metrics,
+            **clustering_metrics,
             "bundle_count_first_60s": bundle_count,
             "bundle_size_value": round(sum(bundle_values), 6) if bundle_values else None,
             "unique_wallets_per_bundle_avg": round(sum(wallet_counts) / len(wallet_counts), 6) if wallet_counts else None,
             "bundle_timing_from_liquidity_add_min": round(min(bundle_offsets_min), 6) if bundle_offsets_min else None,
             "bundle_success_rate": round(sum(success_values) / len(success_values), 6) if success_values else None,
-            "bundle_enrichment_warning": source_warning,
-            **clustering_metrics,
+            "bundle_metric_origin": HEURISTIC_FALLBACK_ORIGIN,
+            "bundle_enrichment_status": "ok",
+            "bundle_enrichment_warning": source_warning or evidence_metrics.get("bundle_enrichment_warning"),
         }
     except Exception as exc:  # pragma: no cover - defensive fail-open
         log_warning(
@@ -271,7 +335,11 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
             pair_address=str(pair.get("pair_address") or ""),
             error=str(exc),
         )
-        return safe_null_bundle_metrics(status="failed", warning=str(exc))
+        return safe_null_bundle_metrics(
+            status="failed",
+            warning=str(exc),
+            metric_origin=MISSING_BUNDLE_ORIGIN,
+        )
 
 
 

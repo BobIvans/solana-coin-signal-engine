@@ -191,7 +191,7 @@ def load_replay_inputs(
     token_inputs: dict[str, dict[str, Any]] = {}
     warnings: list[str] = []
 
-    def add_row(bucket: str, row: dict[str, Any]) -> None:
+    def add_row(bucket: str, row: dict[str, Any], *, create_missing: bool = True) -> None:
         token_address = _canonical_token(row)
         if not token_address:
             malformed_key = f"malformed::{bucket}::{len(token_inputs)}"
@@ -209,6 +209,8 @@ def load_replay_inputs(
             token_inputs[malformed_key]["malformed_rows"] += 1
             token_inputs[malformed_key]["warnings"].append(f"missing_token_address:{bucket}")
             warnings.append(f"missing_token_address:{bucket}")
+            return
+        if not create_missing and token_address not in token_inputs:
             return
         record = token_inputs.setdefault(
             token_address,
@@ -229,12 +231,17 @@ def load_replay_inputs(
             record["pair_address"] = _canonical_pair(row)
         record[bucket].append(row)
 
-    for bucket in ("scored_rows", "entry_candidates", "signals", "trades", "positions"):
+    for bucket in ("entry_candidates", "signals", "trades", "positions"):
         path = loaded_files[bucket]
         if not path:
             continue
         for row in _load_file(path):
-            add_row(bucket, row)
+            add_row(bucket, row, create_missing=True)
+
+    path = loaded_files["scored_rows"]
+    if path:
+        for row in _load_file(path):
+            add_row("scored_rows", row, create_missing=False)
 
     for token_address, rows in load_replay_price_paths(artifact_dir=artifact_dir, loaded_files=loaded_files).items():
         record = token_inputs.setdefault(
@@ -256,21 +263,11 @@ def load_replay_inputs(
 
     universe = load_replay_universe(artifact_dir=artifact_dir, loaded_files=loaded_files)
     for row in universe:
-        token_inputs.setdefault(
-            row["token_address"],
-            {
-                "token_address": row["token_address"],
-                "pair_address": row.get("pair_address"),
-                "warnings": [],
-                "malformed_rows": 0,
-                "scored_rows": [],
-                "entry_candidates": [],
-                "signals": [],
-                "trades": [],
-                "positions": [],
-                "price_paths": [],
-            },
-        )
+        token_address = row["token_address"]
+        if token_address not in token_inputs:
+            continue
+        if token_inputs[token_address].get("pair_address") is None:
+            token_inputs[token_address]["pair_address"] = row.get("pair_address")
 
     payload = {
         "artifact_dir": str(artifact_dir),
