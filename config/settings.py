@@ -1,5 +1,3 @@
-"""Centralized environment settings for bootstrap infrastructure."""
-
 from __future__ import annotations
 
 import os
@@ -55,6 +53,10 @@ class Settings:
 
     BUNDLE_ENRICHMENT_ENABLED: bool
     BUNDLE_ENRICHMENT_WINDOW_SEC: int
+    BUNDLE_EVIDENCE_ENABLED: bool
+    BUNDLE_EVIDENCE_MAX_RECORDS: int
+    BUNDLE_EVIDENCE_WINDOW_SEC: int
+    BUNDLE_EVIDENCE_SOURCE_ORDER: str
 
     # Wallet graph clustering foundation (PR-CL-2)
     WALLET_GRAPH_ENABLED: bool
@@ -390,6 +392,7 @@ def load_settings() -> Settings:
             _get_env(merged, "BUNDLE_ENRICHMENT_WINDOW_SEC", "60"),
             key="BUNDLE_ENRICHMENT_WINDOW_SEC",
         ),
+<<<<<<< HEAD
         # Wallet graph clustering foundation (PR-CL-2)
         WALLET_GRAPH_ENABLED=_as_bool(
             _get_env(merged, "WALLET_GRAPH_ENABLED", "true"),
@@ -415,6 +418,22 @@ def load_settings() -> Settings:
         ),
         WALLET_GRAPH_EVENTS_PATH=_as_abs_path(
             _get_env(merged, "WALLET_GRAPH_EVENTS_PATH", "./data/processed/wallet_graph_events.jsonl")
+=======
+        BUNDLE_EVIDENCE_ENABLED=_as_bool(
+            _get_env(merged, "BUNDLE_EVIDENCE_ENABLED", "true"),
+            key="BUNDLE_EVIDENCE_ENABLED",
+        ),
+        BUNDLE_EVIDENCE_MAX_RECORDS=_as_positive_int(
+            _get_env(merged, "BUNDLE_EVIDENCE_MAX_RECORDS", "200"),
+            key="BUNDLE_EVIDENCE_MAX_RECORDS",
+        ),
+        BUNDLE_EVIDENCE_WINDOW_SEC=_as_positive_int(
+            _get_env(merged, "BUNDLE_EVIDENCE_WINDOW_SEC", "60"),
+            key="BUNDLE_EVIDENCE_WINDOW_SEC",
+        ),
+        BUNDLE_EVIDENCE_SOURCE_ORDER=str(
+            _get_env(merged, "BUNDLE_EVIDENCE_SOURCE_ORDER", "inline,activity,events,flows,attempts")
+>>>>>>> origin/main
         ),
         GLOBAL_RATE_LIMIT_ENABLED=_as_bool(
             _get_env(merged, "GLOBAL_RATE_LIMIT_ENABLED", "true"),

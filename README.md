@@ -122,6 +122,7 @@ python scripts/post_run_analyzer_smoke.py --base-dir data/smoke/post_run
 ```
 
 
+<<<<<<< HEAD
 ## PR-CL-2 wallet graph clustering foundation
 
 PR-CL-2 adds a graph-backed wallet clustering layer while preserving the original heuristic fallback.
@@ -153,3 +154,42 @@ Behavior notes:
 - cluster provenance fields are additive and backward-compatible
 - missing or malformed graph evidence does not hard-fail discovery/scoring
 - implementation details and caveats live in `docs/wallet_graph_clustering.md`
+=======
+## PR-BDL-4 bundle evidence
+
+PR-BDL-4 adds an evidence-first bundle collection layer for early launch analysis.
+
+What is now real evidence in this repo:
+
+- structured `bundle_activity` / `bundle_events` / `bundle_flows` / `bundle_attempts` / `bundle_evidence` payloads
+- normalized provenance-aware bundle records with landed/failed/unknown status
+- retry, tip, and cross-block evidence when present in the source
+
+What is still heuristic:
+
+- the legacy `bundle_transactions` grouping path
+- any bundle derivation when structured evidence is too sparse or unavailable
+- attribution quality when upstream source coverage is incomplete
+
+Fallback policy:
+
+- use real evidence first when it is usable
+- fall back to the existing heuristic detector when evidence is missing, partial, malformed, or insufficient
+- preserve fail-open behavior and keep bundle contract fields stable downstream
+
+New additive output fields:
+
+- `bundle_evidence_status`
+- `bundle_evidence_source`
+- `bundle_evidence_warning`
+- `bundle_evidence_confidence`
+- `bundle_metric_origin`
+
+Run bundle evidence smoke:
+
+```bash
+python scripts/bundle_evidence_smoke.py
+```
+
+See `docs/bundle_evidence.md` for the honesty policy and routing details.
+>>>>>>> origin/main
