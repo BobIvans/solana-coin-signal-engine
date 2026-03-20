@@ -94,6 +94,12 @@ python scripts/historical_replay_smoke.py
 
 This writes deterministic smoke outputs under `data/smoke/`.
 
+Run the end-to-end golden smoke chain:
+
+```bash
+python scripts/e2e_golden_smoke.py
+```
+
 ## PR-RUN-1 runtime signal consumption
 
 This repository also contains the runtime promotion loop and related guards/reporting under `scripts/run_promotion_loop.py` and `src/promotion/`.
