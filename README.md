@@ -122,6 +122,7 @@ python scripts/post_run_analyzer_smoke.py --base-dir data/smoke/post_run
 ```
 
 
+<<<<<<< HEAD
 ## PR-CL-3 linkage scorer
 
 PR-CL-3 adds a creator/dev/funder linkage layer that keeps the existing cluster heuristics but emits explicit evidence-backed linkage outputs for downstream scoring, regime checks, exits, replay, and future analyzer work.
@@ -133,9 +134,81 @@ Key points:
 - bundle-stage enrichment keeps linkage fields null-filled when evidence is unavailable so downstream contracts stay stable;
 - confidence and provenance are exposed through `linkage_confidence`, `linkage_reason_codes`, `linkage_metric_origin`, and `linkage_status`;
 - this PR does **not** claim identity certainty, and weak evidence stays low-confidence.
+=======
+<<<<<<< HEAD
+## PR-CL-2 wallet graph clustering foundation
+
+PR-CL-2 adds a graph-backed wallet clustering layer while preserving the original heuristic fallback.
+
+New components:
+
+- `analytics/wallet_graph_builder.py`
+- `analytics/cluster_store.py`
+- `schemas/wallet_graph.schema.json`
+- `schemas/wallet_clusters.schema.json`
+- `docs/wallet_graph_clustering.md`
+
+Produced artifacts:
+
+- `data/processed/wallet_graph.json`
+- `data/processed/wallet_clusters.json`
+- `data/processed/wallet_graph_events.jsonl`
+>>>>>>> origin/main
 
 Run smoke:
 
 ```bash
+<<<<<<< HEAD
 python scripts/linkage_smoke.py
 ```
+=======
+python scripts/wallet_graph_smoke.py
+```
+
+Behavior notes:
+
+- graph evidence is used first when coverage is meaningful
+- the legacy heuristic clustering path is still preserved as the safe fallback
+- cluster provenance fields are additive and backward-compatible
+- missing or malformed graph evidence does not hard-fail discovery/scoring
+- implementation details and caveats live in `docs/wallet_graph_clustering.md`
+=======
+## PR-BDL-4 bundle evidence
+
+PR-BDL-4 adds an evidence-first bundle collection layer for early launch analysis.
+
+What is now real evidence in this repo:
+
+- structured `bundle_activity` / `bundle_events` / `bundle_flows` / `bundle_attempts` / `bundle_evidence` payloads
+- normalized provenance-aware bundle records with landed/failed/unknown status
+- retry, tip, and cross-block evidence when present in the source
+
+What is still heuristic:
+
+- the legacy `bundle_transactions` grouping path
+- any bundle derivation when structured evidence is too sparse or unavailable
+- attribution quality when upstream source coverage is incomplete
+
+Fallback policy:
+
+- use real evidence first when it is usable
+- fall back to the existing heuristic detector when evidence is missing, partial, malformed, or insufficient
+- preserve fail-open behavior and keep bundle contract fields stable downstream
+
+New additive output fields:
+
+- `bundle_evidence_status`
+- `bundle_evidence_source`
+- `bundle_evidence_warning`
+- `bundle_evidence_confidence`
+- `bundle_metric_origin`
+
+Run bundle evidence smoke:
+
+```bash
+python scripts/bundle_evidence_smoke.py
+```
+
+See `docs/bundle_evidence.md` for the honesty policy and routing details.
+>>>>>>> origin/main
+>>>>>>> origin/main

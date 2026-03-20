@@ -1,4 +1,4 @@
-"""Lightweight first-window bundle enrichment for discovery candidates."""
+"""Evidence-first first-window bundle enrichment for discovery candidates."""
 
 from __future__ import annotations
 
@@ -6,8 +6,18 @@ from collections import defaultdict
 from typing import Any
 
 from analytics.wallet_clustering import compute_wallet_clustering_metrics
+from collectors.bundle_evidence_collector import (
+    HEURISTIC_FALLBACK_ORIGIN,
+    MISSING_BUNDLE_ORIGIN,
+    compute_bundle_metrics_from_evidence,
+    collect_bundle_evidence_for_pair,
+)
 from collectors.helius_client import HeliusClient
-from utils.bundle_contract_fields import BUNDLE_CONTRACT_FIELDS, LINKAGE_CONTRACT_FIELDS
+from utils.bundle_contract_fields import (
+    BUNDLE_CONTRACT_FIELDS,
+    BUNDLE_PROVENANCE_FIELDS,
+    LINKAGE_CONTRACT_FIELDS,
+)
 from utils.logger import log_warning
 from utils.rate_limit import acquire
 
@@ -18,6 +28,27 @@ MVP_BUNDLE_FIELDS = [
     "bundle_timing_from_liquidity_add_min",
     "bundle_success_rate",
 ]
+
+COMPOSITION_UNKNOWN = "unknown"
+COMPOSITION_BUY_ONLY = "buy-only"
+COMPOSITION_MIXED = "mixed"
+COMPOSITION_SELL_ONLY = "sell-only"
+
+_BUNDLE_EVENT_KEYS = (
+    "bundle_events",
+    "bundle_activity",
+    "bundle_flows",
+    "bundles",
+    "bundle_attempts",
+)
+_NESTED_BUNDLE_KEYS = ("bundle_data", "bundle_metrics", "bundle_insights", "bundle_analysis", "metadata")
+_SIDE_KEYS = ("side", "direction", "swap_direction", "action", "action_label", "flow")
+_TIP_KEYS = ("tip_amount", "tip", "jito_tip", "priority_fee_sol", "priority_fee", "bundle_tip")
+_VALUE_KEYS = ("bundle_value", "value", "notional", "usd_value", "total_value")
+_ACTOR_KEYS = ("actor", "wallet", "wallet_address", "signer", "authority", "owner")
+_STATUS_KEYS = ("status", "result", "outcome", "execution_status")
+_TS_KEYS = ("timestamp", "ts", "time", "block_time")
+_BLOCK_KEYS = ("slot", "block", "block_slot", "block_number")
 
 
 def _null_bundle_metrics() -> dict[str, Any]:
@@ -33,9 +64,21 @@ def safe_null_bundle_metrics(
         **_null_bundle_metrics(),
         "bundle_enrichment_status": status,
         "bundle_enrichment_warning": warning,
+        "bundle_evidence_status": status if status in {"disabled", "failed", "unavailable"} else "unavailable",
+        "bundle_evidence_source": None,
+        "bundle_evidence_warning": warning,
+        "bundle_evidence_confidence": None,
+        "bundle_metric_origin": MISSING_BUNDLE_ORIGIN,
+        "bundle_records": [],
+        "bundle_evidence_summary": {},
+        "bundle_evidence_collected_at": None,
+        "bundle_window_anchor_ts": None,
+        "bundle_window_sec": None,
     }
-    for field in [*BUNDLE_CONTRACT_FIELDS, *LINKAGE_CONTRACT_FIELDS]:
+    for field in [*BUNDLE_CONTRACT_FIELDS, *BUNDLE_PROVENANCE_FIELDS, *LINKAGE_CONTRACT_FIELDS]:
         payload.setdefault(field, None)
+    payload["bundle_records"] = []
+    payload["bundle_evidence_summary"] = {}
     return payload
 
 
@@ -138,6 +181,13 @@ def _extract_success(tx: dict[str, Any]) -> bool | None:
     return False
 
 
+def _clustering_artifact_scope(pair: dict[str, Any]) -> dict[str, str]:
+    return {
+        "token_address": str(pair.get("token_address") or "").strip(),
+        "pair_address": str(pair.get("pair_address") or "").strip(),
+    }
+
+
 def _load_bundle_transactions(pair: dict[str, Any], settings: Any) -> tuple[list[dict[str, Any]], str | None]:
     inline = pair.get("bundle_transactions")
     if isinstance(inline, list):
@@ -161,6 +211,7 @@ def _load_bundle_transactions(pair: dict[str, Any], settings: Any) -> tuple[list
     return txs, None if txs else "no bundle transactions available"
 
 
+<<<<<<< HEAD
 def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: Any) -> dict[str, Any]:
     """Infer first-window bundle metrics from available transaction data.
 
@@ -226,10 +277,12 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
         clustering_metrics = compute_wallet_clustering_metrics(
             clustering_participants,
             creator_wallet=creator_wallet,
-            dev_wallet=_dev_wallet_from_payload(pair),
             participant_wallets=participant_wallets,
             token_address=str(pair.get("token_address") or "") or None,
             pair_address=str(pair.get("pair_address") or "") or None,
+            settings=settings,
+            persist_artifacts=True,
+            artifact_scope=_clustering_artifact_scope(pair),
         )
 
         for bundle in inferred_bundles:
@@ -269,16 +322,10 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
 
 
 
+=======
+>>>>>>> origin/main
 def _creator_wallet_from_payload(payload: dict[str, Any]) -> str | None:
     for key in ("creator_wallet", "deployer_wallet", "mint_authority", "update_authority", "dev_wallet_est"):
-        value = str(payload.get(key) or "").strip()
-        if value:
-            return value
-    return None
-
-
-def _dev_wallet_from_payload(payload: dict[str, Any]) -> str | None:
-    for key in ("dev_wallet", "dev_wallet_est", "developer_wallet", "team_wallet", "deployer_wallet"):
         value = str(payload.get(key) or "").strip()
         if value:
             return value
@@ -320,7 +367,6 @@ def _extract_clustering_participants(
             merge(wallet_value, group_id=[group_key] if group_key else None, funder=tx_funder)
 
     creator_wallet = _creator_wallet_from_payload(payload)
-    dev_wallet = _dev_wallet_from_payload(payload)
 
     list_keys = (
         "early_buyers",
@@ -375,32 +421,147 @@ def _extract_clustering_participants(
     if creator_wallet and (creator_funder or creator_wallet in participants):
         merge(creator_wallet, funder=creator_funder, creator_linked=True)
 
-    dev_funder = str(payload.get("dev_funder") or payload.get("dev_funding_source") or "").strip() or None
-    if dev_wallet and (dev_funder or dev_wallet in participants):
-        merge(dev_wallet, funder=dev_funder, dev_linked=True)
-
     return sorted(participants.values(), key=lambda item: str(item.get("wallet") or "")), sorted(participant_wallets), creator_wallet
 
-COMPOSITION_UNKNOWN = "unknown"
-COMPOSITION_BUY_ONLY = "buy-only"
-COMPOSITION_MIXED = "mixed"
-COMPOSITION_SELL_ONLY = "sell-only"
 
-_BUNDLE_EVENT_KEYS = (
-    "bundle_events",
-    "bundle_activity",
-    "bundle_flows",
-    "bundles",
-    "bundle_attempts",
-)
-_NESTED_BUNDLE_KEYS = ("bundle_data", "bundle_metrics", "bundle_insights", "bundle_analysis", "metadata")
-_SIDE_KEYS = ("side", "direction", "swap_direction", "action", "action_label", "flow")
-_TIP_KEYS = ("tip_amount", "tip", "jito_tip", "priority_fee_sol", "priority_fee", "bundle_tip")
-_VALUE_KEYS = ("bundle_value", "value", "notional", "usd_value", "total_value")
-_ACTOR_KEYS = ("actor", "wallet", "wallet_address", "signer", "authority", "owner")
-_STATUS_KEYS = ("status", "result", "outcome", "execution_status")
-_TS_KEYS = ("timestamp", "ts", "time", "block_time")
-_BLOCK_KEYS = ("slot", "block", "block_slot", "block_number")
+def _detect_bundle_metrics_heuristic(pair: dict[str, Any], now_ts: int, settings: Any) -> dict[str, Any]:
+    if not getattr(settings, "BUNDLE_ENRICHMENT_ENABLED", True):
+        return safe_null_bundle_metrics(status="disabled", warning="bundle enrichment disabled")
+
+    anchor_ts = _extract_anchor_ts(pair)
+    if anchor_ts is None:
+        return safe_null_bundle_metrics(status="unavailable", warning="missing liquidity/pair creation anchor")
+
+    if now_ts < anchor_ts:
+        return safe_null_bundle_metrics(status="unavailable", warning="anchor timestamp is in the future")
+
+    txs, source_warning = _load_bundle_transactions(pair, settings)
+    if source_warning and not txs:
+        return safe_null_bundle_metrics(status="unavailable", warning=source_warning)
+
+    window_sec = max(int(getattr(settings, "BUNDLE_ENRICHMENT_WINDOW_SEC", 60) or 60), 1)
+    window_end = anchor_ts + window_sec
+
+    first_window = []
+    for tx in txs:
+        timestamp = _extract_timestamp(tx)
+        if timestamp is None or timestamp < anchor_ts or timestamp > window_end:
+            continue
+        first_window.append(
+            {
+                "timestamp": timestamp,
+                "group_key": _extract_group_key(tx, timestamp),
+                "wallets": _extract_wallets(tx),
+                "value": _extract_value(tx),
+                "success": _extract_success(tx),
+                "funder": str(tx.get("funder") or tx.get("funding_source") or tx.get("funded_by") or "").strip() or None,
+            }
+        )
+
+    if not first_window:
+        return safe_null_bundle_metrics(status="ok", warning="no first-window transactions found")
+
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for tx in first_window:
+        grouped[tx["group_key"]].append(tx)
+
+    inferred_bundles = [group for group in grouped.values() if len(group) >= 2]
+    if not inferred_bundles:
+        return {
+            **safe_null_bundle_metrics(status="ok", warning="no inferred bundles detected in first window"),
+            "bundle_count_first_60s": 0,
+        }
+
+    bundle_count = len(inferred_bundles)
+    wallet_counts: list[int] = []
+    bundle_values: list[float] = []
+    bundle_offsets_min: list[float] = []
+    success_values: list[float] = []
+    clustering_participants, participant_wallets, creator_wallet = _extract_clustering_participants(pair, first_window)
+    clustering_metrics = compute_wallet_clustering_metrics(
+        clustering_participants,
+        creator_wallet=creator_wallet,
+        participant_wallets=participant_wallets,
+    )
+
+    for bundle in inferred_bundles:
+        wallets = {wallet for tx in bundle for wallet in tx["wallets"]}
+        wallet_counts.append(len(wallets))
+
+        values = [value for value in (tx["value"] for tx in bundle) if value is not None]
+        if values:
+            bundle_values.append(sum(values))
+
+        timestamps = [int(tx["timestamp"]) for tx in bundle]
+        bundle_offsets_min.append((min(timestamps) - anchor_ts) / 60.0)
+
+        successes = [tx["success"] for tx in bundle if tx["success"] is not None]
+        if successes:
+            success_values.extend(1.0 if flag else 0.0 for flag in successes)
+
+    return {
+        **safe_null_bundle_metrics(status="ok"),
+        "bundle_count_first_60s": bundle_count,
+        "bundle_size_value": round(sum(bundle_values), 6) if bundle_values else None,
+        "unique_wallets_per_bundle_avg": round(sum(wallet_counts) / len(wallet_counts), 6) if wallet_counts else None,
+        "bundle_timing_from_liquidity_add_min": round(min(bundle_offsets_min), 6) if bundle_offsets_min else None,
+        "bundle_success_rate": round(sum(success_values) / len(success_values), 6) if success_values else None,
+        "bundle_enrichment_warning": source_warning,
+        "bundle_metric_origin": HEURISTIC_FALLBACK_ORIGIN,
+        **clustering_metrics,
+    }
+
+
+def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: Any) -> dict[str, Any]:
+    """Route bundle enrichment through real evidence first, then heuristic fallback."""
+
+    if not getattr(settings, "BUNDLE_ENRICHMENT_ENABLED", True):
+        return safe_null_bundle_metrics(status="disabled", warning="bundle enrichment disabled")
+
+    try:
+        evidence_payload = collect_bundle_evidence_for_pair(pair, now_ts, settings)
+        evidence_metrics = compute_bundle_metrics_from_evidence(evidence_payload, pair=pair)
+        if evidence_metrics.get("bundle_metric_origin") == "real_evidence":
+            return evidence_metrics
+
+        heuristic_metrics = _detect_bundle_metrics_heuristic(pair, now_ts, settings)
+        heuristic_warning = heuristic_metrics.get("bundle_enrichment_warning")
+        evidence_warning = evidence_metrics.get("bundle_evidence_warning") or evidence_metrics.get("bundle_enrichment_warning")
+        merged_warning = "; ".join(part for part in (evidence_warning, heuristic_warning) if part) or None
+
+        if heuristic_metrics.get("bundle_enrichment_status") in {"ok", "disabled"}:
+            heuristic_metrics.update(
+                {
+                    "bundle_evidence_status": evidence_payload.get("bundle_evidence_status"),
+                    "bundle_evidence_source": evidence_payload.get("bundle_evidence_source"),
+                    "bundle_evidence_warning": evidence_warning,
+                    "bundle_evidence_confidence": evidence_metrics.get("bundle_evidence_confidence"),
+                    "bundle_metric_origin": HEURISTIC_FALLBACK_ORIGIN if heuristic_metrics.get("bundle_enrichment_status") == "ok" else heuristic_metrics.get("bundle_metric_origin"),
+                    "bundle_records": evidence_payload.get("bundle_records") or [],
+                    "bundle_evidence_summary": evidence_payload.get("bundle_evidence_summary") or {},
+                    "bundle_evidence_collected_at": evidence_payload.get("bundle_evidence_collected_at"),
+                    "bundle_window_anchor_ts": evidence_payload.get("bundle_window_anchor_ts"),
+                    "bundle_window_sec": evidence_payload.get("bundle_window_sec"),
+                    "bundle_enrichment_warning": merged_warning,
+                }
+            )
+        if heuristic_metrics.get("bundle_metric_origin") == HEURISTIC_FALLBACK_ORIGIN:
+            log_warning(
+                "bundle_evidence_fallback_heuristic",
+                token_address=str(pair.get("token_address") or ""),
+                pair_address=str(pair.get("pair_address") or ""),
+                evidence_status=evidence_payload.get("bundle_evidence_status"),
+                warning=merged_warning,
+            )
+        return heuristic_metrics
+    except Exception as exc:  # pragma: no cover - defensive fail-open
+        log_warning(
+            "bundle_evidence_failed",
+            token_address=str(pair.get("token_address") or ""),
+            pair_address=str(pair.get("pair_address") or ""),
+            error=str(exc),
+        )
+        return safe_null_bundle_metrics(status="failed", warning=str(exc))
 
 
 def _iter_advanced_bundle_lists(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -625,11 +786,15 @@ def compute_cross_block_bundle_correlation(bundle_records: list[dict[str, Any]],
 def compute_advanced_bundle_fields(*, candidate: dict[str, Any] | None = None, raw_pair: dict[str, Any] | None = None) -> dict[str, Any]:
     candidate = candidate or {}
     raw_pair = raw_pair or {}
-    bundle_records = _extract_advanced_bundle_records(candidate, raw_pair)
+    bundle_records = candidate.get("bundle_records") or _extract_advanced_bundle_records(candidate, raw_pair)
 
-    return {
+    computed = {
         "bundle_composition_dominant": classify_bundle_composition(bundle_records),
         "bundle_tip_efficiency": compute_bundle_tip_efficiency(bundle_records, candidate.get("bundle_size_value")),
         "bundle_failure_retry_pattern": detect_bundle_failure_retry_pattern(bundle_records),
         "cross_block_bundle_correlation": compute_cross_block_bundle_correlation(bundle_records),
     }
+    for key in list(computed):
+        if candidate.get(key) is not None:
+            computed[key] = candidate.get(key)
+    return computed

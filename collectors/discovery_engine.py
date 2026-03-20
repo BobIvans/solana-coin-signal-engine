@@ -108,6 +108,7 @@ def run_discovery_once() -> dict[str, Any]:
 
     candidates: list[dict[str, Any]] = []
     bundle_status_counts: dict[str, int] = {}
+    bundle_origin_counts: dict[str, int] = {}
     bundle_warnings: list[str] = []
     for raw_pair in raw_pairs:
         normalized = normalize_pair(raw_pair)
@@ -132,7 +133,9 @@ def run_discovery_once() -> dict[str, Any]:
 
         bundle_status = str(bundle_payload.get("bundle_enrichment_status") or "unknown")
         bundle_status_counts[bundle_status] = bundle_status_counts.get(bundle_status, 0) + 1
-        warning = str(bundle_payload.get("bundle_enrichment_warning") or "").strip()
+        bundle_origin = str(bundle_payload.get("bundle_metric_origin") or "missing")
+        bundle_origin_counts[bundle_origin] = bundle_origin_counts.get(bundle_origin, 0) + 1
+        warning = str(bundle_payload.get("bundle_enrichment_warning") or bundle_payload.get("bundle_evidence_warning") or "").strip()
         if warning:
             bundle_warnings.append(warning)
 
@@ -178,6 +181,7 @@ def run_discovery_once() -> dict[str, Any]:
         "bundle_enrichment": {
             "enabled": bool(settings.BUNDLE_ENRICHMENT_ENABLED),
             "status_counts": bundle_status_counts,
+            "origin_counts": bundle_origin_counts,
             "warnings": sorted(set(bundle_warnings)),
         },
     }
