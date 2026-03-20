@@ -4,10 +4,8 @@ from __future__ import annotations
 import argparse
 import json
 import random
-
 import sys
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -22,11 +20,11 @@ from src.promotion.io import append_jsonl, write_json
 from src.promotion.kill_switch import is_kill_switch_active
 from src.promotion.policy import config_hash, validate_runtime_config
 from src.promotion.report import write_daily_summary_json, write_daily_summary_md
+from src.promotion.runtime_signal_adapter import adapt_runtime_signal_batch
+from src.promotion.runtime_signal_loader import load_runtime_signals
 from src.promotion.session import restore_runtime_state, write_session_state
 from src.promotion.state_machine import apply_transition
 from src.promotion.types import utc_now_iso
-
-
 
 
 def _parse_scalar(raw: str):
@@ -37,7 +35,7 @@ def _parse_scalar(raw: str):
         inner = value[1:-1].strip()
         if not inner:
             return []
-        return [item.strip().strip('\"') for item in inner.split(',')]
+        return [item.strip().strip('"') for item in inner.split(',')]
     lowered = value.lower()
     if lowered == "true":
         return True
@@ -48,7 +46,7 @@ def _parse_scalar(raw: str):
             return float(value)
         return int(value)
     except ValueError:
-        return value.strip('\"')
+        return value.strip('"')
 
 
 def _load_simple_yaml(path: str) -> dict:
@@ -71,6 +69,8 @@ def _load_simple_yaml(path: str) -> dict:
             if isinstance(parsed, dict):
                 stack.append((indent, parsed))
     return root
+
+
 def _load_config(path: str) -> dict:
     with open(path, "r", encoding="utf-8") as handle:
         raw = handle.read()
@@ -81,16 +81,82 @@ def _load_config(path: str) -> dict:
 
 
 def _simulate_signals(loop_index: int) -> list[dict]:
-    # deterministic synthetic signals for smoke/runtime testing
     return [
         {
             "signal_id": f"sig_{loop_index}_{i}",
             "token_address": f"token_{i}",
             "regime": "SCALP" if i % 2 == 0 else "TREND",
+            "entry_decision": "SCALP" if i % 2 == 0 else "TREND",
             "x_status": "degraded" if i == 0 and loop_index % 2 == 0 else "healthy",
+            "recommended_position_pct": 0.5,
+            "regime_confidence": 0.6,
+            "runtime_signal_origin": "synthetic_dev",
+            "runtime_signal_status": "ok",
+            "runtime_signal_confidence": 0.6,
+            "runtime_signal_warning": "synthetic_dev_mode",
+            "runtime_signal_partial_flag": False,
+            "source_artifact": None,
         }
         for i in range(2)
     ]
+
+
+def _summarize_runtime_signal_batch(batch: dict, normalized_signals: list[dict]) -> dict:
+    status_counts: dict[str, int] = {}
+    origin_counts: dict[str, int] = {}
+    for signal in normalized_signals:
+        status = str(signal.get("runtime_signal_status") or "unknown")
+        origin = str(signal.get("runtime_signal_origin") or "unknown")
+        status_counts[status] = status_counts.get(status, 0) + 1
+        origin_counts[origin] = origin_counts.get(origin, 0) + 1
+    return {
+        "batch_status": batch.get("batch_status", "missing"),
+        "signal_count": len(normalized_signals),
+        "selected_origin": batch.get("selected_origin"),
+        "selected_artifact": batch.get("selected_artifact"),
+        "status_counts": status_counts,
+        "origin_counts": origin_counts,
+        "warnings": batch.get("warnings", []),
+    }
+
+
+def _load_normalized_signals(args: argparse.Namespace, loop_idx: int) -> tuple[list[dict], dict]:
+    if args.signal_source == "synthetic-dev":
+        signals = _simulate_signals(loop_idx)
+        summary = {
+            "batch_status": "synthetic_dev",
+            "signal_count": len(signals),
+            "selected_origin": "synthetic_dev",
+            "selected_artifact": None,
+            "status_counts": {"ok": len(signals)},
+            "origin_counts": {"synthetic_dev": len(signals)},
+            "warnings": ["synthetic_dev_mode_enabled"],
+        }
+        return signals, summary
+
+    batch = load_runtime_signals(args.signals_dir, stale_after_sec=args.signal_stale_after_sec)
+    normalized = adapt_runtime_signal_batch(
+        batch["signals"],
+        runtime_signal_origin=batch.get("selected_origin") or "unknown",
+        source_artifact=batch.get("selected_artifact"),
+    )
+    return normalized, _summarize_runtime_signal_batch(batch, normalized)
+
+
+def _emit_signal_batch_events(event_log: Path, run_id: str, summary: dict) -> None:
+    append_jsonl(
+        event_log,
+        {
+            "ts": utc_now_iso(),
+            "event": "runtime_real_signals_loaded",
+            "run_id": run_id,
+            "signal_origin": summary.get("selected_origin"),
+            "signal_status": summary.get("batch_status"),
+            "signal_count": summary.get("signal_count", 0),
+            "warnings": summary.get("warnings", []),
+            "selected_artifact": summary.get("selected_artifact"),
+        },
+    )
 
 
 def main() -> int:
@@ -104,6 +170,9 @@ def main() -> int:
     parser.add_argument("--force-watchlist-only", action="store_true")
     parser.add_argument("--kill-switch", action="store_true")
     parser.add_argument("--allow-regime", choices=["scalp", "trend", "both"])
+    parser.add_argument("--signals-dir", default="data/processed")
+    parser.add_argument("--signal-source", choices=["auto", "synthetic-dev"], default="auto")
+    parser.add_argument("--signal-stale-after-sec", type=int, default=3600)
     args = parser.parse_args()
 
     cfg = _load_config(args.config)
@@ -147,6 +216,9 @@ def main() -> int:
         "runtime_seed": cfg.get("runtime", {}).get("seed", 42),
         "allowed_regimes": cfg["modes"].get(args.mode, {}).get("allow_regimes", ["SCALP", "TREND"]),
         "degraded_x_policy": cfg["modes"].get(args.mode, {}).get("degraded_x_policy", "watchlist_only"),
+        "runtime_signal_source": args.signal_source,
+        "signals_dir": args.signals_dir,
+        "signal_stale_after_sec": args.signal_stale_after_sec,
     }
     write_json(run_dir / "runtime_manifest.json", manifest)
 
@@ -160,10 +232,14 @@ def main() -> int:
     rng = random.Random(cfg.get("runtime", {}).get("seed", 42))
     total_opened = 0
     total_rejected = 0
+    total_invalid = 0
+    latest_signal_summary: dict[str, object] = {"batch_status": "missing", "origin_counts": {}, "status_counts": {}, "warnings": []}
 
     for loop_idx in range(args.max_loops):
         roll_daily_state_if_needed(state)
-        signals = _simulate_signals(loop_idx)
+        signals, signal_summary = _load_normalized_signals(args, loop_idx)
+        latest_signal_summary = signal_summary
+        _emit_signal_batch_events(event_log, args.run_id, signal_summary)
         opened = 0
         rejected = 0
 
@@ -174,55 +250,181 @@ def main() -> int:
                 print("[promotion] cooldown_started type=captcha duration_min=30")
 
         for signal in signals:
+            append_jsonl(
+                event_log,
+                {
+                    "ts": utc_now_iso(),
+                    "event": "runtime_signal_adapted",
+                    "run_id": args.run_id,
+                    "signal_id": signal.get("signal_id"),
+                    "token_address": signal.get("token_address"),
+                    "signal_origin": signal.get("runtime_signal_origin"),
+                    "signal_status": signal.get("runtime_signal_status"),
+                    "warning": signal.get("runtime_signal_warning"),
+                },
+            )
+
+            if signal.get("runtime_signal_status") == "invalid" or not signal.get("token_address"):
+                total_invalid += 1
+                append_jsonl(
+                    event_log,
+                    {
+                        "ts": utc_now_iso(),
+                        "event": "runtime_signal_invalid",
+                        "run_id": args.run_id,
+                        "signal_id": signal.get("signal_id"),
+                        "token_address": signal.get("token_address"),
+                        "signal_origin": signal.get("runtime_signal_origin"),
+                        "signal_status": signal.get("runtime_signal_status"),
+                        "warning": signal.get("runtime_signal_warning"),
+                        "blockers": signal.get("blockers", []),
+                    },
+                )
+                continue
+
+            if signal.get("runtime_signal_partial_flag"):
+                append_jsonl(
+                    event_log,
+                    {
+                        "ts": utc_now_iso(),
+                        "event": "runtime_signal_partial",
+                        "run_id": args.run_id,
+                        "signal_id": signal.get("signal_id"),
+                        "token_address": signal.get("token_address"),
+                        "signal_origin": signal.get("runtime_signal_origin"),
+                        "warning": signal.get("runtime_signal_warning"),
+                    },
+                )
+
+            if signal.get("entry_decision") == "IGNORE":
+                rejected += 1
+                total_rejected += 1
+                append_jsonl(
+                    decisions_log,
+                    {
+                        "ts": utc_now_iso(),
+                        "token_address": signal["token_address"],
+                        "signal_id": signal["signal_id"],
+                        "mode": args.mode,
+                        "decision": "reject_signal",
+                        "decision_reason_codes": ["entry_decision_ignore"],
+                        "x_status": signal.get("x_status", "unknown"),
+                        "signal_origin": signal.get("runtime_signal_origin"),
+                        "signal_status": signal.get("runtime_signal_status"),
+                        "effective_position_scale": 0.0,
+                    },
+                )
+                append_jsonl(
+                    event_log,
+                    {
+                        "ts": utc_now_iso(),
+                        "event": "runtime_signal_skipped",
+                        "run_id": args.run_id,
+                        "signal_id": signal["signal_id"],
+                        "token_address": signal["token_address"],
+                        "signal_origin": signal.get("runtime_signal_origin"),
+                        "reason": "entry_decision_ignore",
+                    },
+                )
+                continue
+
             append_jsonl(event_log, {"ts": utc_now_iso(), "event": "signal_seen", "signal_id": signal["signal_id"]})
             guard_results = evaluate_entry_guards(signal, state, cfg)
             scale = effective_position_scale(signal, state, cfg)
 
-            if should_block_entry(guard_results) or args.dry_run:
+            if should_block_entry(guard_results) or args.dry_run or scale <= 0:
                 rejected += 1
                 total_rejected += 1
+                reason_codes = list(guard_results["hard_block_reasons"])
+                if args.dry_run:
+                    reason_codes.append("dry_run")
+                if scale <= 0:
+                    reason_codes.append("zero_effective_position_scale")
                 decision = {
                     "ts": utc_now_iso(),
                     "token_address": signal["token_address"],
                     "signal_id": signal["signal_id"],
                     "mode": args.mode,
                     "decision": "reject_signal",
-                    "decision_reason_codes": guard_results["hard_block_reasons"] or ["dry_run"],
+                    "decision_reason_codes": reason_codes,
                     "x_status": signal.get("x_status", "healthy"),
                     "guard_results": guard_results,
                     "effective_position_scale": scale,
+                    "signal_origin": signal.get("runtime_signal_origin"),
+                    "signal_status": signal.get("runtime_signal_status"),
+                    "recommended_position_pct": signal.get("recommended_position_pct"),
                 }
                 append_jsonl(decisions_log, decision)
-                append_jsonl(event_log, {"ts": utc_now_iso(), "event": "signal_rejected", "signal_id": signal["signal_id"]})
+                append_jsonl(
+                    event_log,
+                    {
+                        "ts": utc_now_iso(),
+                        "event": "runtime_real_signal_rejected",
+                        "run_id": args.run_id,
+                        "signal_id": signal["signal_id"],
+                        "token_address": signal["token_address"],
+                        "signal_origin": signal.get("runtime_signal_origin"),
+                        "signal_status": signal.get("runtime_signal_status"),
+                        "reason": reason_codes,
+                    },
+                )
                 continue
 
             position = {
                 "position_id": f"pos_{signal['signal_id']}",
                 "token_address": signal["token_address"],
+                "pair_address": signal.get("pair_address"),
+                "entry_decision": signal.get("entry_decision"),
                 "opened_at": utc_now_iso(),
                 "size_scale": scale,
+                "recommended_position_pct": signal.get("recommended_position_pct"),
+                "signal_origin": signal.get("runtime_signal_origin"),
+                "signal_status": signal.get("runtime_signal_status"),
+                "source_artifact": signal.get("source_artifact"),
+                "entry_snapshot": signal.get("entry_snapshot") or {},
             }
             state.setdefault("open_positions", []).append(position)
             update_trade_counters(state, pnl_pct=0.0)
             opened += 1
             total_opened += 1
-            append_jsonl(event_log, {"ts": utc_now_iso(), "event": "paper_position_opened", "position_id": position["position_id"]})
-            append_jsonl(decisions_log, {
-                "ts": utc_now_iso(),
-                "token_address": signal["token_address"],
-                "signal_id": signal["signal_id"],
-                "mode": args.mode,
-                "decision": "open_paper_position",
-                "decision_reason_codes": guard_results.get("soft_reasons", []),
-                "x_status": signal.get("x_status", "healthy"),
-                "guard_results": guard_results,
-                "effective_position_scale": scale,
-            })
+            append_jsonl(
+                event_log,
+                {
+                    "ts": utc_now_iso(),
+                    "event": "runtime_real_signal_opened",
+                    "run_id": args.run_id,
+                    "signal_id": signal["signal_id"],
+                    "position_id": position["position_id"],
+                    "token_address": signal["token_address"],
+                    "signal_origin": signal.get("runtime_signal_origin"),
+                    "signal_status": signal.get("runtime_signal_status"),
+                },
+            )
+            append_jsonl(
+                decisions_log,
+                {
+                    "ts": utc_now_iso(),
+                    "token_address": signal["token_address"],
+                    "signal_id": signal["signal_id"],
+                    "mode": args.mode,
+                    "decision": "open_paper_position",
+                    "decision_reason_codes": guard_results.get("soft_reasons", []),
+                    "x_status": signal.get("x_status", "healthy"),
+                    "guard_results": guard_results,
+                    "effective_position_scale": scale,
+                    "signal_origin": signal.get("runtime_signal_origin"),
+                    "signal_status": signal.get("runtime_signal_status"),
+                    "recommended_position_pct": signal.get("recommended_position_pct"),
+                },
+            )
 
         if is_kill_switch_active(cfg):
             append_jsonl(event_log, {"ts": utc_now_iso(), "event": "kill_switch_triggered", "reason": "kill_switch_file_present"})
 
-        print(f"[promotion] signals_processed count={len(signals)} opened={opened} rejected={rejected}")
+        print(
+            f"[promotion] signals_processed count={len(signals)} opened={opened} rejected={rejected} "
+            f"origin={signal_summary.get('selected_origin')} status={signal_summary.get('batch_status')}"
+        )
         if not args.dry_run:
             time.sleep(cfg.get("runtime", {}).get("loop_interval_sec", 30))
 
@@ -237,10 +439,31 @@ def main() -> int:
         "x_cooldown_active": is_x_cooldown_active(state),
         "total_opened": total_opened,
         "total_rejected": total_rejected,
+        "total_invalid": total_invalid,
+        "runtime_signal_source": args.signal_source,
+        "runtime_signal_origin": latest_signal_summary.get("selected_origin"),
+        "runtime_signal_status": latest_signal_summary.get("batch_status"),
+        "runtime_signal_status_counts": latest_signal_summary.get("status_counts", {}),
+        "runtime_signal_origin_counts": latest_signal_summary.get("origin_counts", {}),
+        "runtime_signal_warnings": latest_signal_summary.get("warnings", []),
+        "signals_dir": args.signals_dir,
     }
     summary_json_path = write_daily_summary_json(run_dir / "daily_summary.json", summary)
     write_daily_summary_md(run_dir / "daily_summary.md", summary)
     write_session_state(session_path, state)
+    append_jsonl(
+        event_log,
+        {
+            "ts": utc_now_iso(),
+            "event": "runtime_real_signal_loop_completed",
+            "run_id": args.run_id,
+            "total_opened": total_opened,
+            "total_rejected": total_rejected,
+            "total_invalid": total_invalid,
+            "signal_origin": latest_signal_summary.get("selected_origin"),
+            "signal_status": latest_signal_summary.get("batch_status"),
+        },
+    )
     append_jsonl(event_log, {"ts": utc_now_iso(), "event": "state_persisted"})
 
     print(f"[promotion] daily_summary_written path={summary_json_path}")

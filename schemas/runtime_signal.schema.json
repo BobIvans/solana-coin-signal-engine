@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RuntimeSignal",
+  "type": "object",
+  "required": [
+    "signal_id",
+    "token_address",
+    "signal_ts",
+    "regime",
+    "x_status",
+    "entry_decision",
+    "regime_confidence",
+    "recommended_position_pct",
+    "reason_flags",
+    "blockers",
+    "runtime_signal_origin",
+    "runtime_signal_status",
+    "runtime_signal_confidence"
+  ],
+  "properties": {
+    "schema_version": {"type": ["string", "null"]},
+    "metadata": {"type": ["object", "null"]},
+    "signal_id": {"type": "string", "minLength": 1},
+    "token_address": {"type": "string", "minLength": 1},
+    "pair_address": {"type": ["string", "null"]},
+    "symbol": {"type": ["string", "null"]},
+    "signal_ts": {"type": "string", "minLength": 1},
+    "regime": {"type": "string"},
+    "x_status": {"type": "string"},
+    "entry_decision": {"type": "string"},
+    "regime_confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "recommended_position_pct": {"type": "number", "minimum": 0, "maximum": 1},
+    "reason_flags": {"type": "array", "items": {"type": "string"}},
+    "blockers": {"type": "array", "items": {"type": "string"}},
+    "effective_signal_status": {"type": ["string", "null"]},
+    "source_artifact": {"type": ["string", "null"]},
+    "runtime_signal_origin": {
+      "type": "string",
+      "enum": ["entry_events", "entry_candidates", "scored_tokens", "historical_replay", "synthetic_dev", "unknown"]
+    },
+    "runtime_signal_status": {"type": "string", "enum": ["ok", "partial", "invalid"]},
+    "runtime_signal_warning": {"type": ["string", "null"]},
+    "runtime_signal_confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "runtime_signal_partial_flag": {"type": ["boolean", "null"]},
+    "entry_confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "entry_reason": {"type": ["string", "null"]},
+    "warnings": {"type": ["array", "null"], "items": {"type": "string"}},
+    "raw_signal": {"type": ["object", "null"]},
+    "metadata_status": {"type": ["string", "null"]}
+  },
+  "additionalProperties": true
+}
