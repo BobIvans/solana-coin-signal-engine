@@ -19,43 +19,52 @@
       "items": {
         "type": "object",
         "required": [
-          "token_address",
-          "top1_holder_share",
-          "top20_holder_share",
-          "first50_holder_conc_est",
-          "holder_entropy_est",
-          "unique_buyers_5m",
-          "holder_growth_5m",
-          "dev_sell_pressure_5m",
-          "pumpfun_to_raydium_sec",
+          "continuation_missing_evidence",
+          "smart_wallet_early_entry_hits",
+          "net_unique_buyers_60s",
+          "contract_version",
+          "continuation_coverage_ratio",
+          "x_author_velocity_5m",
+          "smart_wallet_watch_hits",
           "smart_wallet_hits",
-          "smart_wallet_hit_wallets",
+          "liquidity_refill_ratio_120s",
+          "dev_sell_pressure_5m",
+          "holder_growth_5m",
+          "liquidity_shock_recovery_sec",
+          "unique_buyers_5m",
+          "first50_holder_conc_est",
+          "smart_wallet_conviction_bonus",
+          "seller_reentry_ratio",
           "wallet_registry_status",
           "wallet_registry_hot_set_size",
-          "wallet_registry_validated_size",
-          "smart_wallet_score_sum",
-          "smart_wallet_tier1_hits",
-          "smart_wallet_tier2_hits",
-          "smart_wallet_tier3_hits",
-          "smart_wallet_early_entry_hits",
-          "smart_wallet_active_hits",
-          "smart_wallet_watch_hits",
-          "smart_wallet_hit_tiers",
-          "smart_wallet_hit_statuses",
-          "smart_wallet_netflow_bias",
-          "smart_wallet_conviction_bonus",
-          "smart_wallet_registry_confidence",
-          "net_unique_buyers_60s",
-          "liquidity_refill_ratio_120s",
+          "continuation_metric_origin",
           "cluster_sell_concentration_120s",
+          "smart_wallet_score_sum",
+          "smart_wallet_active_hits",
+          "wallet_registry_validated_size",
+          "smart_wallet_hit_statuses",
+          "continuation_available_evidence",
+          "continuation_inputs_status",
+          "continuation_warning",
+          "smart_wallet_tier2_hits",
+          "top1_holder_share",
+          "smart_wallet_hit_tiers",
+          "continuation_warnings",
+          "smart_wallet_netflow_bias",
           "smart_wallet_dispersion_score",
-          "x_author_velocity_5m",
-          "seller_reentry_ratio",
-          "liquidity_shock_recovery_sec",
-          "enrichment_status",
+          "token_address",
+          "pumpfun_to_raydium_sec",
+          "smart_wallet_tier1_hits",
+          "top20_holder_share",
+          "smart_wallet_registry_confidence",
+          "smart_wallet_hit_wallets",
           "enrichment_warnings",
           "enriched_at",
-          "contract_version"
+          "continuation_confidence",
+          "enrichment_status",
+          "smart_wallet_tier3_hits",
+          "continuation_status",
+          "holder_entropy_est"
         ],
         "properties": {
           "token_address": {
@@ -334,6 +343,60 @@
               "integer",
               "null"
             ]
+          },
+          "continuation_status": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "partial",
+              "missing"
+            ]
+          },
+          "continuation_warning": {
+            "type": "string"
+          },
+          "continuation_confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "continuation_metric_origin": {
+            "type": "string",
+            "enum": [
+              "computed_from_tx",
+              "computed_from_x",
+              "computed_from_wallet_registry",
+              "mixed_evidence",
+              "partial",
+              "missing"
+            ]
+          },
+          "continuation_coverage_ratio": {
+            "type": "number"
+          },
+          "continuation_inputs_status": {
+            "type": "object"
+          },
+          "continuation_warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "continuation_available_evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "continuation_missing_evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       }

@@ -83,6 +83,11 @@ class Settings:
     SMART_WALLET_HIT_WINDOW_SEC: int
     PROGRAM_ID_MAP_PATH: Path
     ALLOW_LAUNCH_PATH_HEURISTICS_ONLY: bool
+    CONTINUATION_ENRICHMENT_ENABLED: bool
+    CONTINUATION_MIN_TX_WINDOW_COVERAGE: float
+    CONTINUATION_MIN_X_EVIDENCE: int
+    CONTINUATION_MIN_WALLET_REGISTRY_MATCHES: int
+    CONTINUATION_CONFIDENCE_FLOOR_PARTIAL: float
 
     RUG_ENGINE_ENABLED: bool
     RUG_ENGINE_FAILCLOSED: bool
@@ -486,6 +491,26 @@ def load_settings() -> Settings:
         ALLOW_LAUNCH_PATH_HEURISTICS_ONLY=_as_bool(
             _get_env(merged, "ALLOW_LAUNCH_PATH_HEURISTICS_ONLY", "true"),
             key="ALLOW_LAUNCH_PATH_HEURISTICS_ONLY",
+        ),
+        CONTINUATION_ENRICHMENT_ENABLED=_as_bool(
+            _get_env(merged, "CONTINUATION_ENRICHMENT_ENABLED", "true"),
+            key="CONTINUATION_ENRICHMENT_ENABLED",
+        ),
+        CONTINUATION_MIN_TX_WINDOW_COVERAGE=_as_unit_float(
+            _get_env(merged, "CONTINUATION_MIN_TX_WINDOW_COVERAGE", "0.4"),
+            key="CONTINUATION_MIN_TX_WINDOW_COVERAGE",
+        ),
+        CONTINUATION_MIN_X_EVIDENCE=_as_positive_int(
+            _get_env(merged, "CONTINUATION_MIN_X_EVIDENCE", "1"),
+            key="CONTINUATION_MIN_X_EVIDENCE",
+        ),
+        CONTINUATION_MIN_WALLET_REGISTRY_MATCHES=_as_positive_int(
+            _get_env(merged, "CONTINUATION_MIN_WALLET_REGISTRY_MATCHES", "2"),
+            key="CONTINUATION_MIN_WALLET_REGISTRY_MATCHES",
+        ),
+        CONTINUATION_CONFIDENCE_FLOOR_PARTIAL=_as_unit_float(
+            _get_env(merged, "CONTINUATION_CONFIDENCE_FLOOR_PARTIAL", "0.4"),
+            key="CONTINUATION_CONFIDENCE_FLOOR_PARTIAL",
         ),
         RUG_ENGINE_ENABLED=_as_bool(
             _get_env(merged, "RUG_ENGINE_ENABLED", "true"), key="RUG_ENGINE_ENABLED"

@@ -53,6 +53,15 @@ REQUIRED_MATRIX_KEYS = [
     "x_author_velocity_5m",
     "seller_reentry_ratio",
     "liquidity_shock_recovery_sec",
+    "continuation_status",
+    "continuation_warning",
+    "continuation_confidence",
+    "continuation_metric_origin",
+    "continuation_coverage_ratio",
+    "continuation_inputs_status",
+    "continuation_warnings",
+    "continuation_available_evidence",
+    "continuation_missing_evidence",
     "x_status",
     "x_validation_score_entry",
     "x_validation_delta_entry",
@@ -231,6 +240,15 @@ def test_trade_feature_matrix_preserves_enriched_payload_fields():
                     "x_author_velocity_5m": 0.6,
                     "seller_reentry_ratio": 0.25,
                     "liquidity_shock_recovery_sec": 45,
+                    "continuation_status": "complete",
+                    "continuation_warning": "",
+                    "continuation_confidence": "high",
+                    "continuation_metric_origin": "mixed_evidence",
+                    "continuation_coverage_ratio": 1.0,
+                    "continuation_inputs_status": {"tx": "ready", "x": "ready", "wallet_registry": "ready"},
+                    "continuation_warnings": [],
+                    "continuation_available_evidence": ["tx", "wallet_registry", "x"],
+                    "continuation_missing_evidence": [],
                     "x_validation_delta": 11,
                 },
                 "x_status": "ok",
@@ -285,6 +303,9 @@ def test_trade_feature_matrix_preserves_enriched_payload_fields():
     assert row["smart_wallet_dispersion_score"] == 0.55
     assert row["x_author_velocity_5m"] == 0.6
     assert row["liquidity_shock_recovery_sec"] == 45
+    assert row["continuation_status"] == "complete"
+    assert row["continuation_confidence"] == "high"
+    assert row["continuation_metric_origin"] == "mixed_evidence"
 
 
 def test_trade_feature_matrix_calibration_metrics_are_none_without_path_evidence():

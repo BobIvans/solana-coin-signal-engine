@@ -259,54 +259,70 @@ def compute_cluster_quality_adjustment(token_ctx: dict, settings: Any) -> dict:
 
 
 def compute_continuation_quality_adjustment(token_ctx: dict, settings: Any) -> dict:
+    continuation_confidence = str(token_ctx.get("continuation_confidence") or "").lower()
+    continuation_status = str(token_ctx.get("continuation_status") or "").lower()
+    coverage_ratio = normalize_unit_interval(_f(token_ctx.get("continuation_coverage_ratio")))
+
+    confidence_multiplier = {
+        "high": 1.0,
+        "medium": 0.75,
+        "low": 0.4,
+    }.get(continuation_confidence, 1.0 if coverage_ratio >= 0.85 else 0.8)
+    if continuation_status == "partial":
+        confidence_multiplier *= 0.8
+    elif continuation_status == "missing":
+        confidence_multiplier = 0.0
+    if coverage_ratio is not None and coverage_ratio > 0:
+        confidence_multiplier *= max(0.35, coverage_ratio)
+
     organic_buyer_flow_raw = normalize_capped(
         _f(token_ctx.get("net_unique_buyers_60s")), 2.0, 18.0
     )
     organic_buyer_flow_bonus = organic_buyer_flow_raw * float(
         settings.UNIFIED_SCORE_ORGANIC_BUYER_FLOW_MAX
-    )
+    ) * confidence_multiplier
 
     liquidity_refill_raw = normalize_capped(
         _f(token_ctx.get("liquidity_refill_ratio_120s")), 0.90, 1.80
     )
     liquidity_refill_bonus = liquidity_refill_raw * float(
         settings.UNIFIED_SCORE_LIQUIDITY_REFILL_MAX
-    )
+    ) * confidence_multiplier
 
     smart_wallet_dispersion_raw = normalize_capped(
         _f(token_ctx.get("smart_wallet_dispersion_score")), 0.35, 0.90
     )
     smart_wallet_dispersion_bonus = smart_wallet_dispersion_raw * float(
         settings.UNIFIED_SCORE_SMART_WALLET_DISPERSION_MAX
-    )
+    ) * confidence_multiplier
 
     x_author_velocity_raw = normalize_capped(
         _f(token_ctx.get("x_author_velocity_5m")), 1.10, 2.80
     )
     x_author_velocity_bonus = x_author_velocity_raw * float(
         settings.UNIFIED_SCORE_X_AUTHOR_VELOCITY_MAX
-    )
+    ) * confidence_multiplier
 
     seller_reentry_raw = normalize_capped(
         _f(token_ctx.get("seller_reentry_ratio")), 0.18, 0.72
     )
     seller_reentry_bonus = seller_reentry_raw * float(
         settings.UNIFIED_SCORE_SELLER_REENTRY_MAX
-    )
+    ) * confidence_multiplier
 
     shock_recovery_raw = normalize_inverse(
         _f(token_ctx.get("liquidity_shock_recovery_sec")), 20.0, 180.0
     )
     shock_recovery_bonus = shock_recovery_raw * float(
         settings.UNIFIED_SCORE_SHOCK_RECOVERY_MAX
-    )
+    ) * confidence_multiplier
 
     cluster_distribution_risk_raw = normalize_capped(
         _f(token_ctx.get("cluster_sell_concentration_120s")), 0.45, 0.90
     )
     cluster_distribution_risk_penalty = cluster_distribution_risk_raw * float(
         settings.UNIFIED_SCORE_CLUSTER_DISTRIBUTION_RISK_MAX
-    )
+    ) * max(confidence_multiplier, 0.5 if cluster_distribution_risk_raw > 0 else 0.0)
 
     flags: list[str] = []
     warnings: list[str] = []
@@ -334,43 +350,47 @@ def compute_continuation_quality_adjustment(token_ctx: dict, settings: Any) -> d
 
     if (
         organic_buyer_flow_bonus
-        >= float(settings.UNIFIED_SCORE_ORGANIC_BUYER_FLOW_MAX) * 0.4
+        >= float(settings.UNIFIED_SCORE_ORGANIC_BUYER_FLOW_MAX) * 0.4 * max(confidence_multiplier, 0.4)
     ):
         flags.append("organic_buyer_flow_positive")
     if (
         liquidity_refill_bonus
-        >= float(settings.UNIFIED_SCORE_LIQUIDITY_REFILL_MAX) * 0.4
+        >= float(settings.UNIFIED_SCORE_LIQUIDITY_REFILL_MAX) * 0.4 * max(confidence_multiplier, 0.4)
     ):
         flags.append("liquidity_refill_positive")
     if (
         smart_wallet_dispersion_bonus
-        >= float(settings.UNIFIED_SCORE_SMART_WALLET_DISPERSION_MAX) * 0.4
+        >= float(settings.UNIFIED_SCORE_SMART_WALLET_DISPERSION_MAX) * 0.4 * max(confidence_multiplier, 0.4)
     ):
         flags.append("smart_wallet_dispersion_positive")
     if (
         x_author_velocity_bonus
-        >= float(settings.UNIFIED_SCORE_X_AUTHOR_VELOCITY_MAX) * 0.4
+        >= float(settings.UNIFIED_SCORE_X_AUTHOR_VELOCITY_MAX) * 0.4 * max(confidence_multiplier, 0.4)
     ):
         flags.append("x_author_velocity_expanding")
     if (
         seller_reentry_bonus
-        >= float(settings.UNIFIED_SCORE_SELLER_REENTRY_MAX) * 0.4
+        >= float(settings.UNIFIED_SCORE_SELLER_REENTRY_MAX) * 0.4 * max(confidence_multiplier, 0.4)
     ):
         flags.append("seller_reentry_supportive")
     if (
         shock_recovery_bonus
-        >= float(settings.UNIFIED_SCORE_SHOCK_RECOVERY_MAX) * 0.4
+        >= float(settings.UNIFIED_SCORE_SHOCK_RECOVERY_MAX) * 0.4 * max(confidence_multiplier, 0.4)
     ):
         flags.append("liquidity_shock_recovered_fast")
     if (
         cluster_distribution_risk_penalty
-        >= float(settings.UNIFIED_SCORE_CLUSTER_DISTRIBUTION_RISK_MAX) * 0.4
+        >= float(settings.UNIFIED_SCORE_CLUSTER_DISTRIBUTION_RISK_MAX) * 0.4 * max(confidence_multiplier, 0.5)
     ):
         flags.append("cluster_distribution_risk")
 
     if evidence_present and evidence_present < 3:
         warnings.append("continuation_quality_partial_evidence")
-    if sum(1 for value in positive_components.values() if value > 0) >= 3:
+    if continuation_status in {"partial", "missing"}:
+        warnings.append(f"continuation_status={continuation_status}")
+    if continuation_confidence == "low":
+        warnings.append("continuation_confidence_low")
+    if sum(1 for value in positive_components.values() if value > 0) >= 3 and confidence_multiplier > 0:
         flags.append("continuation_quality_supported")
 
     return {
