@@ -29,7 +29,7 @@ See `docs/entry_selector.md` for regime rules, confidence logic, degraded/partia
 
 ## Historical replay harness
 
-The replay path is now evidence-first.
+The replay path is now evidence-first. `src/replay/historical_replay_harness.py` is the only supported replay entrypoint, and the old synthetic replay shim has been removed.
 
 Historical replay uses recorded local artifacts such as scored rows, entry candidates, historical signals/trades/positions, and recorded price paths to reconstruct candidate, entry, position, and exit lifecycles.
 

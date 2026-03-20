@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Historical replay driver with explicit synthetic smoke fallback."""
+"""Historical replay driver for the canonical artifact-backed harness."""
 
 from __future__ import annotations
 
