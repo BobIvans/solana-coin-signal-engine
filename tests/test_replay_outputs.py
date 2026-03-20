@@ -10,6 +10,8 @@ def test_replay_writes_required_artifacts_and_fields():
         [
             sys.executable,
             "scripts/replay_7d.py",
+            "--artifact-dir",
+            "tests/fixtures/historical_replay/full_win",
             "--config",
             "config/replay.default.yaml",
             "--days",

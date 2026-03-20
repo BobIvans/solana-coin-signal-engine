@@ -9,6 +9,8 @@ def test_replay_smoke_end_to_end():
         [
             sys.executable,
             "scripts/replay_7d.py",
+            "--artifact-dir",
+            "tests/fixtures/historical_replay/full_win",
             "--config",
             "config/replay.default.yaml",
             "--days",
