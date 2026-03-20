@@ -17,10 +17,7 @@ from analytics.score_components import (
     compute_x_validation_bonus,
 )
 from analytics.score_router import route_score
-from src.wallets.scoring import (
-    apply_wallet_adjustment_to_final_score,
-    compute_wallet_score_adjustment,
-)
+from src.wallets.scoring import compute_wallet_score_adjustment
 from utils.bundle_contract_fields import copy_bundle_contract_fields, copy_linkage_contract_fields
 from utils.clock import utc_now_iso
 from utils.short_horizon_contract_fields import copy_short_horizon_contract_fields
@@ -103,18 +100,18 @@ def score_token(token_ctx: dict, settings: Any) -> dict:
             }
         },
     )
-    final_score = _clamp(
-        apply_wallet_adjustment_to_final_score(base_score, wallet_adjustment, {})
-    )
+    final_score_pre_wallet = _clamp(base_score)
 
     score_ctx = {
-        "final_score": round(final_score, 4),
+        "final_score": round(final_score_pre_wallet, 4),
         "heuristic_ratio": float(early.get("heuristic_ratio") or 0.0),
     }
     routed = route_score(token_ctx, score_ctx, settings)
 
     if routed["hard_override"]:
         score_ctx["final_score"] = min(score_ctx["final_score"], 35.0)
+
+    final_score_pre_wallet = _clamp(float(score_ctx["final_score"]))
 
     flags = set()
     warnings = set()
@@ -193,7 +190,8 @@ def score_token(token_ctx: dict, settings: Any) -> dict:
         "spam_penalty": round(float(spam["spam_penalty"]), 4),
         "confidence_adjustment": round(confidence_adjustment, 4),
         "wallet_adjustment": wallet_adjustment,
-        "final_score": round(float(score_ctx["final_score"]), 4),
+        "final_score_pre_wallet": round(final_score_pre_wallet, 4),
+        "final_score": round(final_score_pre_wallet, 4),
         "regime_candidate": routed["regime_candidate"],
         "score_inputs_status": _status_block(token_ctx),
         "score_flags": sorted(flags),

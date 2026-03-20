@@ -55,11 +55,11 @@ def test_shadow_mode_computes_component_but_does_not_change_final_score():
     assert token["final_score"] == token["final_score_pre_wallet"]
 
 
-def test_on_mode_applies_bounded_wallet_adjustment():
+def test_on_mode_applies_bounded_wallet_adjustment_exactly_once():
     token = score_token(_base_token(), wallet_weighting_mode="on")
     assert token["wallet_score_component_applied"] > 0.0
-    assert token["final_score"] > token["final_score_pre_wallet"]
     assert token["wallet_score_component_applied"] <= 8.0
+    assert token["final_score"] == pytest.approx(token["final_score_pre_wallet"] + token["wallet_score_component_applied"])
 
 
 def test_degraded_registry_forces_zero_wallet_adjustment():

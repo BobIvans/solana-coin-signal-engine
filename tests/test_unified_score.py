@@ -308,3 +308,19 @@ def test_linkage_penalties_apply_conservatively_when_confident():
     assert out["cluster_dev_link_penalty"] > 0
     assert out["shared_funder_penalty"] > 0
     assert "shared_funder_penalty" in out["score_flags"]
+
+
+def test_analytics_unified_score_is_wallet_neutral():
+    settings = load_settings()
+    token = {
+        **_base_token(),
+        "wallet_features": {
+            "smart_wallet_tier1_hits": 1,
+            "smart_wallet_tier2_hits": 1,
+            "smart_wallet_early_entry_hits": 1,
+            "smart_wallet_netflow_bias": 0.0,
+        },
+    }
+    out = score_token(token, settings)
+    assert out["wallet_adjustment"]["wallet_bonus_score"] > 0
+    assert out["final_score"] == out["final_score_pre_wallet"]

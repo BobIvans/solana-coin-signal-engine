@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from trading.pnl_engine import compute_exit_pnl, compute_unrealized_pnl
+from trading.pnl_engine import (
+    compute_closed_fraction_of_position,
+    compute_exit_pnl,
+    compute_unrealized_pnl,
+)
 from utils.clock import utc_now_iso
 
 
@@ -87,12 +91,12 @@ def open_position(fill_ctx: dict[str, Any], signal_ctx: dict[str, Any], state: d
 
 def apply_partial_exit(position_ctx: dict[str, Any], fill_ctx: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
     sold = float(fill_ctx.get("filled_notional_sol") or 0.0)
-    requested = float(fill_ctx.get("requested_notional_sol") or 0.0)
-    ratio = 0.0 if requested <= 0 else max(0.0, min(sold / requested, 1.0))
-    cost_portion = float(position_ctx.get("remaining_size_sol") or 0.0) * ratio
+    remaining_before = float(position_ctx.get("remaining_size_sol") or 0.0)
+    closed_fraction = compute_closed_fraction_of_position(position_ctx, fill_ctx)
+    cost_portion = remaining_before * closed_fraction
     pnl = compute_exit_pnl(position_ctx, fill_ctx)
 
-    position_ctx["remaining_size_sol"] = max(float(position_ctx.get("remaining_size_sol") or 0.0) - sold, 0.0)
+    position_ctx["remaining_size_sol"] = max(remaining_before - sold, 0.0)
     position_ctx["realized_pnl_sol"] = float(position_ctx.get("realized_pnl_sol") or 0.0) + pnl["realized_pnl_sol"]
     position_ctx["fees_paid_sol"] = float(position_ctx.get("fees_paid_sol") or 0.0) + pnl["fees_paid_sol"]
     position_ctx["last_mark_price_usd"] = float(fill_ctx.get("executed_price_usd") or position_ctx.get("last_mark_price_usd") or 0.0)
