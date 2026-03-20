@@ -57,3 +57,58 @@ def test_validate_runtime_signal_inputs_marks_partial_rows(tmp_path):
     selected = next(item for item in validation["artifacts"] if item["origin"] == "entry_candidates")
     assert selected["status"] == "partial"
     assert selected["usable_row_count"] == 0
+
+
+
+def test_loader_uses_historical_replay_jsonl_when_higher_precedence_missing(tmp_path):
+    processed = tmp_path / "processed"
+    append_jsonl(
+        processed / "trade_feature_matrix.jsonl",
+        {
+            "token_address": "SoReplay111",
+            "final_score": 88.0,
+            "signal_ts": "2026-03-20T00:00:00+00:00",
+        },
+    )
+
+    batch = load_latest_runtime_signal_batch(processed, stale_after_sec=None)
+
+    assert batch["selected_origin"] == "historical_replay"
+    assert batch["selected_artifact"].endswith("trade_feature_matrix.jsonl")
+    assert batch["signals"][0]["token_address"] == "SoReplay111"
+
+
+def test_loader_prefers_historical_replay_jsonl_over_legacy_json(tmp_path):
+    processed = tmp_path / "processed"
+    append_jsonl(
+        processed / "trade_feature_matrix.jsonl",
+        {
+            "token_address": "SoReplayCanonical",
+            "final_score": 91.0,
+            "signal_ts": "2026-03-20T00:00:00+00:00",
+        },
+    )
+    write_json(
+        processed / "trade_feature_matrix.json",
+        [{"token_address": "SoReplayLegacy", "final_score": 60.0}],
+    )
+
+    batch = load_latest_runtime_signal_batch(processed, stale_after_sec=None)
+
+    assert batch["selected_origin"] == "historical_replay"
+    assert batch["selected_artifact"].endswith("trade_feature_matrix.jsonl")
+    assert batch["signals"][0]["token_address"] == "SoReplayCanonical"
+
+
+def test_loader_falls_back_to_legacy_historical_replay_json_when_jsonl_missing(tmp_path):
+    processed = tmp_path / "processed"
+    write_json(
+        processed / "trade_feature_matrix.json",
+        [{"token_address": "SoReplayLegacy", "final_score": 77.0}],
+    )
+
+    batch = load_latest_runtime_signal_batch(processed, stale_after_sec=None)
+
+    assert batch["selected_origin"] == "historical_replay_legacy"
+    assert batch["selected_artifact"].endswith("trade_feature_matrix.json")
+    assert batch["signals"][0]["token_address"] == "SoReplayLegacy"

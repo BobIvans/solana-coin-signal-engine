@@ -33,6 +33,12 @@ _DEFAULT_PRECEDENCE = (
     },
     {
         "origin": "historical_replay",
+        "path": "trade_feature_matrix.jsonl",
+        "kind": "jsonl",
+        "required_fields": ("token_address",),
+    },
+    {
+        "origin": "historical_replay_legacy",
         "path": "trade_feature_matrix.json",
         "kind": "json",
         "required_fields": ("token_address",),
