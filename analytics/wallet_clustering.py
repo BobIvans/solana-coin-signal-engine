@@ -6,7 +6,7 @@ from collections import defaultdict
 from math import ceil
 from typing import Any
 
-from analytics.cluster_store import persist_wallet_cluster_artifacts
+from analytics.cluster_store import build_and_persist_wallet_clusters
 from analytics.wallet_graph_builder import build_wallet_graph, derive_wallet_clusters
 from utils.logger import log_info, log_warning
 
@@ -429,8 +429,19 @@ def resolve_wallet_cluster_assignments(
             }
 
     if graph_enabled:
-        graph = build_wallet_graph(participants, creator_wallet=creator_wallet, metadata=scope)
-        clusters = derive_wallet_clusters(graph, min_weight=float(getattr(settings, "WALLET_GRAPH_EDGE_MIN_WEIGHT", 0.5) or 0.5))
+        if persist_artifacts and settings is not None:
+            persisted = build_and_persist_wallet_clusters(
+                participants,
+                creator_wallet=creator_wallet,
+                settings=settings,
+                metadata=scope,
+                min_weight=float(getattr(settings, "WALLET_GRAPH_EDGE_MIN_WEIGHT", 0.5) or 0.5),
+            )
+            graph = persisted["graph"]
+            clusters = persisted["clusters"]
+        else:
+            graph = build_wallet_graph(participants, creator_wallet=creator_wallet, metadata=scope)
+            clusters = derive_wallet_clusters(graph, min_weight=float(getattr(settings, "WALLET_GRAPH_EDGE_MIN_WEIGHT", 0.5) or 0.5))
         graph_wallet_map = clusters.get("wallet_to_cluster") if isinstance(clusters, dict) else {}
         if isinstance(graph_wallet_map, dict):
             mapped = {wallet: str(cluster_id) for wallet, cluster_id in graph_wallet_map.items() if _as_wallet(wallet)}
@@ -444,16 +455,6 @@ def resolve_wallet_cluster_assignments(
                     except (TypeError, ValueError):
                         continue
                 confidence = round(sum(cluster_confidences) / len(cluster_confidences), 6) if cluster_confidences else None
-                if persist_artifacts and settings is not None:
-                    events = [
-                        {"event": "wallet_graph_build_started", **scope},
-                        {"event": "wallet_graph_edges_derived", "node_count": graph.get("summary", {}).get("node_count", 0), "edge_count": graph.get("summary", {}).get("edge_count", 0), **scope},
-                        {"event": "wallet_graph_normalized", "status": "ok", **scope},
-                        {"event": "wallet_clusters_derived", "cluster_count": clusters.get("summary", {}).get("cluster_count", 0), "status": "ok", **scope},
-                        {"event": "wallet_cluster_store_written", "status": "ok", **scope},
-                        {"event": "wallet_graph_completed", "status": "ok", **scope},
-                    ]
-                    persist_wallet_cluster_artifacts(graph=graph, clusters=clusters, settings=settings, events=events)
                 log_info(
                     "wallet_graph_completed",
                     status="ok",

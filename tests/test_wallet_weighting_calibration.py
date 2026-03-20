@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import json
+import warnings
 from pathlib import Path
 
 import pytest
 
 jsonschema = pytest.importorskip("jsonschema")
-referencing = pytest.importorskip("referencing")
-Registry = referencing.Registry
-Resource = referencing.Resource
+try:
+    from referencing import Registry, Resource
+except ImportError:  # pragma: no cover - compatibility fallback for minimal envs
+    Registry = None
+    Resource = None
 
 from analytics.wallet_weighting_calibration import run_wallet_weighting_calibration
 
@@ -167,13 +170,21 @@ def test_schema_validation(tmp_path: Path):
     recommendation_schema_path = schema_dir / "wallet_rollout_recommendation.schema.json"
     report_schema = json.loads(report_schema_path.read_text(encoding="utf-8"))
     recommendation_schema = json.loads(recommendation_schema_path.read_text(encoding="utf-8"))
-    registry = Registry().with_resources(
-        [
-            ("./wallet_calibration_report.schema.json", Resource.from_contents(report_schema)),
-            ("./wallet_rollout_recommendation.schema.json", Resource.from_contents(recommendation_schema)),
-            (report_schema_path.resolve().as_uri(), Resource.from_contents(report_schema)),
-            (recommendation_schema_path.resolve().as_uri(), Resource.from_contents(recommendation_schema)),
-        ]
-    )
-    jsonschema.Draft202012Validator(report_schema, registry=registry).validate(report)
-    jsonschema.Draft202012Validator(recommendation_schema, registry=registry).validate(recommendation)
+    if Registry is not None and Resource is not None:
+        registry = Registry().with_resources(
+            [
+                ("./wallet_calibration_report.schema.json", Resource.from_contents(report_schema)),
+                ("./wallet_rollout_recommendation.schema.json", Resource.from_contents(recommendation_schema)),
+                (report_schema_path.resolve().as_uri(), Resource.from_contents(report_schema)),
+                (recommendation_schema_path.resolve().as_uri(), Resource.from_contents(recommendation_schema)),
+            ]
+        )
+        jsonschema.Draft202012Validator(report_schema, registry=registry).validate(report)
+        jsonschema.Draft202012Validator(recommendation_schema, registry=registry).validate(recommendation)
+        return
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        resolver = jsonschema.RefResolver(base_uri=schema_dir.resolve().as_uri() + "/", referrer=report_schema)
+        jsonschema.validate(report, report_schema, resolver=resolver)
+        jsonschema.validate(recommendation, recommendation_schema)

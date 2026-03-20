@@ -13,6 +13,10 @@ _DEFAULT_CLUSTER_FILENAME = "wallet_clusters.json"
 _DEFAULT_EVENT_FILENAME = "wallet_graph_events.jsonl"
 
 
+def _metadata_scope_values(metadata: dict[str, Any] | None) -> dict[str, Any]:
+    return {key: value for key, value in (metadata or {}).items() if value not in (None, "", [], {})}
+
+
 def _path_or_default(path: Path | str | None, default: Path) -> Path:
     return Path(path).expanduser().resolve() if path is not None else default.expanduser().resolve()
 
@@ -101,15 +105,16 @@ def build_and_persist_wallet_clusters(
     graph = build_wallet_graph(participants, creator_wallet=creator_wallet, metadata=metadata)
     threshold = float(min_weight if min_weight is not None else getattr(settings, "WALLET_GRAPH_EDGE_MIN_WEIGHT", 0.5))
     clusters = derive_wallet_clusters(graph, min_weight=threshold)
+    scope = _metadata_scope_values(metadata)
     events = [
-        {"event": "wallet_graph_build_started", **{key: value for key, value in (metadata or {}).items() if value not in (None, "", [], {})}},
+        {"event": "wallet_graph_build_started", **scope},
         {
             "event": "wallet_graph_completed",
             "status": "ok" if graph.get("summary", {}).get("edge_count", 0) > 0 else "partial",
             "node_count": graph.get("summary", {}).get("node_count", 0),
             "edge_count": graph.get("summary", {}).get("edge_count", 0),
             "cluster_count": clusters.get("summary", {}).get("cluster_count", 0),
-            **{key: value for key, value in (metadata or {}).items() if value not in (None, "", [], {})},
+            **scope,
         },
     ]
     persist_wallet_cluster_artifacts(
