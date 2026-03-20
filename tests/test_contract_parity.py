@@ -63,6 +63,19 @@ def _enriched_row() -> dict:
         "cluster_concentration_ratio": 0.36,
         "num_unique_clusters_first_60s": 3,
         "creator_in_cluster_flag": False,
+        "bundle_evidence_status": "complete",
+        "bundle_evidence_source": "bundle_layer",
+        "bundle_evidence_confidence": "high",
+        "bundle_evidence_warning": "",
+        "bundle_metric_origin": "raw_bundles",
+        "cluster_evidence_status": "complete",
+        "cluster_evidence_source": "graph",
+        "cluster_evidence_confidence": "high",
+        "cluster_metric_origin": "graph_backed",
+        "graph_cluster_id_count": 3,
+        "graph_cluster_coverage_ratio": 0.91,
+        "creator_cluster_id": "cluster-creator-1",
+        "dominant_cluster_id": "cluster-dominant-1",
         "creator_dev_link_score": 0.10,
         "creator_buyer_link_score": 0.08,
         "dev_buyer_link_score": 0.04,
@@ -104,7 +117,7 @@ def _build_repo_fixture(root: Path) -> None:
         encoding="utf-8",
     )
     (root / "docs" / "contracts.md").write_text(
-        """# Contracts\n\ncore_shortlist\ncore_x_validation\ncore_enriched\nbundle_cluster\ncontinuation\ncore_rug_assessed\ncore_scored\ncore_entry_candidates\nreplay_feature_matrix\npost_run_summary\npost_run_recommendations\n\nArtifacts: `shortlist.json`, `x_validated.json`, `enriched_tokens.json`, `rug_assessed_tokens.json`, `scored_tokens.json`, `entry_candidates.json`, `trade_feature_matrix.jsonl`, `post_run_summary.json`, `post_run_recommendations.json`.\n\nTools: `tools/contract_parity.py`, `tools/docs_sync_audit.py`, `scripts/contract_parity_smoke.py`, `docs/contracts.md`.\n""",
+        """# Contracts\n\ncore_shortlist\ncore_x_validation\ncore_enriched\nbundle_cluster\nbundle_provenance\ncluster_provenance\nlinkage_evidence\ncontinuation\ncore_rug_assessed\ncore_scored\ncore_entry_candidates\nreplay_feature_matrix\npost_run_summary\npost_run_recommendations\n\nArtifacts: `shortlist.json`, `x_validated.json`, `enriched_tokens.json`, `rug_assessed_tokens.json`, `scored_tokens.json`, `entry_candidates.json`, `trade_feature_matrix.jsonl`, `post_run_summary.json`, `post_run_recommendations.json`.\n\nTools: `tools/contract_parity.py`, `tools/docs_sync_audit.py`, `scripts/contract_parity_smoke.py`, `docs/contracts.md`.\n""",
         encoding="utf-8",
     )
 
