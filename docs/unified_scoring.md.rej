@@ -1,0 +1,15 @@
+--- docs/unified_scoring.md
++++ docs/unified_scoring.md
+@@ -55,6 +55,12 @@
+ - partial rug status
+ - heuristic-heavy score context
+ 
++Near-threshold partial-evidence reconciliation:
++
++- if a token would otherwise route to `IGNORE`, has partial enrichment/rug/continuation evidence, has no hard blocker, and lands within `UNIFIED_SCORE_PARTIAL_REVIEW_BUFFER` below the watch threshold, routing upgrades it to `WATCHLIST`
++- this adds the warning `watchlist_partial_evidence_review`
++- this is a narrow operator-review path, not an entry relaxation, and it never bypasses hard overrides or critical-missing fail-closed checks
++
+ ## Heuristic discount policy
+ 
+ Heuristic fields (`holder_entropy_est`, `first50_holder_conc_est`, and uncertain migration speed) receive a confidence multiplier defaulting to `0.75`, floored by `UNIFIED_SCORE_HEURISTIC_CONFIDENCE_FLOOR`.

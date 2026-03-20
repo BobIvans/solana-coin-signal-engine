@@ -51,10 +51,12 @@ This suite is intentionally conservative about what the repository already does 
 In particular:
 
 - degraded-X ambiguity is currently forced conservative mainly by score routing and entry gating
-- partial-evidence caution is surfaced by score warnings, route downgrades, and fail-closed style entry behavior
+- partial-evidence caution is surfaced by score warnings, a narrow near-threshold WATCHLIST review path, and fail-closed style entry behavior
 - weak continuation is already visible in score and exit logic, but not every continuation metric is a first-class immediate regime gate yet
 
 The fixture suite documents those realities instead of pretending every layer already consumes every signal equally.
+
+For `partial_evidence_false_confidence`, the intended layering is explicit: the score layer should keep the token operator-visible as `WATCHLIST`, while the regime/entry layer must still block execution with `IGNORE`.
 
 ## Extending the suite
 
