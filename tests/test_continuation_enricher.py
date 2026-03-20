@@ -31,6 +31,7 @@ def _organic_txs() -> list[dict]:
     return [
         {
             "timestamp": 1_000,
+            "success": True,
             "liquidity_usd": 100.0,
             "participants": [
                 {"wallet": "buyer_a", "funder": "shared_a"},
@@ -45,6 +46,7 @@ def _organic_txs() -> list[dict]:
         },
         {
             "timestamp": 1_025,
+            "success": True,
             "liquidity_usd": 60.0,
             "tokenTransfers": [
                 {"fromUserAccount": "buyer_a", "toUserAccount": "lp_pool", "tokenAmount": 18},
@@ -53,6 +55,7 @@ def _organic_txs() -> list[dict]:
         },
         {
             "timestamp": 1_050,
+            "success": True,
             "liquidity_usd": 100.0,
             "tokenTransfers": [
                 {"fromUserAccount": "lp_pool", "toUserAccount": "buyer_a", "tokenAmount": 4},
@@ -65,6 +68,7 @@ def _distribution_txs() -> list[dict]:
     return [
         {
             "timestamp": 1_000,
+            "success": True,
             "liquidity_usd": 120.0,
             "participants": [
                 {"wallet": "seller_a", "funder": "shared_a"},
@@ -77,6 +81,7 @@ def _distribution_txs() -> list[dict]:
         },
         {
             "timestamp": 1_020,
+            "success": True,
             "liquidity_usd": 45.0,
             "tokenTransfers": [
                 {"fromUserAccount": "seller_a", "toUserAccount": "lp_pool", "tokenAmount": 20},
@@ -86,6 +91,7 @@ def _distribution_txs() -> list[dict]:
         },
         {
             "timestamp": 1_090,
+            "success": True,
             "liquidity_usd": 65.0,
             "tokenTransfers": [
                 {"fromUserAccount": "seller_a", "toUserAccount": "lp_pool", "tokenAmount": 8},
@@ -191,3 +197,72 @@ def test_build_payload_matches_schema_when_available():
     if Draft7Validator is not None:
         schema = json.loads((Path(__file__).resolve().parents[1] / "schemas" / "continuation_enrichment.schema.json").read_text())
         Draft7Validator(schema).validate(payload)
+
+
+def test_failed_txs_do_not_fake_continuation_strength():
+    txs = [
+        {
+            "timestamp": 1_000,
+            "success": True,
+            "liquidity_usd": 100.0,
+            "participants": [
+                {"wallet": "buyer_a", "funder": "shared_a"},
+                {"wallet": "buyer_b", "funder": "shared_a"},
+                {"wallet": "buyer_c", "funder": "shared_c"},
+            ],
+            "tokenTransfers": [
+                {"fromUserAccount": "lp_pool", "toUserAccount": "buyer_a", "tokenAmount": 6},
+                {"fromUserAccount": "lp_pool", "toUserAccount": "buyer_b", "tokenAmount": 6},
+                {"fromUserAccount": "lp_pool", "toUserAccount": "buyer_c", "tokenAmount": 5},
+            ],
+        },
+        {
+            "timestamp": 1_025,
+            "success": True,
+            "liquidity_usd": 60.0,
+            "tokenTransfers": [
+                {"fromUserAccount": "buyer_a", "toUserAccount": "lp_pool", "tokenAmount": 18},
+                {"fromUserAccount": "buyer_b", "toUserAccount": "lp_pool", "tokenAmount": 12},
+            ],
+        },
+        {
+            "timestamp": 1_050,
+            "success": True,
+            "liquidity_usd": 100.0,
+            "tokenTransfers": [
+                {"fromUserAccount": "lp_pool", "toUserAccount": "buyer_a", "tokenAmount": 4},
+            ],
+        },
+        {
+            "timestamp": 1_015,
+            "success": False,
+            "participants": [
+                {"wallet": "fake_seller_a", "funder": "shared_fake"},
+                {"wallet": "fake_seller_b", "funder": "shared_fake"},
+            ],
+            "tokenTransfers": [
+                {"fromUserAccount": "lp_pool", "toUserAccount": "fake_buyer_a", "tokenAmount": 500},
+                {"fromUserAccount": "lp_pool", "toUserAccount": "fake_buyer_b", "tokenAmount": 400},
+                {"fromUserAccount": "fake_seller_a", "toUserAccount": "lp_pool", "tokenAmount": 900},
+                {"fromUserAccount": "fake_seller_b", "toUserAccount": "lp_pool", "tokenAmount": 850},
+            ],
+        },
+        {
+            "timestamp": 1_055,
+            "tokenTransfers": [
+                {"fromUserAccount": "lp_pool", "toUserAccount": "unknown_buyer", "tokenAmount": 777},
+            ],
+        },
+    ]
+
+    result = compute_continuation_metrics(
+        token_ctx={"pair_created_at": "1970-01-01T00:16:40Z"},
+        txs=txs,
+        pair_created_ts=PAIR_CREATED_TS,
+    )
+
+    assert result["net_unique_buyers_60s"] == 1
+    assert result["cluster_sell_concentration_120s"] == 0.588235
+    assert result["seller_reentry_ratio"] == 0.5
+    assert result["continuation_status"] == "partial"
+    assert result["continuation_metric_origin"] == "computed_from_tx"

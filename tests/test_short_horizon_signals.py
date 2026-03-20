@@ -23,6 +23,7 @@ def test_compute_net_unique_buyers_60s_counts_distinct_buyers_minus_sellers():
     txs = [
         {
             "timestamp": 1_010,
+            "success": True,
             "tokenTransfers": [
                 {"fromUserAccount": "lp_pool", "toUserAccount": "buyer_a", "tokenAmount": 10},
                 {"fromUserAccount": "lp_pool", "toUserAccount": "buyer_b", "tokenAmount": 5},
@@ -50,6 +51,7 @@ def test_compute_cluster_sell_concentration_120s_requires_cluster_evidence():
     txs_with_clusters = [
         {
             "timestamp": 1_005,
+            "success": True,
             "participants": [
                 {"wallet": "seller_a", "funder": "shared"},
                 {"wallet": "seller_b", "funder": "shared"},
@@ -109,11 +111,11 @@ def test_compute_x_author_velocity_5m_counts_new_authors_per_minute():
 
 def test_compute_seller_reentry_ratio_requires_sell_then_rebuy_lifecycle():
     txs = [
-        {"timestamp": 1_005, "tokenTransfers": [{"fromUserAccount": "lp_pool", "toUserAccount": "buyer_a", "tokenAmount": 10}]},
-        {"timestamp": 1_015, "tokenTransfers": [{"fromUserAccount": "lp_pool", "toUserAccount": "buyer_b", "tokenAmount": 8}]},
-        {"timestamp": 1_025, "tokenTransfers": [{"fromUserAccount": "buyer_a", "toUserAccount": "lp_pool", "tokenAmount": 4}]},
-        {"timestamp": 1_035, "tokenTransfers": [{"fromUserAccount": "lp_pool", "toUserAccount": "buyer_a", "tokenAmount": 6}]},
-        {"timestamp": 1_045, "tokenTransfers": [{"fromUserAccount": "buyer_b", "toUserAccount": "lp_pool", "tokenAmount": 4}]},
+        {"timestamp": 1_005, "success": True, "tokenTransfers": [{"fromUserAccount": "lp_pool", "toUserAccount": "buyer_a", "tokenAmount": 10}]},
+        {"timestamp": 1_015, "success": True, "tokenTransfers": [{"fromUserAccount": "lp_pool", "toUserAccount": "buyer_b", "tokenAmount": 8}]},
+        {"timestamp": 1_025, "success": True, "tokenTransfers": [{"fromUserAccount": "buyer_a", "toUserAccount": "lp_pool", "tokenAmount": 4}]},
+        {"timestamp": 1_035, "success": True, "tokenTransfers": [{"fromUserAccount": "lp_pool", "toUserAccount": "buyer_a", "tokenAmount": 6}]},
+        {"timestamp": 1_045, "success": True, "tokenTransfers": [{"fromUserAccount": "buyer_b", "toUserAccount": "lp_pool", "tokenAmount": 4}]},
     ]
 
     assert compute_seller_reentry_ratio(pair_created_ts=PAIR_CREATED_TS, txs=txs) == 0.5
@@ -134,3 +136,78 @@ def test_compute_liquidity_shock_recovery_sec_requires_honest_recovery():
 
     assert compute_liquidity_shock_recovery_sec(pair_created_ts=PAIR_CREATED_TS, txs=txs) == 60
     assert compute_liquidity_shock_recovery_sec(pair_created_ts=PAIR_CREATED_TS, txs=unrecovered) is None
+
+
+def test_compute_net_unique_buyers_60s_ignores_failed_and_unknown_transactions():
+    txs = [
+        {
+            "timestamp": 1_010,
+            "success": True,
+            "tokenTransfers": [{"fromUserAccount": "lp_pool", "toUserAccount": "buyer_a", "tokenAmount": 10}],
+        },
+        {
+            "timestamp": 1_011,
+            "success": False,
+            "tokenTransfers": [{"fromUserAccount": "lp_pool", "toUserAccount": "buyer_b", "tokenAmount": 999}],
+        },
+        {
+            "timestamp": 1_012,
+            "success": True,
+            "tokenTransfers": [{"fromUserAccount": "seller_a", "toUserAccount": "lp_pool", "tokenAmount": 3}],
+        },
+        {
+            "timestamp": 1_013,
+            "tokenTransfers": [{"fromUserAccount": "lp_pool", "toUserAccount": "buyer_c", "tokenAmount": 50}],
+        },
+    ]
+
+    assert compute_net_unique_buyers_60s(pair_created_ts=PAIR_CREATED_TS, txs=txs) == 0
+
+
+def test_compute_cluster_sell_concentration_120s_ignores_failed_clustered_sells():
+    txs = [
+        {
+            "timestamp": 1_005,
+            "success": True,
+            "participants": [
+                {"wallet": "seller_a", "funder": "shared"},
+                {"wallet": "seller_b", "funder": "shared"},
+                {"wallet": "seller_c", "funder": "other"},
+            ],
+            "tokenTransfers": [
+                {"fromUserAccount": "seller_a", "toUserAccount": "lp_pool", "tokenAmount": 10},
+                {"fromUserAccount": "seller_b", "toUserAccount": "lp_pool", "tokenAmount": 10},
+                {"fromUserAccount": "seller_c", "toUserAccount": "lp_pool", "tokenAmount": 1},
+            ],
+        },
+        {
+            "timestamp": 1_010,
+            "success": False,
+            "participants": [
+                {"wallet": "seller_a", "funder": "shared"},
+                {"wallet": "seller_b", "funder": "shared"},
+            ],
+            "tokenTransfers": [
+                {"fromUserAccount": "seller_a", "toUserAccount": "lp_pool", "tokenAmount": 500},
+                {"fromUserAccount": "seller_b", "toUserAccount": "lp_pool", "tokenAmount": 500},
+            ],
+        },
+    ]
+
+    assert compute_cluster_sell_concentration_120s(pair_created_ts=PAIR_CREATED_TS, txs=txs) == 0.952381
+
+
+def test_compute_seller_reentry_ratio_ignores_failed_rebuys_and_failed_sells():
+    failed_rebuy_txs = [
+        {"timestamp": 1_005, "success": True, "tokenTransfers": [{"fromUserAccount": "lp_pool", "toUserAccount": "buyer_a", "tokenAmount": 10}]},
+        {"timestamp": 1_025, "success": True, "tokenTransfers": [{"fromUserAccount": "buyer_a", "toUserAccount": "lp_pool", "tokenAmount": 4}]},
+        {"timestamp": 1_035, "success": False, "tokenTransfers": [{"fromUserAccount": "lp_pool", "toUserAccount": "buyer_a", "tokenAmount": 6}]},
+    ]
+    failed_sell_txs = [
+        {"timestamp": 1_005, "success": True, "tokenTransfers": [{"fromUserAccount": "lp_pool", "toUserAccount": "buyer_b", "tokenAmount": 10}]},
+        {"timestamp": 1_025, "success": False, "tokenTransfers": [{"fromUserAccount": "buyer_b", "toUserAccount": "lp_pool", "tokenAmount": 4}]},
+        {"timestamp": 1_035, "success": True, "tokenTransfers": [{"fromUserAccount": "lp_pool", "toUserAccount": "buyer_b", "tokenAmount": 6}]},
+    ]
+
+    assert compute_seller_reentry_ratio(pair_created_ts=PAIR_CREATED_TS, txs=failed_rebuy_txs) == 0.0
+    assert compute_seller_reentry_ratio(pair_created_ts=PAIR_CREATED_TS, txs=failed_sell_txs) is None

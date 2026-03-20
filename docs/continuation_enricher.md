@@ -29,6 +29,8 @@ Computed from launch-window transaction evidence:
 
 These are still calculated by helper logic in `analytics/short_horizon_signals.py`, but orchestration now lives in the continuation enricher.
 
+Transfer-derived continuation metrics use **only explicitly successful transactions** (`success is True`). Failed, reverted, or unknown-success transactions are intentionally ignored so the layer does not fabricate organic buyer flow, cluster distribution, or seller re-entry from unconfirmed execution attempts.
+
 ### X-derived
 
 Computed when usable X snapshot/card timestamps are present:
