@@ -105,6 +105,28 @@ Run smoke:
 python scripts/entry_selector_smoke.py --scored data/processed/scored_tokens.json
 ```
 
+## PR-RUN-1 runtime real signal wiring
+
+The runtime promotion loop now reads real local signal artifacts by default instead of using synthetic placeholder signals.
+
+Primary artifact precedence:
+
+1. `data/processed/entry_candidates.json`
+2. `data/processed/entry_candidates.smoke.json`
+3. `data/processed/entry_events.jsonl`
+4. `data/processed/scored_tokens.json` when it already contains decision-support fields
+5. replay-compatible artifacts such as `trade_feature_matrix.json`
+
+If artifacts are missing, stale, partial, or malformed, runtime degrades safely, records provenance/status fields, and skips unusable rows rather than inventing trades. Synthetic behavior is still available only through explicit `--signal-source synthetic-dev` opt-in.
+
+Run the real-signal smoke path:
+
+```bash
+python scripts/runtime_signal_smoke.py
+```
+
+See `docs/runtime_real_signals.md` for the runtime signal contract and fallback behavior.
+
 ## PR-10 post-run analyzer
 
 PR-10 adds a post-run analytics layer over paper-trading artifacts:
