@@ -160,6 +160,12 @@ def test_schema_validation(tmp_path: Path):
     recommendation = json.loads(paths["out_recommendation"].read_text(encoding="utf-8"))
     report_schema = json.loads((Path(__file__).resolve().parents[1] / "schemas" / "wallet_calibration_report.schema.json").read_text(encoding="utf-8"))
     recommendation_schema = json.loads((Path(__file__).resolve().parents[1] / "schemas" / "wallet_rollout_recommendation.schema.json").read_text(encoding="utf-8"))
-    resolver = jsonschema.RefResolver(base_uri=(Path(__file__).resolve().parents[1] / "schemas").resolve().as_uri() + "/", referrer=report_schema)
-    jsonschema.validate(report, report_schema, resolver=resolver)
+    report_schema = {
+        **report_schema,
+        "properties": {
+            **(report_schema.get("properties") or {}),
+            "recommendation": recommendation_schema,
+        },
+    }
+    jsonschema.validate(report, report_schema)
     jsonschema.validate(recommendation, recommendation_schema)
