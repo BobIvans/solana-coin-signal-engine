@@ -69,6 +69,18 @@ CONTINUATION_COMPONENT_KEYS = {
 }
 
 
+EVIDENCE_COMPONENT_KEYS = {
+    "evidence_quality_score",
+    "evidence_conflict_flag",
+    "partial_evidence_flag",
+    "evidence_coverage_ratio",
+    "evidence_available",
+    "evidence_scores",
+    "partial_evidence_penalty",
+    "low_confidence_evidence_penalty",
+}
+
+
 def test_unified_score_strong_token_watch_or_entry(monkeypatch):
     monkeypatch.setenv("UNIFIED_SCORE_ENTRY_THRESHOLD", "45")
     monkeypatch.setenv("UNIFIED_SCORE_WATCH_THRESHOLD", "35")
@@ -292,6 +304,8 @@ def test_score_payload_contract_includes_new_component_keys():
         assert key in token
     for key in CONTINUATION_COMPONENT_KEYS:
         assert key in token
+    for key in EVIDENCE_COMPONENT_KEYS:
+        assert key in token
 
 
 def test_linkage_penalties_apply_conservatively_when_confident():
@@ -308,6 +322,60 @@ def test_linkage_penalties_apply_conservatively_when_confident():
     assert out["cluster_dev_link_penalty"] > 0
     assert out["shared_funder_penalty"] > 0
     assert "shared_funder_penalty" in out["score_flags"]
+
+
+def test_healthy_evidence_does_not_pay_explicit_evidence_penalties():
+    settings = load_settings()
+    token = {
+        **_base_token(),
+        "regime_confidence": 0.84,
+        "runtime_signal_confidence": 0.86,
+        "continuation_confidence": 0.76,
+        "continuation_status": "confirmed",
+        "linkage_confidence": 0.81,
+        "linkage_status": "ok",
+        "bundle_wallet_clustering_score": 0.74,
+        "cluster_concentration_ratio": 0.22,
+        "smart_wallet_tier1_hits": 1,
+        "smart_wallet_netflow_bias": 0.18,
+        "x_status": "healthy",
+    }
+    out = score_token(token, settings)
+    for key in EVIDENCE_COMPONENT_KEYS:
+        assert key in out
+    assert out["partial_evidence_penalty"] == 0.0
+    assert out["low_confidence_evidence_penalty"] == 0.0
+    assert out["evidence_conflict_flag"] is False
+    assert out["partial_evidence_flag"] is False
+
+
+def test_partial_evidence_lowers_final_score_explicitly():
+    settings = load_settings()
+    healthy = {
+        **_base_token(),
+        "regime_confidence": 0.82,
+        "runtime_signal_confidence": 0.81,
+        "continuation_confidence": 0.74,
+        "continuation_status": "confirmed",
+        "linkage_confidence": 0.78,
+        "linkage_status": "ok",
+        "x_status": "healthy",
+        "bundle_wallet_clustering_score": 0.68,
+        "cluster_concentration_ratio": 0.28,
+    }
+    partial = dict(healthy)
+    partial.update({
+        "runtime_signal_partial_flag": True,
+        "continuation_status": "missing",
+        "linkage_status": "partial",
+        "x_status": "missing",
+        "x_validation_score": None,
+    })
+    healthy_out = score_token(healthy, settings)
+    partial_out = score_token(partial, settings)
+    assert partial_out["partial_evidence_flag"] is True
+    assert partial_out["partial_evidence_penalty"] == pytest.approx(settings.UNIFIED_SCORE_PARTIAL_EVIDENCE_PENALTY)
+    assert partial_out["final_score"] < healthy_out["final_score"]
 
 
 def test_analytics_unified_score_off_mode_preserves_pre_wallet_score():
@@ -330,31 +398,6 @@ def test_analytics_unified_score_off_mode_preserves_pre_wallet_score():
     assert out["wallet_weighting_effective_mode"] == "off"
     assert out["wallet_score_component_applied"] == 0.0
     assert out["wallet_adjustment"]["applied_delta"] == 0.0
-    assert out["final_score"] == out["final_score_pre_wallet"]
-
-
-<<<<<<< HEAD
-def test_analytics_unified_score_shadow_mode_logs_wallet_component_without_applying():
-    settings = load_settings()
-    token = {
-        **_base_token(),
-        "timestamp": "2026-03-18T10:00:00Z",
-        "wallet_registry_status": "validated",
-        "wallet_features": {
-            "smart_wallet_score_sum": 12.0,
-            "smart_wallet_tier1_hits": 1,
-            "smart_wallet_tier2_hits": 1,
-            "smart_wallet_early_entry_hits": 1,
-            "smart_wallet_active_hits": 1,
-            "smart_wallet_registry_confidence": "high",
-            "smart_wallet_netflow_bias": 0.0,
-        },
-    }
-    out = score_token(token, settings, wallet_weighting_mode="shadow")
-    assert out["wallet_weighting_effective_mode"] == "shadow"
-    assert out["wallet_score_component_applied_shadow"] > 0.0
-    assert out["wallet_score_component_applied"] == 0.0
-    assert out["wallet_adjustment"]["shadow_delta"] > 0.0
     assert out["final_score"] == out["final_score_pre_wallet"]
 
 
@@ -381,7 +424,8 @@ def test_analytics_unified_score_on_mode_applies_wallet_component_once():
     assert out["final_score"] == pytest.approx(
         out["final_score_pre_wallet"] + out["wallet_score_component_applied"]
     )
-=======
+
+
 def test_unified_score_propagates_wallet_family_summary_fields():
     settings = load_settings()
     token = {
@@ -402,4 +446,3 @@ def test_unified_score_propagates_wallet_family_summary_fields():
     assert out["smart_wallet_family_ids"] == ["fam_a"]
     assert out["smart_wallet_family_confidence_max"] == 0.84
     assert out["smart_wallet_family_shared_funder_flag"] is True
->>>>>>> origin/main

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from analytics.evidence_quality import derive_evidence_quality
+from analytics.evidence_weighted_sizing import derive_sizing_confidence
 from src.promotion.guards import compute_position_sizing
 
 
@@ -159,3 +161,34 @@ def test_conflicting_evidence_sets_conflict_flag_and_reduces_size():
     assert sizing["effective_position_pct"] < sizing["base_position_pct"]
     assert "evidence_conflict_size_reduced" in sizing["sizing_reason_codes"]
     assert "cluster_evidence_low_confidence_size_reduced" in sizing["sizing_reason_codes"]
+
+
+def test_shared_evidence_quality_helper_stays_in_sync_with_sizing_summary():
+    signal = {
+        "signal_id": "shared_summary",
+        "token_address": "SoShared111",
+        "entry_decision": "TREND",
+        "regime": "TREND",
+        "recommended_position_pct": 0.33,
+        "regime_confidence": 0.81,
+        "runtime_signal_confidence": 0.77,
+        "continuation_confidence": 0.66,
+        "continuation_status": "confirmed",
+        "linkage_confidence": 0.72,
+        "linkage_status": "ok",
+        "bundle_wallet_clustering_score": 0.61,
+        "cluster_concentration_ratio": 0.34,
+        "smart_wallet_hits": 3,
+        "smart_wallet_tier1_hits": 1,
+        "smart_wallet_netflow_bias": 0.15,
+        "x_status": "healthy",
+        "x_validation_score": 79,
+    }
+
+    summary = derive_evidence_quality(signal)
+    sizing = derive_sizing_confidence(signal, config=BASE_CONFIG)
+
+    assert sizing["evidence_quality_score"] == summary["evidence_quality_score"]
+    assert sizing["evidence_conflict_flag"] == summary["evidence_conflict_flag"]
+    assert sizing["partial_evidence_flag"] == summary["partial_evidence_flag"]
+    assert sizing["evidence_available"] == summary["evidence_available"]

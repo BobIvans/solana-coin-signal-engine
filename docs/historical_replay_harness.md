@@ -113,3 +113,6 @@ This harness intentionally does **not**:
 - redesign regime logic
 - redesign exit logic
 - fabricate complete PnL when historical evidence is incomplete
+
+
+Evidence-quality score penalties (`partial_evidence_penalty`, `low_confidence_evidence_penalty`) are now propagated into the replay trade feature matrix alongside existing evidence-quality summary fields.
