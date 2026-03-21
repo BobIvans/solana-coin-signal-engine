@@ -119,9 +119,15 @@ def score_token(
         + confidence_adjustment
     )
     final_score_pre_wallet = _clamp(base_score)
+    partial_review_score = _clamp(
+        final_score_pre_wallet
+        + float(evidence_penalties.get("partial_evidence_penalty") or 0.0)
+        + float(evidence_penalties.get("low_confidence_evidence_penalty") or 0.0)
+    )
 
     score_ctx = {
         "final_score": round(final_score_pre_wallet, 4),
+        "partial_review_score": round(partial_review_score, 4),
         "heuristic_ratio": float(early.get("heuristic_ratio") or 0.0),
     }
     routed = route_score(token_ctx, score_ctx, settings)
@@ -212,6 +218,7 @@ def score_token(
         "wallet_score_component_reason": str(wallet_weighting["wallet_score_component_reason"]),
         "wallet_score_explain": dict(wallet_weighting["wallet_score_explain"]),
         "final_score_pre_wallet": round(final_score_pre_wallet, 4),
+        "partial_review_score": round(partial_review_score, 4),
         "final_score": round(final_score, 4),
         "regime_candidate": routed["regime_candidate"],
         "score_inputs_status": _status_block(token_ctx),

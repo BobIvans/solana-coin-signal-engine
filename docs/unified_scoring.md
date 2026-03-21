@@ -57,7 +57,9 @@ Downgrades from `ENTRY_CANDIDATE` to `WATCHLIST`:
 
 Near-threshold partial-evidence reconciliation:
 
-- if a token would otherwise route to `IGNORE`, has partial enrichment/rug/continuation evidence, has no hard blocker, and lands within `UNIFIED_SCORE_PARTIAL_REVIEW_BUFFER` below the watch threshold, routing upgrades it to `WATCHLIST`
+- `final_score` stays penalized and remains the conservative execution-facing score basis
+- `partial_review_score` is review-only and reconstructs the score before `partial_evidence_penalty` and `low_confidence_evidence_penalty` were applied
+- if a token would otherwise route to `IGNORE`, has partial enrichment/rug/continuation evidence, has no hard blocker, and `partial_review_score` lands within `UNIFIED_SCORE_PARTIAL_REVIEW_BUFFER` below the watch threshold, routing upgrades it to `WATCHLIST`
 - this adds the warning `watchlist_partial_evidence_review`
 - this is a narrow operator-review path, not an entry relaxation, and it never bypasses hard overrides or critical-missing fail-closed checks
 

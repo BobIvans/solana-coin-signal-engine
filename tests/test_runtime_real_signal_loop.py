@@ -81,7 +81,7 @@ def test_runtime_loop_opens_paper_position_from_real_signal(tmp_path):
     summary = read_json(run_dir / "daily_summary.json", default={})
     positions = read_json(run_dir / "positions.json", default={})
     assert summary["runtime_signal_origin"] == "entry_candidates"
-    assert summary["runtime_origin_tier"] == "canonical"
+    assert summary["runtime_origin_tier"] == "fallback"
     assert summary["runtime_pipeline_status"] == "ok"
     assert summary["total_opened"] == 1
     assert positions["open_positions"][0]["token_address"] == "SoReal111"

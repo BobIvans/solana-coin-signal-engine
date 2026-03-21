@@ -6,9 +6,15 @@ from pathlib import Path
 from typing import Any
 
 _ALLOWED_EVENT_TYPES = {"entry_decision_made", "entry_signal"}
-_CANONICAL_ORIGINS = {"entry_candidates", "entry_events"}
+_CANONICAL_ORIGINS = {"historical_replay"}
 _PIPELINE_MANIFEST = "runtime_signal_pipeline_manifest.json"
 _DEFAULT_PRECEDENCE = (
+    {
+        "origin": "historical_replay",
+        "path": "trade_feature_matrix.jsonl",
+        "kind": "jsonl",
+        "required_fields": ("token_address", "schema_version"),
+    },
     {
         "origin": "entry_candidates",
         "path": "entry_candidates.json",
@@ -31,12 +37,6 @@ _DEFAULT_PRECEDENCE = (
         "origin": "scored_tokens",
         "path": "scored_tokens.json",
         "kind": "json",
-        "required_fields": ("token_address",),
-    },
-    {
-        "origin": "historical_replay",
-        "path": "trade_feature_matrix.jsonl",
-        "kind": "jsonl",
         "required_fields": ("token_address",),
     },
     {
@@ -216,6 +216,7 @@ def validate_runtime_signal_inputs(
         "selected_path": selected["path"] if selected else None,
         "selected_origin_tier": selected_tier,
         "artifact_precedence": [spec["origin"] for spec in specs],
+        "canonical_truth_layer": "trade_feature_matrix.jsonl",
         "artifacts": artifacts,
         "warnings": warnings,
         "pipeline_manifest": pipeline_manifest,
@@ -270,7 +271,7 @@ def load_latest_runtime_signal_batch(
 
     batch_status = "ok" if validation["overall_status"] == "ready" else "partial"
     origin_tier = "canonical" if spec["origin"] in _CANONICAL_ORIGINS else "fallback"
-    runtime_pipeline_origin = "canonical_runtime_pipeline" if origin_tier == "canonical" and pipeline_manifest else ("fallback_loader" if origin_tier == "fallback" else "local_entry_artifact")
+    runtime_pipeline_origin = "canonical_trade_feature_matrix" if spec["origin"] == "historical_replay" else ("canonical_runtime_pipeline" if origin_tier == "canonical" and pipeline_manifest else ("fallback_loader" if origin_tier == "fallback" else "local_entry_artifact"))
     return {
         "signals": rows,
         "selected_origin": spec["origin"],
@@ -278,6 +279,7 @@ def load_latest_runtime_signal_batch(
         "batch_status": batch_status,
         "origin_tier": origin_tier,
         "runtime_pipeline_origin": runtime_pipeline_origin,
+        "canonical_truth_layer": validation.get("canonical_truth_layer"),
         "runtime_pipeline_status": pipeline_manifest.get("pipeline_status") if pipeline_manifest else None,
         "runtime_pipeline_manifest": pipeline_manifest.get("manifest_path") if pipeline_manifest else None,
         "warnings": validation.get("warnings", []),
@@ -299,6 +301,7 @@ def load_runtime_signals(
         "batch_status": batch["batch_status"],
         "origin_tier": batch.get("origin_tier"),
         "runtime_pipeline_origin": batch.get("runtime_pipeline_origin"),
+        "canonical_truth_layer": batch.get("canonical_truth_layer"),
         "runtime_pipeline_status": batch.get("runtime_pipeline_status"),
         "runtime_pipeline_manifest": batch.get("runtime_pipeline_manifest"),
         "artifacts": batch["artifacts"],

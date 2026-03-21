@@ -26,3 +26,7 @@ def test_fast_failure_target_triggers_on_early_loss_or_failure_reason():
     assert _build_target_value({"mae_pct_240s": -7.0}, "fast_failure_flag") is True
     assert _build_target_value({"exit_reason_final": "breakdown_stop"}, "fast_failure_flag") is True
     assert _build_target_value({"net_pnl_pct": 5.0, "hold_sec": 600, "mae_pct_240s": -2.0}, "fast_failure_flag") is False
+
+def test_trend_success_target_is_stable_when_only_two_signals_exist():
+    assert _build_target_value({"net_pnl_pct": 6.0, "trend_survival_15m": 0.62}, "trend_success_flag") is True
+    assert _build_target_value({"net_pnl_pct": 6.0, "trend_survival_15m": 0.10}, "trend_success_flag") is False

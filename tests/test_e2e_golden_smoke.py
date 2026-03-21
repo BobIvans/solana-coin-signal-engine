@@ -33,6 +33,8 @@ def test_e2e_golden_smoke_script_runs_and_reports_all_scenarios(tmp_path):
     assert summary["degraded_x"]["x_status"] == "degraded"
     assert summary["degraded_x"]["x_validation_score"] == 45
     assert summary["degraded_x"]["x_validation_delta"] == 0
+    assert summary["healthy"]["analyzer_matrix_path"].endswith("trade_feature_matrix.jsonl")
+    assert summary["partial"]["analyzer_matrix_path"].endswith("trade_feature_matrix.jsonl")
 
     for name in summary:
         for key in (

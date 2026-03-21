@@ -13,7 +13,7 @@ from analytics.score_normalizers import (
 )
 
 
-X_DEGRADED_STATES = {"degraded", "timeout", "login_required", "captcha"}
+X_DEGRADED_STATES = {"degraded", "timeout", "login_required", "captcha", "soft_ban"}
 SELL_HEAVY_BUNDLE_COMPOSITIONS = {
     "sell-only": 1.0,
     "sell_heavy": 0.75,

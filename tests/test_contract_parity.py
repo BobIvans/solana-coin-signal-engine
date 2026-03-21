@@ -180,6 +180,7 @@ def _build_repo_fixture(root: Path) -> None:
         root / "trade_feature_matrix.jsonl",
         [
             {
+                "schema_version": "trade_feature_matrix.v1",
                 "position_id": "pos_1",
                 "regime_decision": "SCALP",
                 "expected_hold_class": "seconds_to_minutes",
@@ -196,6 +197,15 @@ def _build_repo_fixture(root: Path) -> None:
                 "x_author_velocity_5m": 1.1,
                 "seller_reentry_ratio": 0.35,
                 "liquidity_shock_recovery_sec": 42,
+                "wallet_weighting_requested_mode": "off",
+                "wallet_weighting_effective_mode": "off",
+                "replay_score_source": "generic_scored_artifact_rescored",
+                "wallet_mode_parity_status": "comparable",
+                "historical_input_hash": "hash123",
+                "score_contract_version": "score_contract.v1",
+                "replay_input_origin": "historical",
+                "replay_data_status": "historical",
+                "replay_resolution_status": "resolved",
                 "regime_confidence": 0.70,
                 "bundle_tip_efficiency": 0.62,
             }

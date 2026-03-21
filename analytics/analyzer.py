@@ -291,6 +291,17 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
         as_of=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     )
     slice_group_counts = {group: len(payload) for group, payload in analyzer_slices.get("slice_groups", {}).items()}
+    required_evidence_quality_slices = [
+        "partial_evidence_trades",
+        "low_confidence_evidence_trades",
+        "evidence_conflict_trades",
+        "degraded_x_salvage_cases",
+        "linkage_risk_underperformance",
+    ]
+    available_evidence_quality_slices = sorted((analyzer_slices.get("slice_groups", {}).get("evidence_quality") or {}).keys())
+    missing_evidence_quality_slices = [
+        name for name in required_evidence_quality_slices if name not in available_evidence_quality_slices
+    ]
     append_jsonl(
         events_path,
         {
@@ -377,8 +388,12 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
         "top_negative_feature_slices": matrix_analysis.get("top_negative_feature_slices", []),
         "trade_feature_matrix_path": str(matrix_path) if matrix_path else "",
         "analyzer_slices_available": bool(analyzer_slices.get("slice_groups")),
+        "analyzer_slice_source": analyzer_slices.get("metadata", {}).get("source", "closed_positions"),
         "analyzer_slices_overview": analyzer_slices.get("coverage", {}),
         "analyzer_slices_recommendation_inputs": analyzer_slices.get("recommendation_inputs", {}),
+        "required_evidence_quality_slices": required_evidence_quality_slices,
+        "available_evidence_quality_slices": available_evidence_quality_slices,
+        "missing_evidence_quality_slices": missing_evidence_quality_slices,
         "warnings": warnings,
         "contract_version": settings.POST_RUN_CONTRACT_VERSION,
     }

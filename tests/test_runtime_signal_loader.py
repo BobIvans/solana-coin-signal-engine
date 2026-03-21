@@ -24,7 +24,7 @@ def test_loader_prefers_entry_candidates_over_lower_precedence(tmp_path):
     batch = load_latest_runtime_signal_batch(processed, stale_after_sec=None)
 
     assert batch["selected_origin"] == "entry_candidates"
-    assert batch["origin_tier"] == "canonical"
+    assert batch["origin_tier"] == "fallback"
     assert batch["selected_artifact"].endswith("entry_candidates.json")
     assert batch["signals"][0]["token_address"] == "So111"
 
@@ -75,7 +75,7 @@ def test_loader_uses_historical_replay_jsonl_when_higher_precedence_missing(tmp_
     batch = load_latest_runtime_signal_batch(processed, stale_after_sec=None)
 
     assert batch["selected_origin"] == "historical_replay"
-    assert batch["origin_tier"] == "fallback"
+    assert batch["origin_tier"] == "canonical"
     assert batch["selected_artifact"].endswith("trade_feature_matrix.jsonl")
     assert batch["signals"][0]["token_address"] == "SoReplay111"
 
@@ -123,7 +123,34 @@ def test_loader_surfaces_pipeline_manifest_for_canonical_origin(tmp_path):
 
     batch = load_latest_runtime_signal_batch(processed, stale_after_sec=None)
 
-    assert batch["origin_tier"] == "canonical"
-    assert batch["runtime_pipeline_origin"] == "canonical_runtime_pipeline"
+    assert batch["origin_tier"] == "fallback"
+    assert batch["runtime_pipeline_origin"] == "fallback_loader"
     assert batch["runtime_pipeline_status"] == "ok"
     assert batch["runtime_pipeline_manifest"].endswith("runtime_signal_pipeline_manifest.json")
+
+
+def test_loader_prefers_canonical_trade_feature_matrix_over_entry_candidates(tmp_path):
+    processed = tmp_path / "processed"
+    append_jsonl(
+        processed / "trade_feature_matrix.jsonl",
+        {
+            "schema_version": "trade_feature_matrix.v1",
+            "token_address": "SoCanonical111",
+            "decision": "ENTER",
+            "regime_decision": "SCALP",
+            "replay_input_origin": "historical",
+            "replay_data_status": "historical",
+            "replay_resolution_status": "resolved",
+            "signal_ts": "2026-03-20T00:00:00+00:00",
+        },
+    )
+    write_json(
+        processed / "entry_candidates.json",
+        {"tokens": [{"token_address": "SoFallback111", "entry_decision": "SCALP", "signal_ts": "2026-03-20T00:00:00+00:00"}]},
+    )
+
+    batch = load_latest_runtime_signal_batch(processed, stale_after_sec=None)
+
+    assert batch["selected_origin"] == "historical_replay"
+    assert batch["origin_tier"] == "canonical"
+    assert batch["signals"][0]["token_address"] == "SoCanonical111"

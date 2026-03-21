@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -115,8 +116,8 @@ def _enriched_row() -> dict:
     }
 
 
-def _build_fixture_root(root: Path) -> Path:
-    fixture_root = ensure_dir(root / "data" / "smoke" / "contract_parity_fixture")
+def _build_fixture_root(base_dir: Path) -> Path:
+    fixture_root = ensure_dir(base_dir / "contract_parity_fixture")
     ensure_dir(fixture_root / "data" / "processed")
     ensure_dir(fixture_root / "docs")
 
@@ -179,6 +180,7 @@ def _build_fixture_root(root: Path) -> Path:
         fixture_root / "trade_feature_matrix.jsonl",
         [
             {
+                "schema_version": "trade_feature_matrix.v1",
                 "position_id": "pos_1",
                 "regime_decision": "SCALP",
                 "expected_hold_class": "seconds_to_minutes",
@@ -195,6 +197,15 @@ def _build_fixture_root(root: Path) -> Path:
                 "x_author_velocity_5m": 1.1,
                 "seller_reentry_ratio": 0.35,
                 "liquidity_shock_recovery_sec": 42,
+                "wallet_weighting_requested_mode": "off",
+                "wallet_weighting_effective_mode": "off",
+                "replay_score_source": "generic_scored_artifact_rescored",
+                "wallet_mode_parity_status": "comparable",
+                "historical_input_hash": "smoke-hash-123",
+                "score_contract_version": "score_contract.v1",
+                "replay_input_origin": "historical",
+                "replay_data_status": "historical",
+                "replay_resolution_status": "resolved",
                 "regime_confidence": 0.70,
                 "bundle_tip_efficiency": 0.62,
             }
@@ -224,8 +235,12 @@ def _write_summary_md(path: Path, report: dict) -> None:
 
 
 def main() -> int:
-    smoke_dir = ensure_dir(REPO_ROOT / "data" / "smoke")
-    fixture_root = _build_fixture_root(REPO_ROOT)
+    parser = argparse.ArgumentParser(description="Deterministic smoke runner for contract parity and docs sync")
+    parser.add_argument("--base-dir", default=str(REPO_ROOT / "data" / "smoke" / "contract_parity"), help="Base directory for isolated contract parity smoke artifacts")
+    args = parser.parse_args()
+
+    smoke_dir = ensure_dir(Path(args.base_dir).expanduser().resolve())
+    fixture_root = _build_fixture_root(smoke_dir)
     report = compute_contract_parity_report(fixture_root, include_docs_sync=True)
 
     report_path = smoke_dir / "contract_parity_report.json"

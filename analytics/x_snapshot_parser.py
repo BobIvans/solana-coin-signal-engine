@@ -135,7 +135,7 @@ def aggregate_token_snapshots(token: dict[str, Any], snapshots: list[dict[str, A
     contract_mention_presence = 1 if any(card.get("has_contract_mention", False) or contract in str(card.get("text", "")) for card in cards) else 0
 
     status = "ok"
-    if parsed and all(s in {"timeout", "captcha", "login_required", "blocked", "degraded", "error"} for s in statuses):
+    if parsed and all(s in {"timeout", "captcha", "login_required", "blocked", "soft_ban", "degraded", "error"} for s in statuses):
         status = "degraded"
 
     cache_hit = any(bool(snapshot.get("cache_hit", False)) for snapshot in parsed)

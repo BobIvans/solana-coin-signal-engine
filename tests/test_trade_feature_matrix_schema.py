@@ -60,3 +60,28 @@ def test_trade_feature_matrix_schema_requires_schema_version() -> None:
     schema = json.loads(Path("schemas/trade_feature_matrix.schema.json").read_text(encoding="utf-8"))
     required = set(schema.get("required", []))
     assert "schema_version" in required
+
+
+def test_trade_feature_matrix_schema_is_closed_on_top_level() -> None:
+    schema = json.loads(Path("schemas/trade_feature_matrix.schema.json").read_text(encoding="utf-8"))
+    assert schema["additionalProperties"] is False
+
+
+def test_trade_feature_matrix_schema_exposes_canonical_runtime_replay_fields() -> None:
+    schema = json.loads(Path("schemas/trade_feature_matrix.schema.json").read_text(encoding="utf-8"))
+    props = schema["properties"]
+    for field in {
+        "token_address",
+        "decision",
+        "regime_decision",
+        "replay_input_origin",
+        "replay_data_status",
+        "replay_resolution_status",
+        "wallet_weighting_requested_mode",
+        "wallet_weighting_effective_mode",
+        "replay_score_source",
+        "wallet_mode_parity_status",
+        "historical_input_hash",
+        "score_contract_version",
+    }:
+        assert field in props

@@ -44,6 +44,23 @@ _EXCLUDED_FEATURES = {
     "outcome_price_path",
 }
 
+_LEAKAGE_EXCLUDED_FEATURES = {
+    "net_pnl_pct",
+    "gross_pnl_pct",
+    "hold_sec",
+    "exit_reason_final",
+    "mfe_pct",
+    "mae_pct",
+    "mfe_pct_240s",
+    "mae_pct_240s",
+    "trend_survival_15m",
+    "trend_survival_60m",
+    "time_to_first_profit_sec",
+    "exit_decision",
+    "exit_flags",
+    "exit_warnings",
+}
+
 
 class FeatureMatrixLoadError(ValueError):
     """Raised when a feature matrix cannot be analyzed safely."""
@@ -227,8 +244,21 @@ def _infer_feature_names(rows: list[dict[str, Any]]) -> list[str]:
     names: set[str] = set()
     for row in rows:
         names.update(row.keys())
-    candidates = [name for name in names if name not in _EXCLUDED_FEATURES and feature_group_for_name(name) != "meta_features"]
+    candidates = [
+        name
+        for name in names
+        if name not in _EXCLUDED_FEATURES
+        and name not in _LEAKAGE_EXCLUDED_FEATURES
+        and feature_group_for_name(name) not in {"meta_features", "outcome_only_fields"}
+    ]
     return sorted(candidates)
+
+
+def _excluded_feature_names(rows: list[dict[str, Any]]) -> list[str]:
+    names: set[str] = set()
+    for row in rows:
+        names.update(row.keys())
+    return sorted(name for name in names if name in _LEAKAGE_EXCLUDED_FEATURES)
 
 
 
@@ -433,6 +463,7 @@ def compute_offline_feature_importance(
         raise FeatureMatrixLoadError("Cannot compute importance from an empty matrix payload")
 
     feature_names = _infer_feature_names(rows)
+    excluded_feature_names = _excluded_feature_names(rows)
     selected_targets = target_names or list(TARGET_DEFINITIONS)
     results: list[dict[str, Any]] = []
     target_definitions: list[dict[str, Any]] = []
@@ -500,6 +531,7 @@ def compute_offline_feature_importance(
         ],
         "target_definitions": target_definitions,
         "targets": results,
+        "excluded_feature_names": excluded_feature_names,
         "warnings": sorted(set(overall_warnings)),
         "caveats": [
             "Offline-only association analysis; these rankings are not causal proof.",
@@ -529,6 +561,7 @@ def summarize_feature_importance(importance_payload: dict[str, Any]) -> str:
         f"- usable rows: {importance_payload.get('input_artifact', {}).get('row_count', 0)}",
         f"- excluded rows: {importance_payload.get('input_artifact', {}).get('excluded_row_count', 0)}",
         f"- malformed rows: {importance_payload.get('input_artifact', {}).get('malformed_row_count', 0)}",
+        f"- excluded outcome fields: {', '.join(importance_payload.get('excluded_feature_names', [])) or 'none'}",
         "",
     ]
 

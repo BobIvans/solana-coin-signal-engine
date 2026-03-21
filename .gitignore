@@ -6,3 +6,17 @@ data/processed/entry_candidates.json
 data/smoke/linkage_events.jsonl
 data/smoke/linkage_score.smoke.json
 data/smoke/linkage_status.json
+*.rej
+FETCH_HEAD
+pr-*.patch
+pr-*-git.patch
+
+# Generated smoke outputs
+data/smoke/contract_parity_fixture/
+data/smoke/contract_parity_report.json
+data/smoke/contract_parity_summary.md
+data/smoke/historical_replay_smoke/
+data/smoke/historical_replay_summary.json
+data/smoke/historical_replay_summary.md
+data/smoke/historical_trade_feature_matrix.jsonl
+data/smoke/runtime_signal/

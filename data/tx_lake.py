@@ -136,6 +136,7 @@ def get_tx_lake_status(
         "tx_batch_record_count": int(payload.get("tx_batch_record_count") or payload.get("record_count") or 0),
         "tx_batch_fetched_at": payload.get("tx_batch_fetched_at") or payload.get("fetched_at"),
         "tx_batch_normalized_at": payload.get("tx_batch_normalized_at") or payload.get("normalized_at"),
+        "contract_version": payload.get("contract_version"),
     }
 def list_tx_lake_batches(
     *,
@@ -165,6 +166,7 @@ def list_tx_lake_batches(
                 "tx_batch_status": payload.get("tx_batch_status") or payload.get("batch_status"),
                 "tx_batch_freshness": payload.get("tx_batch_freshness") or payload.get("freshness_status"),
                 "tx_batch_record_count": int(payload.get("tx_batch_record_count") or payload.get("record_count") or 0),
+                "contract_version": payload.get("contract_version"),
             }
         )
     return summaries

@@ -26,6 +26,7 @@ def build_manifest(config: dict[str, Any], args: Any) -> dict[str, Any]:
         "x_mode": str(config.get("x_mode", {}).get("status", "degraded")),
         "x_validation_score_baseline": int(config.get("x_mode", {}).get("baseline_score", 45)),
         "wallet_weighting": bool(args.wallet_weighting == "on"),
+        "artifact_truth_layer": "trade_feature_matrix.jsonl",
         "created_at": _utc_now(),
     }
 

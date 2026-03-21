@@ -164,3 +164,11 @@ python scripts/analyzer_slices_smoke.py
 ```
 
 This writes smoke artifacts under `data/smoke/` so the richer slice output can be inspected without replaying a full run.
+
+## canonical matrix contract
+
+Analyzer slices are expected to operate on canonical `trade_feature_matrix.jsonl` rows. Legacy JSON fixtures can exist for compatibility, but they are not the preferred operational contract.
+
+## Offline ML boundary
+
+Analyzer diagnostics may summarize post-trade outcome fields, but offline ML / feature-importance must not feed those same outcome-only columns back into the feature space. `trade_feature_matrix.jsonl` is the canonical input surface, but not every matrix column is an allowed offline feature.

@@ -23,8 +23,8 @@ def test_feature_groups_map_expected_prefixes():
     assert feature_group_for_name("wallet_weighting") == "wallet_features"
     assert feature_group_for_name("x_author_velocity_5m") == "x_features"
     assert feature_group_for_name("regime_confidence") == "regime_features"
-    assert feature_group_for_name("hold_sec") == "exit_features"
-    assert feature_group_for_name("linkage_risk_score") == "risk_features"
+    assert feature_group_for_name("hold_sec") == "outcome_only_fields"
+    assert feature_group_for_name("linkage_risk_score") == "linkage_features"
     assert feature_group_for_name("liquidity_usd") == "friction_features"
     grouped = group_features(["bundle_count_first_60s", "cluster_concentration_ratio"])
     assert grouped["bundle_features"] == ["bundle_count_first_60s"]

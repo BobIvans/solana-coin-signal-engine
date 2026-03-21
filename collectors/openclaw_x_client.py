@@ -9,9 +9,11 @@ import subprocess
 import threading
 import time
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from config.settings import load_settings
+from src.promotion.cooldowns import normalize_x_error_type, register_x_error
 from utils.cache import cache_get, cache_set
 from utils.clock import utc_now_iso
 from utils.io import append_jsonl
@@ -19,7 +21,8 @@ from utils.io import append_jsonl
 _GLOBAL_SEMAPHORE = threading.Semaphore(2)
 
 
-def classify_x_error(exc: Exception | dict[str, Any]) -> str:
+
+def classify_x_error(exc: Exception | dict[str, Any] | str) -> str:
     text = str(exc).lower()
     if isinstance(exc, dict):
         text = f"{exc.get('error_code', '')} {exc.get('error_detail', '')}".lower()
@@ -30,21 +33,36 @@ def classify_x_error(exc: Exception | dict[str, Any]) -> str:
         return "login_required"
     if "timeout" in text:
         return "timeout"
-    if "blocked" in text or "soft-ban" in text or "429" in text:
-        return "blocked"
+    if "blocked" in text or "soft-ban" in text or "soft ban" in text or "429" in text or "rate limit" in text:
+        return "soft_ban"
     return "error"
+
 
 
 def _event(event_path: str, event: str, payload: dict[str, Any]) -> None:
     append_jsonl(event_path, {"ts": utc_now_iso(), "event": event, **payload})
 
 
+
 def _cache_ttl_for_status(settings, status: str) -> int:
+    status = normalize_x_error_type(status)
     if status == "login_required":
         return 60
-    if status in {"captcha", "timeout", "blocked"}:
+    if status in {"captcha", "timeout", "soft_ban", "degraded", "error"}:
         return 90
     return settings.OPENCLAW_X_CACHE_TTL_SEC
+
+
+
+def _register_cooldown(snapshot: dict[str, Any], *, state: dict | None, config: dict | None) -> None:
+    if state is None or not isinstance(config, dict):
+        return
+    error_code = normalize_x_error_type(str(snapshot.get("error_code") or snapshot.get("x_status") or ""))
+    if error_code in {"captcha", "timeout", "soft_ban"}:
+        event = register_x_error(error_code, state, config)
+        if event:
+            snapshot["cooldown_event"] = event
+
 
 
 def fetch_single_query(query_obj: dict[str, Any]) -> dict[str, Any]:
@@ -79,7 +97,7 @@ def fetch_single_query(query_obj: dict[str, Any]) -> dict[str, Any]:
             "error_detail": "openclaw cli not found or LOCAL_OPENCLAW_ONLY=false",
             "cache_hit": False,
         }
-        cache_set("x", cache_key, snapshot)
+        cache_set("x", cache_key, snapshot, ttl_sec=_cache_ttl_for_status(settings, snapshot["x_status"]))
         _event(events_path, "x_query_failed", {"token_address": token_address, "query_type": query_type, "error_code": "openclaw_unavailable", "attempt": 1})
         return snapshot
 
@@ -161,24 +179,63 @@ def fetch_single_query(query_obj: dict[str, Any]) -> dict[str, Any]:
         }
         _event(events_path, "x_query_failed", {"token_address": token_address, "query_type": query_type, "error_code": error_code, "attempt": 1})
 
-    cache_set("x", cache_key, snapshot)
+    cache_set("x", cache_key, snapshot, ttl_sec=_cache_ttl_for_status(settings, snapshot.get("x_status", "error")))
     return snapshot
 
 
-def fetch_x_snapshots(token: dict[str, Any]) -> list[dict[str, Any]]:
+
+def _safe_failed_snapshot(token_address: str, query_obj: dict[str, Any], exc: Exception) -> dict[str, Any]:
+    error_code = classify_x_error(exc)
+    return {
+        "token_address": token_address,
+        "query": str(query_obj.get("query") or ""),
+        "query_type": str(query_obj.get("query_type") or "unknown"),
+        "fetched_at": utc_now_iso(),
+        "x_status": error_code,
+        "page_url": "",
+        "posts_visible": 0,
+        "authors_visible": [],
+        "cards": [],
+        "error_code": error_code,
+        "error_detail": str(exc)[:300],
+        "cache_hit": False,
+    }
+
+
+
+def fetch_x_snapshots(token: dict[str, Any], *, state: dict | None = None, config: dict | None = None) -> list[dict[str, Any]]:
     from collectors.x_query_builder import build_queries
 
     settings = load_settings()
     queries = build_queries(token)[: settings.OPENCLAW_X_QUERY_MAX]
+    token_address = str(token.get("token_address", "") or "")
     token_queries = [
-        {**q, "token_address": token.get("token_address", ""), "events_path": str(settings.PROCESSED_DATA_DIR / "x_validation_events.jsonl")}
+        {**q, "token_address": token_address, "events_path": str(settings.PROCESSED_DATA_DIR / "x_validation_events.jsonl")}
         for q in queries
     ]
 
-    snapshots: list[dict[str, Any]] = []
-    with _GLOBAL_SEMAPHORE:
-        for query_obj in token_queries:
-            snapshots.append(fetch_single_query(query_obj))
-            time.sleep(random.uniform(0.05, 0.2))
+    operational_state = state if state is not None else token.get("promotion_state")
+    operational_config = config if config is not None else token.get("promotion_config")
 
-    return snapshots
+    max_workers = max(1, int(settings.OPENCLAW_X_TOKEN_MAX_CONCURRENCY or 1))
+    snapshots: list[dict[str, Any] | None] = [None] * len(token_queries)
+
+    def _worker(index: int, query_obj: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        with _GLOBAL_SEMAPHORE:
+            time.sleep(random.uniform(0.05, 0.2))
+            return index, fetch_single_query(query_obj)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(_worker, index, query_obj) for index, query_obj in enumerate(token_queries)]
+        for future in futures:
+            try:
+                index, snapshot = future.result()
+            except Exception as exc:  # noqa: BLE001
+                index = 0
+                query_obj = token_queries[0] if token_queries else {"query_type": "unknown", "query": ""}
+                snapshot = _safe_failed_snapshot(token_address, query_obj, exc)
+            _register_cooldown(snapshot, state=operational_state if isinstance(operational_state, dict) else None, config=operational_config if isinstance(operational_config, dict) else None)
+            if 0 <= index < len(snapshots):
+                snapshots[index] = snapshot
+
+    return [snapshot for snapshot in snapshots if isinstance(snapshot, dict)]

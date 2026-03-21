@@ -15,6 +15,7 @@ def _has_partial_evidence(token_ctx: dict) -> bool:
 
 def route_score(token_ctx: dict, score_ctx: dict, settings: Any) -> dict:
     final_score = float(score_ctx.get("final_score") or 0.0)
+    partial_review_score = float(score_ctx.get("partial_review_score") or final_score)
     warnings: list[str] = []
     route = "IGNORE"
 
@@ -56,7 +57,7 @@ def route_score(token_ctx: dict, score_ctx: dict, settings: Any) -> dict:
 
     downgrade = False
     if route == "ENTRY_CANDIDATE":
-        if str(token_ctx.get("x_status") or "") in {"degraded", "timeout", "login_required", "captcha"}:
+        if str(token_ctx.get("x_status") or "") in {"degraded", "timeout", "login_required", "captcha", "soft_ban"}:
             route = "WATCHLIST"
             downgrade = True
             warnings.append("entry_downgraded_x_degraded")
@@ -80,7 +81,8 @@ def route_score(token_ctx: dict, score_ctx: dict, settings: Any) -> dict:
         and not dev_sell_hard
         and not critical_missing
         and _has_partial_evidence(token_ctx)
-        and final_score >= (watch_threshold - partial_review_buffer)
+        and final_score < watch_threshold
+        and partial_review_score >= (watch_threshold - partial_review_buffer)
     )
     if partial_review_allowed:
         route = "WATCHLIST"

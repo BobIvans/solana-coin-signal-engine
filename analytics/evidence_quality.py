@@ -92,7 +92,7 @@ def derive_evidence_quality(
 
     if x_validation_score is not None:
         x_quality = _clamp(x_validation_score / 100.0)
-        if x_status == "degraded":
+        if x_status in {"degraded", "soft_ban"}:
             x_quality *= 0.7
         elif x_status in {"missing", "error", "unknown"}:
             x_quality *= 0.5
@@ -166,7 +166,7 @@ def derive_evidence_quality(
         warnings.append("limited_evidence_coverage")
     if evidence_quality_score < 0.5:
         warnings.append("low_evidence_quality")
-    if x_status == "degraded":
+    if x_status in {"degraded", "soft_ban"}:
         warnings.append("x_status_degraded")
     if continuation_status in _WEAK_STATUSES:
         warnings.append("continuation_support_weak_or_partial")
