@@ -164,6 +164,8 @@ def test_run_post_run_analysis_with_matrix_adds_matrix_sections(tmp_path):
 
     assert summary["matrix_analysis_available"] is True
     assert summary["matrix_row_count"] == 1
+    assert summary["trade_feature_matrix_path"].endswith("trade_feature_matrix.jsonl")
+    assert summary["analyzer_slice_source"] == "trade_feature_matrix"
     assert "creator_in_cluster_flag:true" in summary["pattern_expectancy_slices"]
     assert summary["trend_failure_summary"]["count"] == 1
     assert any(rec["type"].startswith("matrix_") for rec in recommendations["recommendations"])
