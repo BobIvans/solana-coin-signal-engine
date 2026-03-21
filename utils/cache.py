@@ -25,11 +25,12 @@ class SimpleTTLCache:
             return None
         return value
 
-    def set(self, key: str, value: Any) -> None:
+    def set(self, key: str, value: Any, *, ttl: int | None = None) -> None:
         if len(self._store) >= self.maxsize:
             oldest = next(iter(self._store))
             self._store.pop(oldest, None)
-        self._store[key] = (time.time() + self.ttl, value)
+        resolved_ttl = self.ttl if ttl is None else max(int(ttl), 0)
+        self._store[key] = (time.time() + resolved_ttl, value)
 
     def __len__(self) -> int:
         self._cleanup()
@@ -54,8 +55,8 @@ def cache_get(cache_name: str, key: str) -> Any:
     return _CACHES[cache_name].get(key)
 
 
-def cache_set(cache_name: str, key: str, value: Any) -> None:
-    _CACHES[cache_name].set(key, value)
+def cache_set(cache_name: str, key: str, value: Any, *, ttl_sec: int | None = None) -> None:
+    _CACHES[cache_name].set(key, value, ttl=ttl_sec)
 
 
 def cache_stats() -> dict[str, dict[str, int]]:

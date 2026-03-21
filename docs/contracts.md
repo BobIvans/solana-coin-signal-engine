@@ -371,3 +371,9 @@ Fresh replay summary / manifest payloads and replay-emitted signal, trade, and `
 - `wallet_mode_parity_status`
 - `score_contract_version`
 - `historical_input_hash`
+
+## PR-INFRA-1 contract notes
+
+- `tx_batch.contract_version` is part of freshness policy. Cache entries with a contract-version mismatch must be treated as `refresh_required`, even when TTL has not expired.
+- Historical replay price context may be supplied either as standalone `price_paths.json(.l)` artifacts or as embedded `price_paths` arrays inside chain-backfill rows.
+- X provider error taxonomy is canonicalized to `captcha`, `timeout`, `soft_ban`, `login_required`, `error`, with legacy `blocked` normalized before cooldown logic runs.

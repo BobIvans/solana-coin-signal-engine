@@ -10,10 +10,11 @@ _JSONL_FILE_NAMES = {
     "signals": ["signals.jsonl", "signal_events.jsonl", "entry_events.jsonl"],
     "trades": ["trades.jsonl", "trade_events.jsonl"],
     "positions": ["positions.json"],
-    "price_paths": ["price_paths.json", "price_paths.jsonl", "lifecycle_observations.jsonl"],
+    "price_paths": ["price_paths.json", "price_paths.jsonl", "lifecycle_observations.jsonl", "chain_backfill.json", "chain_backfill.jsonl"],
     "universe": ["universe.json", "universe.jsonl", "scored_tokens.json"],
 }
 _REQUIRED_TOKEN_KEY = "token_address"
+
 
 
 def _ensure_list(payload: Any) -> list[Any]:
@@ -26,8 +27,10 @@ def _ensure_list(payload: Any) -> list[Any]:
     return []
 
 
+
 def _read_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
+
 
 
 def _read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -42,6 +45,7 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
             row.setdefault("_source_line", line_no)
             rows.append(row)
     return rows
+
 
 
 def _load_file(path: Path) -> list[dict[str, Any]]:
@@ -59,6 +63,7 @@ def _load_file(path: Path) -> list[dict[str, Any]]:
     return output
 
 
+
 def _resolve_artifact_path(artifact_dir: Path, explicit_path: str | Path | None, candidates: list[str]) -> Path | None:
     if explicit_path:
         path = Path(explicit_path)
@@ -70,11 +75,13 @@ def _resolve_artifact_path(artifact_dir: Path, explicit_path: str | Path | None,
     return None
 
 
+
 def _scored_mode_candidates(wallet_weighting: str | None) -> list[str]:
     mode = str(wallet_weighting or "").strip().lower()
     if mode in {"off", "shadow", "on"}:
         return [f"scored_tokens.{mode}.jsonl", f"scored_tokens.{mode}.json", *_GENERIC_SCORED_FILE_NAMES]
     return list(_GENERIC_SCORED_FILE_NAMES)
+
 
 
 def _resolve_scored_artifact_path(
@@ -95,14 +102,17 @@ def _resolve_scored_artifact_path(
     return None, "missing"
 
 
+
 def _canonical_token(row: dict[str, Any]) -> str | None:
     token_address = row.get("token_address") or row.get("mint") or row.get("address")
     return str(token_address) if token_address else None
 
 
+
 def _canonical_pair(row: dict[str, Any]) -> str | None:
     pair_address = row.get("pair_address") or row.get("pool_address") or row.get("pair")
     return str(pair_address) if pair_address else None
+
 
 
 def _normalize_price_path_row(row: dict[str, Any]) -> dict[str, Any]:
@@ -111,12 +121,25 @@ def _normalize_price_path_row(row: dict[str, Any]) -> dict[str, Any]:
     normalized["pair_address"] = _canonical_pair(row)
     observations = row.get("price_path") or row.get("observations") or row.get("lifecycle_path") or []
     normalized["price_path"] = observations if isinstance(observations, list) else []
+    normalized["truncated"] = bool(row.get("truncated"))
+    normalized["missing"] = bool(row.get("missing"))
+    normalized["price_path_status"] = row.get("price_path_status")
     return normalized
+
+
+
+def _price_paths_have_observations(price_paths: list[dict[str, Any]]) -> bool:
+    for row in price_paths:
+        observations = row.get("price_path") if isinstance(row, dict) else None
+        if isinstance(observations, list) and observations:
+            return True
+    return False
+
 
 
 def validate_replay_inputs(loaded_inputs: dict[str, Any]) -> dict[str, Any]:
     warnings = list(loaded_inputs.get("warnings", []))
-    malformed_rows = 0
+    malformed_rows = sum(1 for warning in warnings if "missing_token_address" in str(warning))
     token_status: dict[str, dict[str, Any]] = {}
 
     for token, payload in loaded_inputs.get("token_inputs", {}).items():
@@ -130,9 +153,9 @@ def validate_replay_inputs(loaded_inputs: dict[str, Any]) -> dict[str, Any]:
 
         if not (scored or entries or signals or trades or positions):
             missing.append("candidate_context")
-        if not price_paths:
+        if not price_paths or not _price_paths_have_observations(price_paths):
             missing.append("price_path")
-        elif any(bool(path.get("truncated")) for path in price_paths):
+        elif any(bool(path.get("truncated")) or str(path.get("price_path_status") or "") == "partial" for path in price_paths):
             missing.append("truncated_price_path")
 
         if payload.get("malformed_rows"):
@@ -160,6 +183,7 @@ def validate_replay_inputs(loaded_inputs: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+
 def load_replay_universe(*, artifact_dir: str | Path, loaded_files: dict[str, Path] | None = None) -> list[dict[str, Any]]:
     base = Path(artifact_dir)
     path = (loaded_files or {}).get("universe") or _resolve_artifact_path(base, None, _JSONL_FILE_NAMES["universe"])
@@ -177,18 +201,26 @@ def load_replay_universe(*, artifact_dir: str | Path, loaded_files: dict[str, Pa
     return [universe[key] for key in sorted(universe)]
 
 
+
 def load_replay_price_paths(*, artifact_dir: str | Path, loaded_files: dict[str, Path] | None = None) -> dict[str, list[dict[str, Any]]]:
     base = Path(artifact_dir)
     path = (loaded_files or {}).get("price_paths") or _resolve_artifact_path(base, None, _JSONL_FILE_NAMES["price_paths"])
     rows = _load_file(path) if path else []
     by_token: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
-        normalized = _normalize_price_path_row(row)
-        token_address = normalized.get("token_address")
-        if not token_address:
-            continue
-        by_token.setdefault(token_address, []).append(normalized)
+        nested = row.get("price_paths") if isinstance(row.get("price_paths"), list) else None
+        candidate_rows = nested if nested else [row]
+        for candidate in candidate_rows:
+            merged = dict(row)
+            if isinstance(candidate, dict):
+                merged.update(candidate)
+            normalized = _normalize_price_path_row(merged)
+            token_address = normalized.get("token_address")
+            if not token_address:
+                continue
+            by_token.setdefault(token_address, []).append(normalized)
     return by_token
+
 
 
 def load_replay_inputs(
@@ -218,93 +250,76 @@ def load_replay_inputs(
     token_inputs: dict[str, dict[str, Any]] = {}
     warnings: list[str] = []
 
-    def add_row(bucket: str, row: dict[str, Any], *, create_missing: bool = True) -> None:
+    def ensure_token(token_address: str, row: dict[str, Any] | None = None) -> dict[str, Any]:
+        token_address = str(token_address)
+        record = token_inputs.setdefault(
+            token_address,
+            {
+                "token_address": token_address,
+                "pair_address": _canonical_pair(row or {}) if row else None,
+                "scored_rows": [],
+                "entry_candidates": [],
+                "signals": [],
+                "trades": [],
+                "positions": [],
+                "price_paths": [],
+                "warnings": [],
+                "malformed_rows": 0,
+            },
+        )
+        if row and not record.get("pair_address"):
+            record["pair_address"] = _canonical_pair(row)
+        return record
+
+    scored_rows = _load_file(scored_rows_path) if scored_rows_path else []
+    for row in scored_rows:
         token_address = _canonical_token(row)
         if not token_address:
-            malformed_key = f"malformed::{bucket}::{len(token_inputs)}"
-            token_inputs.setdefault(malformed_key, {
-                "token_address": None,
-                "warnings": [],
-                "malformed_rows": 0,
-                "scored_rows": [],
-                "entry_candidates": [],
-                "signals": [],
-                "trades": [],
-                "positions": [],
-                "price_paths": [],
-            })
-            token_inputs[malformed_key]["malformed_rows"] += 1
-            token_inputs[malformed_key]["warnings"].append(f"missing_token_address:{bucket}")
-            warnings.append(f"missing_token_address:{bucket}")
-            return
-        if not create_missing and token_address not in token_inputs:
-            return
-        record = token_inputs.setdefault(
-            token_address,
-            {
-                "token_address": token_address,
-                "pair_address": _canonical_pair(row),
-                "warnings": [],
-                "malformed_rows": 0,
-                "scored_rows": [],
-                "entry_candidates": [],
-                "signals": [],
-                "trades": [],
-                "positions": [],
-                "price_paths": [],
-            },
-        )
-        if record.get("pair_address") is None:
-            record["pair_address"] = _canonical_pair(row)
-        record[bucket].append(row)
-
-    for bucket in ("entry_candidates", "signals", "trades", "positions"):
-        path = loaded_files[bucket]
-        if not path:
+            warnings.append(f"missing_token_address:scored_rows:{row.get('_source_file')}")
             continue
-        for row in _load_file(path):
-            add_row(bucket, row, create_missing=True)
+        ensure_token(token_address, row)["scored_rows"].append(row)
 
-    path = loaded_files["scored_rows"]
-    if path:
-        for row in _load_file(path):
-            add_row("scored_rows", row, create_missing=False)
+    for key in ("entry_candidates", "signals", "trades", "positions"):
+        path = loaded_files.get(key)
+        rows = _load_file(path) if path else []
+        for row in rows:
+            token_address = _canonical_token(row)
+            if not token_address:
+                warnings.append(f"missing_token_address:{key}:{row.get('_source_file')}")
+                continue
+            ensure_token(token_address, row)[key].append(row)
 
     for token_address, rows in load_replay_price_paths(artifact_dir=artifact_dir, loaded_files=loaded_files).items():
-        record = token_inputs.setdefault(
-            token_address,
-            {
-                "token_address": token_address,
-                "pair_address": None,
-                "warnings": [],
-                "malformed_rows": 0,
-                "scored_rows": [],
-                "entry_candidates": [],
-                "signals": [],
-                "trades": [],
-                "positions": [],
-                "price_paths": [],
-            },
-        )
-        record["price_paths"].extend(rows)
+        ensure_token(token_address)["price_paths"].extend(rows)
 
     universe = load_replay_universe(artifact_dir=artifact_dir, loaded_files=loaded_files)
     for row in universe:
-        token_address = row["token_address"]
-        if token_address not in token_inputs:
+        token_address = _canonical_token(row)
+        if not token_address:
             continue
-        if token_inputs[token_address].get("pair_address") is None:
-            token_inputs[token_address]["pair_address"] = row.get("pair_address")
+        ensure_token(token_address, row)
 
-    payload = {
+    for token_address, payload in token_inputs.items():
+        if not payload.get("pair_address"):
+            payload["pair_address"] = next(
+                (
+                    _canonical_pair(item)
+                    for key in ("scored_rows", "entry_candidates", "signals", "trades", "positions", "price_paths")
+                    for item in payload.get(key, [])
+                    if _canonical_pair(item)
+                ),
+                None,
+            )
+
+    loaded = {
         "artifact_dir": str(artifact_dir),
-        "loaded_files": {key: str(path) for key, path in loaded_files.items() if path},
-        "token_inputs": dict(sorted(token_inputs.items(), key=lambda item: item[0])),
-        "universe": universe,
-        "warnings": list(dict.fromkeys(warnings)),
+        "loaded_files": {key: str(value) if value else None for key, value in loaded_files.items()},
         "wallet_weighting_requested_mode": str(wallet_weighting or "off"),
         "scored_input_file": str(scored_rows_path) if scored_rows_path else None,
         "scored_input_kind": scored_path_kind,
+        "token_inputs": token_inputs,
+        "universe": universe,
+        "warnings": warnings,
     }
-    payload["validation"] = validate_replay_inputs(payload)
-    return payload
+    loaded["validation"] = validate_replay_inputs(loaded)
+    return loaded

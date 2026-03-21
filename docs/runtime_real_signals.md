@@ -90,3 +90,10 @@ python scripts/runtime_signal_smoke.py
 ```
 
 The smoke script writes outputs under `data/smoke/runtime_signal/` and `runs/runtime_signal_smoke/`.
+
+## PR-INFRA-1 provider-safe notes
+
+- X/OpenClaw failures now use a canonical cooldown taxonomy: `captcha`, `timeout`, and `soft_ban` (legacy `blocked` is normalized to `soft_ban`).
+- `fetch_x_snapshots()` no longer holds the whole token batch behind a single blocking section; query fetches run with bounded per-query concurrency.
+- Status-specific cache TTL is applied at write time so degraded X states cool down faster than healthy snapshots.
+- Operational callers can pass promotion state/config through the token payload (or explicit args) so X failures actually activate cooldown policy end-to-end.

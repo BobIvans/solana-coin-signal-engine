@@ -33,3 +33,28 @@ def test_loader_reads_price_path_rows_without_inventing_data():
 
     assert "tok_partial" in price_paths
     assert price_paths["tok_partial"][0]["price_path"][-1]["price"] == 1.09
+
+
+
+def test_loader_supports_embedded_backfill_price_paths(tmp_path):
+    import json
+
+    row = {
+        "token_address": "tok_backfill",
+        "pair_address": "pair_backfill",
+        "price_paths": [
+            {
+                "token_address": "tok_backfill",
+                "pair_address": "pair_backfill",
+                "price_path": [
+                    {"offset_sec": 0, "price": 1.0, "timestamp": "2026-03-10T12:00:00Z"},
+                    {"offset_sec": 60, "price": 1.1, "timestamp": "2026-03-10T12:01:00Z"},
+                ],
+            }
+        ],
+    }
+    (tmp_path / "chain_backfill.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+    price_paths = load_replay_price_paths(artifact_dir=tmp_path)
+
+    assert price_paths["tok_backfill"][0]["price_path"][1]["price"] == 1.1

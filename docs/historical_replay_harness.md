@@ -122,3 +122,9 @@ Replay now resolves scored artifacts in a mode-aware order (`scored_tokens.<mode
 
 Evidence-quality score penalties (`partial_evidence_penalty`, `low_confidence_evidence_penalty`) are now propagated into the replay trade feature matrix alongside existing evidence-quality summary fields.
 >>>>>>> origin/main
+
+## Historical price-path collection
+
+- Historical replay no longer assumes `price_paths` magically exist. Backfill can now emit replay-usable `price_paths` directly, including embedded `price_paths` inside `chain_backfill.jsonl` rows.
+- Missing price history must stay explicit (`missing=true`, empty `price_path`) and truncated paths must stay explicit (`truncated=true`, `price_path_status=partial`).
+- The replay loader treats backfill-emitted price paths as canonical historical context when they are present.

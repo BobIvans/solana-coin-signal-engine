@@ -56,7 +56,7 @@ def route_score(token_ctx: dict, score_ctx: dict, settings: Any) -> dict:
 
     downgrade = False
     if route == "ENTRY_CANDIDATE":
-        if str(token_ctx.get("x_status") or "") in {"degraded", "timeout", "login_required", "captcha"}:
+        if str(token_ctx.get("x_status") or "") in {"degraded", "timeout", "login_required", "captcha", "soft_ban"}:
             route = "WATCHLIST"
             downgrade = True
             warnings.append("entry_downgraded_x_degraded")

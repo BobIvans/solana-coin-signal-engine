@@ -117,3 +117,7 @@ python scripts/offline_feature_importance_smoke.py
 ```
 
 The smoke path uses fixture-backed replay matrix data, writes offline artifacts, and prints a compact JSON summary.
+
+## Historical price context reminder
+
+Offline feature analysis should treat replay price paths as externally collected historical context. Missing or truncated price history must remain explicit in artifacts instead of being reconstructed or silently invented downstream.

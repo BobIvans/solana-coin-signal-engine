@@ -73,6 +73,29 @@ class SolanaRpcClient:
         value = result.get("value")
         return value if isinstance(value, dict) else None
 
+    def get_program_accounts(self, program_id: str, *, filters: list[dict[str, Any]] | None = None, encoding: str = "jsonParsed") -> list[dict[str, Any]]:
+        params: list[Any] = [program_id, {"encoding": encoding, "commitment": self.commitment}]
+        if filters:
+            params[1]["filters"] = filters
+        result = self._rpc("getProgramAccounts", params)
+        return result if isinstance(result, list) else []
+
+    def get_mint_holder_owners(self, mint: str) -> list[str]:
+        rows = self.get_program_accounts(
+            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+            filters=[{"dataSize": 165}, {"memcmp": {"offset": 0, "bytes": mint}}],
+        )
+        owners: list[str] = []
+        for row in rows:
+            account = row.get("account") if isinstance(row, dict) else None
+            data = account.get("data") if isinstance(account, dict) else None
+            parsed = data.get("parsed") if isinstance(data, dict) else None
+            info = parsed.get("info") if isinstance(parsed, dict) else None
+            owner = str((info or {}).get("owner") or "").strip()
+            if owner and owner not in owners:
+                owners.append(owner)
+        return owners
+
     def _finalize_tx_response(
         self,
         tx_batch: dict[str, Any] | None,

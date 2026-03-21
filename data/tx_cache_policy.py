@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from data.tx_normalizer import TX_BATCH_CONTRACT_VERSION
+
 
 def _coerce_epoch(value: Any) -> int | None:
     if value in (None, ""):
@@ -39,6 +41,16 @@ def classify_tx_batch_freshness(
     batch_status = str(tx_batch.get("tx_batch_status") or tx_batch.get("batch_status") or "missing")
     if batch_status in {"missing", "malformed"}:
         return {"freshness": batch_status, "age_sec": None, "reason": f"batch_status:{batch_status}"}
+
+    contract_version = str(tx_batch.get("contract_version") or "").strip()
+    if contract_version and contract_version != TX_BATCH_CONTRACT_VERSION:
+        return {
+            "freshness": "refresh_required",
+            "age_sec": None,
+            "reason": "contract_version_mismatch",
+            "expected_contract_version": TX_BATCH_CONTRACT_VERSION,
+            "actual_contract_version": contract_version,
+        }
 
     fetched_at = _coerce_epoch(
         tx_batch.get("tx_batch_fetched_at")
@@ -101,6 +113,8 @@ def resolve_tx_fetch_mode(
             return "upstream_failed_use_stale"
         return "stale_cache_allowed" if allow_stale else "refresh_required"
     if label == "refresh_required":
+        if freshness.get("reason") == "contract_version_mismatch":
+            return "refresh_required"
         if upstream_failed and allow_stale and isinstance(tx_batch, dict) and (tx_batch.get("record_count") or tx_batch.get("tx_batch_record_count")):
             return "upstream_failed_use_stale"
         return "refresh_required"
