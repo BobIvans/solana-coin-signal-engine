@@ -222,8 +222,6 @@ These fields are aggregated token-facing summaries of matched smart-wallet famil
 
 High-level continuation semantics:
 - tx-derived continuation metrics are success-gated (`success is True`)
-- raw tx evidence presence (`continuation_available_evidence`) is distinct from usable tx-lane readiness (`continuation_inputs_status["tx"]`)
-- if all txs are failed / reverted / unknown-success, `continuation_available_evidence` should still include `"tx"`, but `continuation_inputs_status["tx"]` must be `"partial"`, not `"ready"`
 - LP/pool/router/vault/system-like actors must not silently count as organic buyers or sellers
 - ambiguous same-tx role attribution should degrade continuation honesty rather than inflate strength
 
@@ -324,8 +322,6 @@ These fields remain analysis-only in the analyzer slice layer; they are not muta
 
 Other replay/analyzer matrix columns remain additive and are reported rather than force-dropped.
 
-The operational acceptance gate treats this replay matrix as the canonical analyzer truth layer when it is present; reconstructed closed positions remain a fallback, not the preferred primary source.
-
 ### post_run_summary
 Artifact:
 - `data/processed/post_run_summary.json`
@@ -376,18 +372,12 @@ Fresh replay summary / manifest payloads and replay-emitted signal, trade, and `
 - `score_contract_version`
 - `historical_input_hash`
 
-## PR-INFRA-1 contract notes
+### runtime_replay_temporal_flow
 
-- `tx_batch.contract_version` is part of freshness policy. Cache entries with a contract-version mismatch must be treated as `refresh_required`, even when TTL has not expired.
-- Historical replay price context may be supplied either as standalone `price_paths.json(.l)` artifacts or as embedded `price_paths` arrays inside chain-backfill rows.
-- X provider error taxonomy is canonicalized to `captcha`, `timeout`, `soft_ban`, `login_required`, `error`, with legacy `blocked` normalized before cooldown logic runs.
+Operational flow must stay temporally honest across runtime, replay, and offline analysis:
 
-## canonical artifact truth layer
-
-`trade_feature_matrix.jsonl` is the canonical per-trade truth layer for replay outputs, runtime-compatible signal loading, analyzer inputs, and offline ML.
-
-Operational policy:
-- prefer `trade_feature_matrix.jsonl`
-- allow `trade_feature_matrix.json` only as an explicit legacy fallback for older local fixtures
-- runtime/replay artifacts must keep replay provenance fields aligned with matrix rows
-- schema changes must be reflected in both `schemas/*` and this contract document
+- offline ML / feature-importance inputs must exclude post-trade outcome fields
+- historical smart-wallet enrichment must not use current owner-balance RPC state as truth for past windows
+- launch-window continuation fields such as `cluster_sell_concentration_120s` and `liquidity_refill_ratio_120s` are not valid late-live exit inputs unless the hold window is still inside the launch boundary or a true `*_now` replacement exists
+- runtime paper trading state must use the canonical `positions` / `portfolio` ledger, with `open_positions` treated only as a compatibility view
+- replay `trades.jsonl` must remain analyzer-usable for closed lifecycle recovery

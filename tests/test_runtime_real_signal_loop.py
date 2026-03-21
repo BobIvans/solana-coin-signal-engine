@@ -174,3 +174,107 @@ def test_runtime_loop_does_not_self_inject_captcha_cooldown(tmp_path):
     summary = read_json(run_dir / "daily_summary.json", default={})
     assert '"event": "cooldown_started"' not in event_log
     assert summary["x_cooldown_active"] is False
+
+
+def test_runtime_loop_resume_can_close_open_position_from_refreshed_current_state(tmp_path):
+    processed = tmp_path / "processed"
+    write_json(
+        processed / "entry_candidates.json",
+        {
+            "tokens": [
+                {
+                    "signal_id": "life_1",
+                    "token_address": "SoLife111",
+                    "pair_address": "PairLife111",
+                    "entry_decision": "SCALP",
+                    "regime": "SCALP",
+                    "x_status": "healthy",
+                    "signal_ts": "2026-03-20T00:00:00+00:00",
+                    "regime_confidence": 0.9,
+                    "entry_confidence": 0.88,
+                    "recommended_position_pct": 0.4,
+                    "entry_snapshot": {"price_usd": 1.0, "x_validation_score": 82, "buy_pressure": 0.8, "volume_velocity": 4.0},
+                }
+            ]
+        },
+    )
+    config_path = _config(tmp_path, mode="expanded_paper")
+    run_id = "runtime_lifecycle"
+
+    first = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_promotion_loop.py",
+            "--config",
+            str(config_path),
+            "--mode",
+            "expanded_paper",
+            "--run-id",
+            run_id,
+            "--max-loops",
+            "1",
+            "--signals-dir",
+            str(processed),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert first.returncode == 0, first.stderr
+
+    write_json(
+        processed / "entry_candidates.json",
+        {
+            "tokens": [
+                {
+                    "signal_id": "life_1_update",
+                    "token_address": "SoLife111",
+                    "pair_address": "PairLife111",
+                    "entry_decision": "SCALP",
+                    "regime": "SCALP",
+                    "x_status": "healthy",
+                    "signal_ts": "2026-03-20T00:10:00+00:00",
+                    "regime_confidence": 0.9,
+                    "entry_confidence": 0.88,
+                    "recommended_position_pct": 0.4,
+                    "price_usd_now": 0.82,
+                    "buy_pressure_now": 0.72,
+                    "volume_velocity_now": 3.6,
+                    "x_validation_score_now": 80,
+                    "entry_snapshot": {"price_usd": 0.82, "x_validation_score": 80, "buy_pressure": 0.72, "volume_velocity": 3.6},
+                }
+            ]
+        },
+    )
+
+    second = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_promotion_loop.py",
+            "--config",
+            str(config_path),
+            "--mode",
+            "expanded_paper",
+            "--run-id",
+            run_id,
+            "--resume",
+            "--max-loops",
+            "1",
+            "--signals-dir",
+            str(processed),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert second.returncode == 0, second.stderr
+
+    run_dir = tmp_path / "runs" / run_id
+    positions = read_json(run_dir / "positions.json", default={})
+    trades = (run_dir / "trades.jsonl").read_text(encoding="utf-8")
+    summary = read_json(run_dir / "daily_summary.json", default={})
+
+    open_positions = positions["open_positions"]
+    assert '"event": "paper_buy"' in trades
+    assert ('"event": "paper_sell_full"' in trades) or ('"event": "paper_sell_partial"' in trades)
+    assert open_positions[0]["remaining_size_sol"] < open_positions[0]["position_size_sol"] or summary["open_positions"] == 0

@@ -18,6 +18,8 @@ def _to_float(value: Any, default: float = 0.0) -> float:
 def build_exit_snapshot(position_ctx: dict, current_ctx: dict) -> dict:
     entry_snapshot = dict(position_ctx.get("entry_snapshot") or {})
     deltas = compute_position_deltas(entry_snapshot, current_ctx)
+    hold_sec = int(_to_float(current_ctx.get("hold_sec"), 0.0))
+    launch_window_active = hold_sec <= 120
 
     snapshot = {
         "price_usd": _to_float(current_ctx.get("price_usd_now", current_ctx.get("price_usd"))),
@@ -44,8 +46,6 @@ def build_exit_snapshot(position_ctx: dict, current_ctx: dict) -> dict:
         "smart_wallet_hits_now",
         "market_cap_now",
         "cluster_concentration_ratio_now",
-        "cluster_sell_concentration_120s",
-        "liquidity_refill_ratio_120s",
         "seller_reentry_ratio",
         "liquidity_shock_recovery_sec",
         "net_unique_buyers_60s",
@@ -69,5 +69,14 @@ def build_exit_snapshot(position_ctx: dict, current_ctx: dict) -> dict:
     wallet_features = current_ctx.get("wallet_features") or {}
     if wallet_features.get("smart_wallet_netflow_bias") is not None:
         snapshot["smart_wallet_netflow_bias"] = wallet_features.get("smart_wallet_netflow_bias")
+
+    if launch_window_active:
+        for optional_field in ("cluster_sell_concentration_120s", "liquidity_refill_ratio_120s"):
+            if optional_field in current_ctx and current_ctx.get(optional_field) is not None:
+                snapshot[optional_field] = current_ctx.get(optional_field)
+            elif optional_field in entry_snapshot and entry_snapshot.get(optional_field) is not None:
+                snapshot[optional_field] = entry_snapshot.get(optional_field)
+
+    snapshot["launch_window_metrics_status"] = "active" if launch_window_active else "expired"
 
     return snapshot

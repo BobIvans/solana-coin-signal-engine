@@ -38,9 +38,11 @@ def _position_sizing_fields(signal_ctx: dict[str, Any]) -> dict[str, Any]:
 
 
 def ensure_state(state: dict[str, Any], settings: Any) -> dict[str, Any]:
-    if "positions" not in state:
+    if not isinstance(state.get("positions"), list):
         state["positions"] = []
-    if "portfolio" not in state:
+
+    portfolio = state.get("portfolio")
+    if not isinstance(portfolio, dict) or not portfolio or "free_capital_sol" not in portfolio:
         starting = float(settings.PAPER_STARTING_CAPITAL_SOL)
         state["portfolio"] = {
             "as_of": utc_now_iso(),
@@ -51,8 +53,8 @@ def ensure_state(state: dict[str, Any], settings: Any) -> dict[str, Any]:
             "realized_pnl_sol": 0.0,
             "unrealized_pnl_sol": 0.0,
             "equity_sol": starting,
-            "open_positions": 0,
-            "closed_positions": 0,
+            "open_positions": len([position for position in state.get("positions", []) if position.get("is_open")]),
+            "closed_positions": len([position for position in state.get("positions", []) if not position.get("is_open", True)]),
             "contract_version": settings.PAPER_CONTRACT_VERSION,
         }
     state.setdefault("next_position_seq", 1)

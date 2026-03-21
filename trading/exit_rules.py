@@ -86,6 +86,22 @@ def _setting(settings: Any, name: str, default: Any) -> Any:
     return getattr(settings, name, default)
 
 
+def _window_limited_metric(
+    position_ctx: dict[str, Any],
+    current_ctx: dict[str, Any],
+    *,
+    field: str,
+    max_hold_sec: int,
+    current_field: str | None = None,
+) -> Any:
+    hold_sec = int(_to_float(current_ctx.get("hold_sec"), default=0.0))
+    if current_field and current_field in current_ctx and current_ctx.get(current_field) is not None:
+        return current_ctx.get(current_field)
+    if hold_sec <= max_hold_sec:
+        return _current_or_entry(position_ctx, current_ctx, field)
+    return None
+
+
 def _is_sell_heavy_composition(value: Any) -> bool:
     composition = _text(value).replace('_', '-')
     return composition in _SELL_HEAVY_COMPOSITIONS
@@ -142,7 +158,16 @@ def _continuation_warning_flags(position_ctx: dict[str, Any], current_ctx: dict[
 
 
 def detect_cluster_dump(position_ctx: dict[str, Any], current_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
-    sell_concentration = _to_float(_current_or_entry(position_ctx, current_ctx, "cluster_sell_concentration_120s"), default=-1.0)
+    sell_concentration = _to_float(
+        _window_limited_metric(
+            position_ctx,
+            current_ctx,
+            field="cluster_sell_concentration_120s",
+            current_field="cluster_sell_concentration_now",
+            max_hold_sec=120,
+        ),
+        default=-1.0,
+    )
     concentration_ratio = _to_float(
         _current_or_entry(position_ctx, current_ctx, "cluster_concentration_ratio_now", "cluster_concentration_ratio")
     )
@@ -186,7 +211,13 @@ def detect_cluster_dump(position_ctx: dict[str, Any], current_ctx: dict[str, Any
 
 def detect_cluster_distribution_exit(position_ctx: dict[str, Any], current_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
     sell_concentration = _to_float(
-        _current_or_entry(position_ctx, current_ctx, "cluster_sell_concentration_120s"),
+        _window_limited_metric(
+            position_ctx,
+            current_ctx,
+            field="cluster_sell_concentration_120s",
+            current_field="cluster_sell_concentration_now",
+            max_hold_sec=120,
+        ),
         default=-1.0,
     )
     if sell_concentration < 0:
@@ -198,7 +229,16 @@ def detect_cluster_distribution_exit(position_ctx: dict[str, Any], current_ctx: 
     hard_threshold = float(
         _setting(settings, "EXIT_CLUSTER_SELL_CONCENTRATION_HARD", getattr(settings, "EXIT_CLUSTER_DUMP_HARD", 0.82))
     )
-    liquidity_refill = _to_float(_current_or_entry(position_ctx, current_ctx, "liquidity_refill_ratio_120s"), default=-1.0)
+    liquidity_refill = _to_float(
+        _window_limited_metric(
+            position_ctx,
+            current_ctx,
+            field="liquidity_refill_ratio_120s",
+            current_field="liquidity_refill_ratio_now",
+            max_hold_sec=120,
+        ),
+        default=-1.0,
+    )
     shock_recovery_sec = _to_float(_current_or_entry(position_ctx, current_ctx, "liquidity_shock_recovery_sec"), default=-1.0)
     concentration_ratio = _to_float(
         _current_or_entry(position_ctx, current_ctx, "cluster_concentration_ratio_now", "cluster_concentration_ratio")
@@ -240,7 +280,16 @@ def detect_cluster_distribution_exit(position_ctx: dict[str, Any], current_ctx: 
 
 
 def detect_failed_liquidity_refill(position_ctx: dict[str, Any], current_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
-    refill_ratio = _to_float(_current_or_entry(position_ctx, current_ctx, "liquidity_refill_ratio_120s"), default=-1.0)
+    refill_ratio = _to_float(
+        _window_limited_metric(
+            position_ctx,
+            current_ctx,
+            field="liquidity_refill_ratio_120s",
+            current_field="liquidity_refill_ratio_now",
+            max_hold_sec=120,
+        ),
+        default=-1.0,
+    )
     if refill_ratio < 0:
         return {"severity": "none", "flags": [], "warnings": []}
 
@@ -283,7 +332,16 @@ def detect_weak_reentry_exit(position_ctx: dict[str, Any], current_ctx: dict[str
 
     weak_max = float(_setting(settings, "EXIT_SELLER_REENTRY_WEAK_MAX", 0.2))
     severe_max = weak_max * 0.5
-    refill_ratio = _to_float(_current_or_entry(position_ctx, current_ctx, "liquidity_refill_ratio_120s"), default=-1.0)
+    refill_ratio = _to_float(
+        _window_limited_metric(
+            position_ctx,
+            current_ctx,
+            field="liquidity_refill_ratio_120s",
+            current_field="liquidity_refill_ratio_now",
+            max_hold_sec=120,
+        ),
+        default=-1.0,
+    )
     shock_recovery_sec = _to_float(_current_or_entry(position_ctx, current_ctx, "liquidity_shock_recovery_sec"), default=-1.0)
     secondary_warnings = _continuation_warning_flags(position_ctx, current_ctx)
 
@@ -293,7 +351,13 @@ def detect_weak_reentry_exit(position_ctx: dict[str, Any], current_ctx: dict[str
     if shock_recovery_sec >= float(_setting(settings, "EXIT_SHOCK_RECOVERY_TOO_SLOW_SEC", 180)):
         paired_weakness += 1
     if _to_float(
-        _current_or_entry(position_ctx, current_ctx, "cluster_sell_concentration_120s"),
+        _window_limited_metric(
+            position_ctx,
+            current_ctx,
+            field="cluster_sell_concentration_120s",
+            current_field="cluster_sell_concentration_now",
+            max_hold_sec=120,
+        ),
         default=0.0,
     ) >= float(_setting(settings, "EXIT_CLUSTER_SELL_CONCENTRATION_WARN", getattr(settings, "EXIT_CLUSTER_CONCENTRATION_SELL_THRESHOLD", 0.65))):
         paired_weakness += 1
@@ -322,8 +386,26 @@ def detect_shock_not_recovered_exit(position_ctx: dict[str, Any], current_ctx: d
 
     too_slow_sec = float(_setting(settings, "EXIT_SHOCK_RECOVERY_TOO_SLOW_SEC", 180))
     severe_sec = too_slow_sec * 1.5
-    refill_ratio = _to_float(_current_or_entry(position_ctx, current_ctx, "liquidity_refill_ratio_120s"), default=-1.0)
-    sell_concentration = _to_float(_current_or_entry(position_ctx, current_ctx, "cluster_sell_concentration_120s"), default=-1.0)
+    refill_ratio = _to_float(
+        _window_limited_metric(
+            position_ctx,
+            current_ctx,
+            field="liquidity_refill_ratio_120s",
+            current_field="liquidity_refill_ratio_now",
+            max_hold_sec=120,
+        ),
+        default=-1.0,
+    )
+    sell_concentration = _to_float(
+        _window_limited_metric(
+            position_ctx,
+            current_ctx,
+            field="cluster_sell_concentration_120s",
+            current_field="cluster_sell_concentration_now",
+            max_hold_sec=120,
+        ),
+        default=-1.0,
+    )
     secondary_warnings = _continuation_warning_flags(position_ctx, current_ctx)
 
     confirmations = 0
@@ -485,7 +567,16 @@ def detect_linkage_risk_exit(position_ctx: dict[str, Any], current_ctx: dict[str
     dev_buyer = _to_float(_current_or_entry(position_ctx, current_ctx, "dev_buyer_link_score_now", "dev_buyer_link_score"), default=0.0)
     shared_funder = _to_float(_current_or_entry(position_ctx, current_ctx, "shared_funder_link_score_now", "shared_funder_link_score"), default=0.0)
     cluster_dev = _to_float(_current_or_entry(position_ctx, current_ctx, "cluster_dev_link_score_now", "cluster_dev_link_score"), default=0.0)
-    sell_concentration = _to_float(_current_or_entry(position_ctx, current_ctx, "cluster_sell_concentration_120s"), default=-1.0)
+    sell_concentration = _to_float(
+        _window_limited_metric(
+            position_ctx,
+            current_ctx,
+            field="cluster_sell_concentration_120s",
+            current_field="cluster_sell_concentration_now",
+            max_hold_sec=120,
+        ),
+        default=-1.0,
+    )
     retry_now = _to_float(_current_or_entry(position_ctx, current_ctx, "bundle_failure_retry_pattern_now", "bundle_failure_retry_pattern"), default=0.0)
 
     threshold = float(_setting(settings, "EXIT_LINKAGE_RISK_HARD", getattr(settings, "EXIT_CREATOR_CLUSTER_RISK_HARD", 0.75)))

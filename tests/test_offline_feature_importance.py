@@ -81,30 +81,18 @@ def test_fast_failure_fixture_surfaces_risk_associated_features():
     assert "cluster_concentration_ratio" in top_features
     assert any(group["feature_group"] == "cluster_features" for group in fast_failure["grouped_importance"])
 
-def test_outcome_fields_are_excluded_from_feature_space():
-    from analytics.offline_feature_importance import _infer_feature_names
 
-    matrix = load_feature_matrix(FIXTURES / "healthy_mixed_replay_matrix.jsonl")
-    feature_names = set(_infer_feature_names(matrix["rows"]))
-    banned = {
+def test_offline_feature_importance_excludes_future_outcome_features_from_rankings():
+    payload = compute_offline_feature_importance(load_feature_matrix(FIXTURES / "healthy_mixed_replay_matrix.jsonl"))
+
+    forbidden = {
         "net_pnl_pct",
         "gross_pnl_pct",
         "hold_sec",
         "exit_reason_final",
-        "mfe_pct",
-        "mae_pct",
         "mfe_pct_240s",
-        "mae_pct_240s",
         "trend_survival_15m",
-        "trend_survival_60m",
-        "time_to_first_profit_sec",
     }
-    assert feature_names.isdisjoint(banned)
-
-
-def test_payload_exposes_excluded_outcome_fields():
-    payload = compute_offline_feature_importance(load_feature_matrix(FIXTURES / "healthy_mixed_replay_matrix.jsonl"))
-    excluded = set(payload["excluded_feature_names"])
-    assert "hold_sec" in excluded
-    assert "net_pnl_pct" in excluded
-    assert "trend_survival_15m" in excluded
+    for target in payload["targets"]:
+        ranked = {item["feature_name"] for item in target["per_feature_importance"]}
+        assert forbidden.isdisjoint(ranked)

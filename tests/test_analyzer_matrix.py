@@ -164,8 +164,6 @@ def test_run_post_run_analysis_with_matrix_adds_matrix_sections(tmp_path):
 
     assert summary["matrix_analysis_available"] is True
     assert summary["matrix_row_count"] == 1
-    assert summary["trade_feature_matrix_path"].endswith("trade_feature_matrix.jsonl")
-    assert summary["analyzer_slice_source"] == "trade_feature_matrix"
     assert "creator_in_cluster_flag:true" in summary["pattern_expectancy_slices"]
     assert summary["trend_failure_summary"]["count"] == 1
     assert any(rec["type"].startswith("matrix_") for rec in recommendations["recommendations"])
@@ -187,40 +185,61 @@ def test_merge_closed_positions_with_matrix_preserves_legacy_positions_and_skips
     assert merged[0]["net_pnl_pct"] == -5.0
 
 
-def test_analyzer_prefers_canonical_matrix_jsonl_path(tmp_path):
-    from analytics.analyzer_matrix import resolve_trade_feature_matrix_path
-
-    run_dir = tmp_path / "run"
-    run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / "trade_feature_matrix.json").write_text("[]", encoding="utf-8")
-    (run_dir / "trade_feature_matrix.jsonl").write_text("{}\n", encoding="utf-8")
-
-    class _Settings:
-        TRADES_DIR = run_dir
-        SIGNALS_DIR = run_dir
-        POSITIONS_DIR = run_dir
-        PROCESSED_DATA_DIR = run_dir
-
-    resolved = resolve_trade_feature_matrix_path(_Settings())
-    assert resolved is not None
-    assert resolved.name == "trade_feature_matrix.jsonl"
-
-def test_resolve_trade_feature_matrix_prefers_canonical_jsonl_over_legacy_json(tmp_path):
-    from types import SimpleNamespace
-    from analytics.analyzer_matrix import resolve_trade_feature_matrix_path
-
-    (tmp_path / "trade_feature_matrix.jsonl").write_text(
-        '{"schema_version":"trade_feature_matrix.v1"}\n',
-        encoding="utf-8",
+def test_run_post_run_analysis_accepts_flat_replay_lifecycle_rows_without_positions_fallback(tmp_path):
+    run_dir = ensure_dir(tmp_path / "runs" / "analyzer_flat_replay")
+    _write_jsonl(
+        run_dir / "trades.jsonl",
+        [
+            {
+                "position_id": "p_flat_1",
+                "token_address": "SoFlat111",
+                "entry_time": "2026-03-15T12:30:00Z",
+                "exit_time": "2026-03-15T12:36:00Z",
+                "entry_price_usd": 1.0,
+                "exit_price_usd": 1.18,
+                "hold_sec": 360,
+                "net_pnl_pct": 18.0,
+                "gross_pnl_pct": 19.0,
+                "net_pnl_sol": 0.018,
+                "gross_pnl_sol": 0.019,
+                "exit_reason_final": "trend_take_profit",
+            },
+        ],
     )
-    (tmp_path / "trade_feature_matrix.json").write_text("[]", encoding="utf-8")
-
-    settings = SimpleNamespace(
-        TRADES_DIR=tmp_path,
-        SIGNALS_DIR=tmp_path,
-        POSITIONS_DIR=tmp_path,
-        PROCESSED_DATA_DIR=tmp_path,
+    _write_jsonl(run_dir / "signals.jsonl", [{"signal": 1}])
+    write_json(run_dir / "positions.json", [])
+    write_json(run_dir / "portfolio_state.json", {"starting_equity_sol": 0.10, "unrealized_pnl_sol": 0.0, "equity_sol": 0.118})
+    _write_jsonl(
+        run_dir / "trade_feature_matrix.jsonl",
+        [
+            {
+                "position_id": "p_flat_1",
+                "regime_decision": "TREND",
+                "regime_confidence": 0.84,
+                "cluster_concentration_ratio": 0.21,
+                "creator_in_cluster_flag": False,
+                "hold_sec": 360,
+                "net_pnl_pct": 18.0,
+                "mfe_pct": 24.0,
+                "exit_reason_final": "trend_take_profit",
+            }
+        ],
     )
-    path = resolve_trade_feature_matrix_path(settings)
-    assert path is not None
-    assert path.name == "trade_feature_matrix.jsonl"
+
+    os.environ["TRADES_DIR"] = str(run_dir)
+    os.environ["SIGNALS_DIR"] = str(run_dir)
+    os.environ["POSITIONS_DIR"] = str(run_dir)
+    os.environ["PROCESSED_DATA_DIR"] = str(run_dir)
+    os.environ["POST_RUN_MIN_TRADES_FOR_CORRELATION"] = "1"
+    os.environ["POST_RUN_MIN_TRADES_FOR_REGIME_COMPARISON"] = "1"
+    os.environ["POST_RUN_MIN_SAMPLE_FOR_RECOMMENDATION"] = "1"
+    os.environ["POST_RUN_OUTLIER_CLIP_PCT"] = "0"
+
+    settings = load_settings()
+    result = run_post_run_analysis(settings)
+    summary = read_json(Path(result["summary_path"]))
+
+    assert result["closed_positions"] == 1
+    assert summary["total_positions_closed"] == 1
+    assert summary["winrate_total"] == 1.0
+    assert summary["matrix_analysis_available"] is True

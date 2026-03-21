@@ -2,25 +2,38 @@
 
 from __future__ import annotations
 
+from itertools import product
+from typing import Any
+
+
+def _candidate_key(params: dict[str, Any]) -> tuple[tuple[str, Any], ...]:
+    return tuple((key, params.get(key)) for key in sorted(params))
+
 
 def build_candidate_grid(config: dict) -> list[dict]:
     grid_cfg = config.get("grid", {})
     baseline = dict(config.get("baseline", {}))
 
     candidates: list[dict] = [{"candidate_id": "baseline", "params": baseline, "is_baseline": True}]
-    seen: set[tuple] = {tuple((k, baseline.get(k)) for k in sorted(baseline))}
+    seen: set[tuple[tuple[str, Any], ...]] = {_candidate_key(baseline)}
+
+    if not grid_cfg:
+        return candidates
+
+    ordered_keys = sorted(grid_cfg)
+    ordered_values = [list(grid_cfg.get(key) or [baseline.get(key)]) for key in ordered_keys]
 
     index = 1
-    for key in sorted(grid_cfg):
-        for value in grid_cfg[key]:
-            candidate = dict(baseline)
+    for combo in product(*ordered_values):
+        candidate = dict(baseline)
+        for key, value in zip(ordered_keys, combo):
             candidate[key] = value
-            candidate_key = tuple((k, candidate[k]) for k in sorted(candidate))
-            if candidate_key in seen:
-                continue
-            seen.add(candidate_key)
-            candidates.append({"candidate_id": f"cand_{index:04d}", "params": candidate, "is_baseline": False})
-            index += 1
+        candidate_key = _candidate_key(candidate)
+        if candidate_key in seen:
+            continue
+        seen.add(candidate_key)
+        candidates.append({"candidate_id": f"cand_{index:04d}", "params": candidate, "is_baseline": False})
+        index += 1
     return candidates
 
 

@@ -1,3 +1,5 @@
+
+
 #!/usr/bin/env python3
 from __future__ import annotations
 
@@ -6,6 +8,8 @@ import json
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -24,6 +28,52 @@ from src.promotion.runtime_signal_loader import load_runtime_signals
 from src.promotion.session import restore_runtime_state, write_session_state
 from src.promotion.state_machine import apply_transition
 from src.promotion.types import utc_now_iso
+from trading.exit_logic import decide_exits
+from trading.paper_trader import process_entry_signals, process_exit_signals, run_mark_to_market
+from trading.position_book import ensure_state
+
+
+_DEFAULT_TRADING_SETTINGS = {
+    "EXIT_ENGINE_FAILCLOSED": True,
+    "EXIT_DEV_SELL_HARD": True,
+    "EXIT_RUG_FLAG_HARD": True,
+    "EXIT_SCALP_STOP_LOSS_PCT": -10,
+    "EXIT_SCALP_LIQUIDITY_DROP_PCT": 20,
+    "EXIT_SCALP_MAX_HOLD_SEC": 120,
+    "EXIT_SCALP_RECHECK_SEC": 18,
+    "EXIT_SCALP_VOLUME_VELOCITY_DECAY": 0.70,
+    "EXIT_SCALP_X_SCORE_DECAY": 0.70,
+    "EXIT_SCALP_BUY_PRESSURE_FLOOR": 0.60,
+    "EXIT_TREND_HARD_STOP_PCT": -18,
+    "EXIT_TREND_BUY_PRESSURE_FLOOR": 0.50,
+    "EXIT_TREND_LIQUIDITY_DROP_PCT": 25,
+    "EXIT_TREND_PARTIAL1_PCT": 35,
+    "EXIT_TREND_PARTIAL2_PCT": 100,
+    "EXIT_CLUSTER_DUMP_HARD": 0.82,
+    "EXIT_CLUSTER_CONCENTRATION_SELL_THRESHOLD": 0.65,
+    "EXIT_CLUSTER_SELL_CONCENTRATION_WARN": 0.72,
+    "EXIT_CLUSTER_SELL_CONCENTRATION_HARD": 0.78,
+    "EXIT_LIQUIDITY_REFILL_FAIL_MIN": 0.85,
+    "EXIT_SELLER_REENTRY_WEAK_MAX": 0.20,
+    "EXIT_SHOCK_RECOVERY_TOO_SLOW_SEC": 180,
+    "EXIT_BUNDLE_FAILURE_SPIKE_THRESHOLD": 2.0,
+    "EXIT_RETRY_MANIPULATION_HARD": 5.0,
+    "EXIT_CREATOR_CLUSTER_RISK_HARD": 0.75,
+    "EXIT_LINKAGE_RISK_HARD": 0.78,
+    "PAPER_STARTING_CAPITAL_SOL": 0.1,
+    "PAPER_DEFAULT_SLIPPAGE_BPS": 100,
+    "PAPER_MAX_SLIPPAGE_BPS": 500,
+    "PAPER_SLIPPAGE_LIQUIDITY_SENSITIVITY": 0.5,
+    "PAPER_PRIORITY_FEE_BASE_SOL": 0.00002,
+    "PAPER_PRIORITY_FEE_SPIKE_MULTIPLIER": 2.0,
+    "PAPER_FAILED_TX_BASE_PROB": 0.0,
+    "PAPER_FAILED_TX_LOW_LIQUIDITY_ADDON": 0.02,
+    "PAPER_FAILED_TX_HIGH_VOLATILITY_ADDON": 0.02,
+    "PAPER_PARTIAL_FILL_ALLOWED": True,
+    "PAPER_PARTIAL_FILL_MIN_RATIO": 0.35,
+    "PAPER_CONTRACT_VERSION": "paper_trader_v1",
+    "EXIT_CONTRACT_VERSION": "exit_engine_v1",
+}
 
 
 def _parse_scalar(raw: str):
@@ -95,6 +145,7 @@ def _simulate_signals(loop_index: int) -> list[dict]:
             "runtime_signal_warning": "synthetic_dev_mode",
             "runtime_signal_partial_flag": False,
             "source_artifact": None,
+            "entry_snapshot": {"price_usd": 1.0, "liquidity_usd": 25000.0},
         }
         for i in range(2)
     ]
@@ -174,6 +225,114 @@ def _emit_signal_batch_events(event_log: Path, run_id: str, summary: dict) -> No
     )
 
 
+def _state_open_positions(state: dict[str, Any]) -> list[dict[str, Any]]:
+    return [position for position in state.get("positions", []) if position.get("is_open")]
+
+
+def _sync_open_positions_compat(state: dict[str, Any]) -> None:
+    state["open_positions"] = [dict(position) for position in _state_open_positions(state)]
+
+
+def _signal_price(signal: dict[str, Any], fallback: float = 0.0) -> float:
+    entry_snapshot = signal.get("entry_snapshot") or {}
+    for key in ("price_usd_now", "price_usd", "current_price_usd"):
+        if signal.get(key) is not None:
+            return float(signal.get(key) or 0.0)
+    return float(entry_snapshot.get("price_usd") or fallback or 0.0)
+
+
+def _market_state_from_signal(signal: dict[str, Any]) -> dict[str, Any]:
+    entry_snapshot = signal.get("entry_snapshot") or {}
+    return {
+        "token_address": signal.get("token_address"),
+        "price_usd": _signal_price(signal),
+        "price_usd_now": _signal_price(signal),
+        "liquidity_usd": signal.get("liquidity_usd") or entry_snapshot.get("liquidity_usd"),
+        "liquidity_usd_now": signal.get("liquidity_usd_now") or signal.get("liquidity_usd") or entry_snapshot.get("liquidity_usd"),
+        "buy_pressure": signal.get("buy_pressure") or entry_snapshot.get("buy_pressure"),
+        "buy_pressure_now": signal.get("buy_pressure_now") or signal.get("buy_pressure") or entry_snapshot.get("buy_pressure"),
+        "volume_velocity": signal.get("volume_velocity") or entry_snapshot.get("volume_velocity"),
+        "volume_velocity_now": signal.get("volume_velocity_now") or signal.get("volume_velocity") or entry_snapshot.get("volume_velocity"),
+        "x_validation_score": signal.get("x_validation_score") or entry_snapshot.get("x_validation_score"),
+        "x_validation_score_now": signal.get("x_validation_score_now") or signal.get("x_validation_score") or entry_snapshot.get("x_validation_score"),
+        "x_status": signal.get("x_status") or entry_snapshot.get("x_status"),
+        "x_status_now": signal.get("x_status_now") or signal.get("x_status") or entry_snapshot.get("x_status"),
+        "bundle_cluster_score": signal.get("bundle_cluster_score") or entry_snapshot.get("bundle_cluster_score"),
+        "bundle_cluster_score_now": signal.get("bundle_cluster_score_now") or signal.get("bundle_cluster_score") or entry_snapshot.get("bundle_cluster_score"),
+        "cluster_sell_concentration_now": signal.get("cluster_sell_concentration_now"),
+        "cluster_sell_concentration_120s": signal.get("cluster_sell_concentration_120s") or entry_snapshot.get("cluster_sell_concentration_120s"),
+        "liquidity_refill_ratio_now": signal.get("liquidity_refill_ratio_now"),
+        "liquidity_refill_ratio_120s": signal.get("liquidity_refill_ratio_120s") or entry_snapshot.get("liquidity_refill_ratio_120s"),
+        "seller_reentry_ratio": signal.get("seller_reentry_ratio") or entry_snapshot.get("seller_reentry_ratio"),
+        "liquidity_shock_recovery_sec": signal.get("liquidity_shock_recovery_sec") or entry_snapshot.get("liquidity_shock_recovery_sec"),
+        "cluster_concentration_ratio_now": signal.get("cluster_concentration_ratio_now") or signal.get("cluster_concentration_ratio") or entry_snapshot.get("cluster_concentration_ratio"),
+        "bundle_composition_dominant_now": signal.get("bundle_composition_dominant_now") or signal.get("bundle_composition_dominant") or entry_snapshot.get("bundle_composition_dominant"),
+        "bundle_failure_retry_pattern_now": signal.get("bundle_failure_retry_pattern_now") or signal.get("bundle_failure_retry_pattern") or entry_snapshot.get("bundle_failure_retry_pattern"),
+        "bundle_failure_retry_delta": signal.get("bundle_failure_retry_delta"),
+        "cross_block_bundle_correlation_now": signal.get("cross_block_bundle_correlation_now") or signal.get("cross_block_bundle_correlation") or entry_snapshot.get("cross_block_bundle_correlation"),
+        "creator_in_cluster_flag_now": signal.get("creator_in_cluster_flag_now") if signal.get("creator_in_cluster_flag_now") is not None else signal.get("creator_in_cluster_flag"),
+        "creator_cluster_activity_now": signal.get("creator_cluster_activity_now"),
+        "linkage_risk_score_now": signal.get("linkage_risk_score_now") or signal.get("linkage_risk_score"),
+        "linkage_confidence": signal.get("linkage_confidence"),
+        "creator_buyer_link_score_now": signal.get("creator_buyer_link_score_now") or signal.get("creator_buyer_link_score"),
+        "dev_buyer_link_score_now": signal.get("dev_buyer_link_score_now") or signal.get("dev_buyer_link_score"),
+        "shared_funder_link_score_now": signal.get("shared_funder_link_score_now") or signal.get("shared_funder_link_score"),
+        "cluster_dev_link_score_now": signal.get("cluster_dev_link_score_now") or signal.get("cluster_dev_link_score"),
+        "wallet_features": signal.get("wallet_features") or entry_snapshot.get("wallet_features") or {},
+        "now_ts": utc_now_iso(),
+    }
+
+
+def _build_market_states(signals: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: dict[str, dict[str, Any]] = {}
+    for signal in signals:
+        token = str(signal.get("token_address") or "")
+        if token:
+            seen[token] = _market_state_from_signal(signal)
+    return list(seen.values())
+
+
+def _build_current_states(state: dict[str, Any], signals: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    market_by_token = {str(item.get("token_address") or ""): item for item in _build_market_states(signals)}
+    current_states: list[dict[str, Any]] = []
+    for position in _state_open_positions(state):
+        token = str(position.get("token_address") or "")
+        entry_snapshot = position.get("entry_snapshot") or {}
+        current = dict(market_by_token.get(token) or {})
+        current.setdefault("token_address", token)
+        current.setdefault("price_usd_now", float(position.get("last_mark_price_usd") or position.get("entry_price_usd") or entry_snapshot.get("price_usd") or 0.0))
+        current.setdefault("price_usd", current.get("price_usd_now"))
+        current.setdefault("liquidity_usd_now", entry_snapshot.get("liquidity_usd"))
+        current.setdefault("buy_pressure_now", entry_snapshot.get("buy_pressure"))
+        current.setdefault("volume_velocity_now", entry_snapshot.get("volume_velocity"))
+        current.setdefault("x_validation_score_now", entry_snapshot.get("x_validation_score"))
+        current.setdefault("x_status_now", entry_snapshot.get("x_status"))
+        current.setdefault("bundle_cluster_score_now", entry_snapshot.get("bundle_cluster_score"))
+        current.setdefault("wallet_features", entry_snapshot.get("wallet_features") or {})
+        current.setdefault("now_ts", utc_now_iso())
+        if token not in market_by_token:
+            current["runtime_current_state_status"] = "stale_entry_snapshot"
+        else:
+            current["runtime_current_state_status"] = "live_refresh"
+        current_states.append(current)
+    return current_states
+
+
+def _build_runtime_trading_settings(cfg: dict[str, Any], args: argparse.Namespace, run_dir: Path) -> Any:
+    settings = dict(_DEFAULT_TRADING_SETTINGS)
+    paper_cfg = cfg.get("paper", {}) if isinstance(cfg.get("paper"), dict) else {}
+    exit_cfg = cfg.get("exit", {}) if isinstance(cfg.get("exit"), dict) else {}
+    settings.update(paper_cfg)
+    settings.update(exit_cfg)
+    settings["PAPER_MAX_CONCURRENT_POSITIONS"] = int(cfg.get("modes", {}).get(args.mode, {}).get("max_open_positions", settings.get("PAPER_MAX_CONCURRENT_POSITIONS", 3)))
+    settings["KILL_SWITCH_FILE"] = str(cfg.get("safety", {}).get("kill_switch_file", "runs/runtime/kill_switch.flag"))
+    settings["PROCESSED_DATA_DIR"] = run_dir
+    settings["SIGNALS_DIR"] = run_dir
+    settings["TRADES_DIR"] = run_dir
+    settings["POSITIONS_DIR"] = run_dir
+    return SimpleNamespace(**settings)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
@@ -200,11 +359,7 @@ def main() -> int:
     run_dir.mkdir(parents=True, exist_ok=True)
 
     if args.allow_regime:
-        allowed = {
-            "scalp": ["SCALP"],
-            "trend": ["TREND"],
-            "both": ["SCALP", "TREND"],
-        }[args.allow_regime]
+        allowed = {"scalp": ["SCALP"], "trend": ["TREND"], "both": ["SCALP", "TREND"]}[args.allow_regime]
         cfg["modes"][args.mode]["allow_regimes"] = allowed
 
     if args.kill_switch:
@@ -221,6 +376,10 @@ def main() -> int:
 
     event_log = run_dir / "event_log.jsonl"
     decisions_log = run_dir / "decisions.jsonl"
+    trading_settings = _build_runtime_trading_settings(cfg, args, run_dir)
+    state["paths"] = {"signals": run_dir / "signals.jsonl", "trades": run_dir / "trades.jsonl"}
+    ensure_state(state, trading_settings)
+    _sync_open_positions_compat(state)
 
     manifest = {
         "run_id": args.run_id,
@@ -241,7 +400,7 @@ def main() -> int:
     append_jsonl(event_log, {"ts": utc_now_iso(), **mode_event})
     print(f"[promotion] mode_entered mode={args.mode}")
     append_jsonl(event_log, {"ts": utc_now_iso(), "event": "state_restored", "resumed": args.resume})
-    print(f"[promotion] state_restored resumed={str(args.resume).lower()} open_positions={len(state.get('open_positions', []))}")
+    print(f"[promotion] state_restored resumed={str(args.resume).lower()} open_positions={len(_state_open_positions(state))}")
     print(f"[promotion] loop_started interval_sec={cfg.get('runtime', {}).get('loop_interval_sec', 30)}")
 
     total_opened = 0
@@ -257,289 +416,157 @@ def main() -> int:
         opened = 0
         rejected = 0
 
-
-        for signal in signals:
+        current_states = _build_current_states(state, signals)
+        if _state_open_positions(state):
+            run_mark_to_market(state, current_states, trading_settings)
+            exit_signals = decide_exits(_state_open_positions(state), current_states, trading_settings)
+            state = process_exit_signals(exit_signals, current_states, state, trading_settings)
+            _sync_open_positions_compat(state)
             append_jsonl(
                 event_log,
                 {
                     "ts": utc_now_iso(),
-                    "event": "runtime_signal_adapted",
+                    "event": "runtime_exit_processing_completed",
                     "run_id": args.run_id,
-                    "signal_id": signal.get("signal_id"),
-                    "token_address": signal.get("token_address"),
-                    "signal_origin": signal.get("runtime_signal_origin"),
-                    "signal_status": signal.get("runtime_signal_status"),
-                    "warning": signal.get("runtime_signal_warning"),
+                    "evaluated_positions": len(exit_signals),
+                    "full_exit_count": len([row for row in exit_signals if row.get("exit_decision") == "FULL_EXIT"]),
+                    "partial_exit_count": len([row for row in exit_signals if row.get("exit_decision") == "PARTIAL_EXIT"]),
                 },
             )
 
-            if signal.get("runtime_signal_status") == "invalid" or not signal.get("token_address"):
-                total_invalid += 1
-                append_jsonl(
-                    event_log,
-                    {
-                        "ts": utc_now_iso(),
-                        "event": "runtime_signal_invalid",
-                        "run_id": args.run_id,
-                        "signal_id": signal.get("signal_id"),
-                        "token_address": signal.get("token_address"),
-                        "signal_origin": signal.get("runtime_signal_origin"),
-                        "signal_status": signal.get("runtime_signal_status"),
-                        "warning": signal.get("runtime_signal_warning"),
-                        "blockers": signal.get("blockers", []),
-                    },
-                )
-                continue
+        market_states = _build_market_states(signals)
+        for signal in signals:
+            guard_results = evaluate_entry_guards(signal, state, cfg)
+            sizing = compute_position_sizing(signal, state, cfg)
+            scale = float(sizing.get("effective_position_scale", 0.0))
+            runtime_position_pct = float(
+                signal.get("recommended_position_pct")
+                or sizing.get("effective_position_pct")
+                or sizing.get("base_position_pct")
+                or 0.0
+            )
+            signal.update(
+                {
+                    "base_position_pct": runtime_position_pct,
+                    "effective_position_pct": runtime_position_pct,
+                    "sizing_multiplier": sizing.get("sizing_multiplier"),
+                    "sizing_reason_codes": sizing.get("sizing_reason_codes", []),
+                    "sizing_confidence": sizing.get("sizing_confidence"),
+                    "sizing_origin": sizing.get("sizing_origin"),
+                    "sizing_warning": sizing.get("sizing_warning"),
+                    "evidence_quality_score": sizing.get("evidence_quality_score"),
+                    "evidence_conflict_flag": sizing.get("evidence_conflict_flag"),
+                    "partial_evidence_flag": sizing.get("partial_evidence_flag"),
+                }
+            )
+            signal.setdefault("symbol", signal.get("token_address"))
+            signal.setdefault("entry_snapshot", signal.get("entry_snapshot") or {"price_usd": _signal_price(signal)})
+            signal["entry_snapshot"].setdefault("price_usd", _signal_price(signal))
+            signal["entry_snapshot"].setdefault("liquidity_usd", signal.get("liquidity_usd"))
+            signal["entry_snapshot"].setdefault("buy_pressure", signal.get("buy_pressure"))
+            signal["entry_snapshot"].setdefault("volume_velocity", signal.get("volume_velocity"))
+            signal["entry_snapshot"].setdefault("x_validation_score", signal.get("x_validation_score"))
+            signal["entry_snapshot"].setdefault("x_status", signal.get("x_status"))
+            signal["contract_version"] = trading_settings.PAPER_CONTRACT_VERSION
 
-            if signal.get("runtime_signal_partial_flag"):
-                append_jsonl(
-                    event_log,
-                    {
-                        "ts": utc_now_iso(),
-                        "event": "runtime_signal_partial",
-                        "run_id": args.run_id,
-                        "signal_id": signal.get("signal_id"),
-                        "token_address": signal.get("token_address"),
-                        "signal_origin": signal.get("runtime_signal_origin"),
-                        "warning": signal.get("runtime_signal_warning"),
-                    },
-                )
-
-            if signal.get("entry_decision") == "IGNORE":
+            if should_block_entry(guard_results) or scale <= 0:
                 rejected += 1
                 total_rejected += 1
                 append_jsonl(
                     decisions_log,
                     {
                         "ts": utc_now_iso(),
-                        "token_address": signal["token_address"],
-                        "signal_id": signal["signal_id"],
+                        "token_address": signal.get("token_address"),
+                        "signal_id": signal.get("signal_id"),
                         "mode": args.mode,
-                        "decision": "reject_signal",
-                        "decision_reason_codes": ["entry_decision_ignore"],
-                        "x_status": signal.get("x_status", "unknown"),
+                        "decision": "reject_entry",
+                        "decision_reason_codes": guard_results.get("hard_block_reasons", []) or sizing.get("sizing_reason_codes", []),
+                        "x_status": signal.get("x_status", "healthy"),
+                        "guard_results": guard_results,
+                        "effective_position_scale": scale,
                         "signal_origin": signal.get("runtime_signal_origin"),
                         "signal_status": signal.get("runtime_signal_status"),
-                        "effective_position_scale": 0.0,
+                        "recommended_position_pct": signal.get("recommended_position_pct"),
+                        "base_position_pct": sizing.get("base_position_pct"),
+                        "effective_position_pct": sizing.get("effective_position_pct"),
+                        "sizing_multiplier": sizing.get("sizing_multiplier"),
+                        "sizing_reason_codes": sizing.get("sizing_reason_codes", []),
+                        "sizing_confidence": sizing.get("sizing_confidence"),
+                        "sizing_origin": sizing.get("sizing_origin"),
+                        "evidence_quality_score": sizing.get("evidence_quality_score"),
+                        "evidence_conflict_flag": sizing.get("evidence_conflict_flag"),
+                        "partial_evidence_flag": sizing.get("partial_evidence_flag"),
+                        "sizing_warning": sizing.get("sizing_warning"),
                     },
                 )
-                append_jsonl(
-                    event_log,
-                    {
-                        "ts": utc_now_iso(),
-                        "event": "runtime_signal_skipped",
-                        "run_id": args.run_id,
-                        "signal_id": signal["signal_id"],
-                        "token_address": signal["token_address"],
-                        "signal_origin": signal.get("runtime_signal_origin"),
-                        "reason": "entry_decision_ignore",
-                    },
-                )
-                continue
-
-            append_jsonl(event_log, {"ts": utc_now_iso(), "event": "signal_seen", "signal_id": signal["signal_id"]})
-            guard_results = evaluate_entry_guards(signal, state, cfg)
-            sizing = compute_position_sizing(signal, state, cfg)
-            scale = sizing["effective_position_scale"]
-
-            append_jsonl(
-                event_log,
-                {
-                    "ts": utc_now_iso(),
-                    "event": "evidence_weighted_sizing_started",
-                    "run_id": args.run_id,
-                    "signal_id": signal.get("signal_id"),
-                    "token_address": signal.get("token_address"),
-                    "base_position_pct": sizing.get("base_position_pct"),
-                    "policy_origin": sizing.get("policy_origin"),
-                },
-            )
-            append_jsonl(
-                event_log,
-                {
-                    "ts": utc_now_iso(),
-                    "event": "evidence_quality_computed",
-                    "run_id": args.run_id,
-                    "signal_id": signal.get("signal_id"),
-                    "token_address": signal.get("token_address"),
-                    "evidence_quality_score": sizing.get("evidence_quality_score"),
-                    "sizing_confidence": sizing.get("sizing_confidence"),
-                    "partial_evidence_flag": sizing.get("partial_evidence_flag"),
-                    "evidence_conflict_flag": sizing.get("evidence_conflict_flag"),
-                },
-            )
-            append_jsonl(
-                event_log,
-                {
-                    "ts": utc_now_iso(),
-                    "event": "sizing_multiplier_computed",
-                    "run_id": args.run_id,
-                    "signal_id": signal.get("signal_id"),
-                    "token_address": signal.get("token_address"),
-                    "base_position_pct": sizing.get("base_position_pct"),
-                    "effective_position_pct": sizing.get("effective_position_pct"),
-                    "sizing_multiplier": sizing.get("sizing_multiplier"),
-                    "reason_codes": sizing.get("sizing_reason_codes", []),
-                },
-            )
-            event_reason_map = {
-                "partial_evidence_size_reduced": "sizing_reduced_partial_evidence",
-                "x_status_degraded_size_reduced": "sizing_reduced_degraded_x",
-                "creator_link_risk_size_reduced": "sizing_reduced_creator_link_risk",
-                "creator_link_risk_moderate_size_reduced": "sizing_reduced_creator_link_risk",
-            }
-            for reason_code, event_name in event_reason_map.items():
-                if reason_code in sizing.get("sizing_reason_codes", []):
-                    append_jsonl(
-                        event_log,
-                        {
-                            "ts": utc_now_iso(),
-                            "event": event_name,
-                            "run_id": args.run_id,
-                            "signal_id": signal.get("signal_id"),
-                            "token_address": signal.get("token_address"),
-                            "base_position_pct": sizing.get("base_position_pct"),
-                            "effective_position_pct": sizing.get("effective_position_pct"),
-                            "sizing_multiplier": sizing.get("sizing_multiplier"),
-                            "reason_codes": sizing.get("sizing_reason_codes", []),
-                            "sizing_confidence": sizing.get("sizing_confidence"),
-                        },
-                    )
-
-            if should_block_entry(guard_results) or args.dry_run or scale <= 0:
-                rejected += 1
-                total_rejected += 1
-                reason_codes = list(guard_results["hard_block_reasons"])
-                if args.dry_run:
-                    reason_codes.append("dry_run")
-                if scale <= 0:
-                    reason_codes.append("zero_effective_position_scale")
-                decision = {
-                    "ts": utc_now_iso(),
-                    "token_address": signal["token_address"],
-                    "signal_id": signal["signal_id"],
-                    "mode": args.mode,
-                    "decision": "reject_signal",
-                    "decision_reason_codes": reason_codes,
-                    "x_status": signal.get("x_status", "healthy"),
-                    "guard_results": guard_results,
-                    "effective_position_scale": scale,
-                    "signal_origin": signal.get("runtime_signal_origin"),
-                    "signal_status": signal.get("runtime_signal_status"),
-                    "recommended_position_pct": signal.get("recommended_position_pct"),
-                    "base_position_pct": sizing.get("base_position_pct"),
-                    "effective_position_pct": sizing.get("effective_position_pct"),
-                    "sizing_multiplier": sizing.get("sizing_multiplier"),
-                    "sizing_reason_codes": sizing.get("sizing_reason_codes", []),
-                    "sizing_confidence": sizing.get("sizing_confidence"),
-                    "sizing_origin": sizing.get("sizing_origin"),
-                    "evidence_quality_score": sizing.get("evidence_quality_score"),
-                    "evidence_conflict_flag": sizing.get("evidence_conflict_flag"),
-                    "partial_evidence_flag": sizing.get("partial_evidence_flag"),
-                    "sizing_warning": sizing.get("sizing_warning"),
-                }
-                append_jsonl(decisions_log, decision)
                 append_jsonl(
                     event_log,
                     {
                         "ts": utc_now_iso(),
                         "event": "runtime_real_signal_rejected",
                         "run_id": args.run_id,
-                        "signal_id": signal["signal_id"],
-                        "token_address": signal["token_address"],
-                        "signal_origin": signal.get("runtime_signal_origin"),
-                        "signal_status": signal.get("runtime_signal_status"),
-                        "reason": reason_codes,
-                    },
-                )
-                append_jsonl(
-                    event_log,
-                    {
-                        "ts": utc_now_iso(),
-                        "event": "evidence_weighted_sizing_completed",
-                        "run_id": args.run_id,
                         "signal_id": signal.get("signal_id"),
                         "token_address": signal.get("token_address"),
-                        "base_position_pct": sizing.get("base_position_pct"),
-                        "effective_position_pct": sizing.get("effective_position_pct"),
-                        "sizing_multiplier": sizing.get("sizing_multiplier"),
-                        "reason_codes": sizing.get("sizing_reason_codes", []),
-                        "sizing_confidence": sizing.get("sizing_confidence"),
+                        "signal_origin": signal.get("runtime_signal_origin"),
+                        "signal_status": signal.get("runtime_signal_status"),
+                        "reason": guard_results.get("hard_block_reasons", []) or sizing.get("sizing_reason_codes", []),
                     },
                 )
                 continue
 
-            position = {
-                "position_id": f"pos_{signal['signal_id']}",
-                "token_address": signal["token_address"],
-                "pair_address": signal.get("pair_address"),
-                "entry_decision": signal.get("entry_decision"),
-                "opened_at": utc_now_iso(),
-                "size_scale": scale,
-                "recommended_position_pct": signal.get("recommended_position_pct"),
-                "base_position_pct": sizing.get("base_position_pct"),
-                "effective_position_pct": sizing.get("effective_position_pct"),
-                "sizing_multiplier": sizing.get("sizing_multiplier"),
-                "sizing_reason_codes": sizing.get("sizing_reason_codes", []),
-                "sizing_confidence": sizing.get("sizing_confidence"),
-                "sizing_origin": sizing.get("sizing_origin"),
-                "sizing_warning": sizing.get("sizing_warning"),
-                "evidence_quality_score": sizing.get("evidence_quality_score"),
-                "evidence_conflict_flag": sizing.get("evidence_conflict_flag"),
-                "partial_evidence_flag": sizing.get("partial_evidence_flag"),
-                "signal_origin": signal.get("runtime_signal_origin"),
-                "signal_status": signal.get("runtime_signal_status"),
-                "source_artifact": signal.get("source_artifact"),
-                "entry_snapshot": signal.get("entry_snapshot") or {},
-            }
-            state.setdefault("open_positions", []).append(position)
-            update_trade_counters(state, pnl_pct=0.0, realized_pnl_sol=0.0, starting_capital_sol=1.0)
-            opened += 1
-            total_opened += 1
-            append_jsonl(
-                event_log,
-                {
-                    "ts": utc_now_iso(),
-                    "event": "runtime_real_signal_opened",
-                    "run_id": args.run_id,
-                    "signal_id": signal["signal_id"],
-                    "position_id": position["position_id"],
-                    "token_address": signal["token_address"],
-                    "signal_origin": signal.get("runtime_signal_origin"),
-                    "signal_status": signal.get("runtime_signal_status"),
-                    "base_position_pct": sizing.get("base_position_pct"),
-                    "effective_position_pct": sizing.get("effective_position_pct"),
-                    "sizing_multiplier": sizing.get("sizing_multiplier"),
-                    "sizing_reason_codes": sizing.get("sizing_reason_codes", []),
-                },
+            before_open = len(_state_open_positions(state))
+            entry_signal = dict(signal)
+            entry_signal["base_position_pct"] = runtime_position_pct
+            entry_signal["effective_position_pct"] = runtime_position_pct
+            state = process_entry_signals([entry_signal], market_states, state, trading_settings)
+            opened_position = next(
+                (
+                    position
+                    for position in _state_open_positions(state)
+                    if position.get("token_address") == signal.get("token_address")
+                ),
+                None,
             )
-            append_jsonl(
-                decisions_log,
-                {
-                    "ts": utc_now_iso(),
-                    "token_address": signal["token_address"],
-                    "signal_id": signal["signal_id"],
-                    "mode": args.mode,
-                    "decision": "open_paper_position",
-                    "decision_reason_codes": guard_results.get("soft_reasons", []),
-                    "x_status": signal.get("x_status", "healthy"),
-                    "guard_results": guard_results,
-                    "effective_position_scale": scale,
-                    "signal_origin": signal.get("runtime_signal_origin"),
-                    "signal_status": signal.get("runtime_signal_status"),
-                    "recommended_position_pct": signal.get("recommended_position_pct"),
-                    "base_position_pct": sizing.get("base_position_pct"),
-                    "effective_position_pct": sizing.get("effective_position_pct"),
-                    "sizing_multiplier": sizing.get("sizing_multiplier"),
-                    "sizing_reason_codes": sizing.get("sizing_reason_codes", []),
-                    "sizing_confidence": sizing.get("sizing_confidence"),
-                    "sizing_origin": sizing.get("sizing_origin"),
-                    "evidence_quality_score": sizing.get("evidence_quality_score"),
-                    "evidence_conflict_flag": sizing.get("evidence_conflict_flag"),
-                    "partial_evidence_flag": sizing.get("partial_evidence_flag"),
-                    "sizing_warning": sizing.get("sizing_warning"),
-                },
-            )
+            if opened_position is not None:
+                opened_position["base_position_pct"] = runtime_position_pct
+                opened_position["effective_position_pct"] = runtime_position_pct
+            after_open = len(_state_open_positions(state))
+            opened_delta = max(after_open - before_open, 0)
+            if opened_delta > 0:
+                opened += opened_delta
+                total_opened += opened_delta
+                for _ in range(opened_delta):
+                    update_trade_counters(state, pnl_pct=0.0)
+                append_jsonl(
+                    decisions_log,
+                    {
+                        "ts": utc_now_iso(),
+                        "token_address": signal.get("token_address"),
+                        "signal_id": signal.get("signal_id"),
+                        "mode": args.mode,
+                        "decision": "open_paper_position",
+                        "decision_reason_codes": guard_results.get("soft_reasons", []),
+                        "x_status": signal.get("x_status", "healthy"),
+                        "guard_results": guard_results,
+                        "effective_position_scale": scale,
+                        "signal_origin": signal.get("runtime_signal_origin"),
+                        "signal_status": signal.get("runtime_signal_status"),
+                        "recommended_position_pct": signal.get("recommended_position_pct"),
+                        "base_position_pct": sizing.get("base_position_pct"),
+                        "effective_position_pct": sizing.get("effective_position_pct"),
+                        "sizing_multiplier": sizing.get("sizing_multiplier"),
+                        "sizing_reason_codes": sizing.get("sizing_reason_codes", []),
+                        "sizing_confidence": sizing.get("sizing_confidence"),
+                        "sizing_origin": sizing.get("sizing_origin"),
+                        "evidence_quality_score": sizing.get("evidence_quality_score"),
+                        "evidence_conflict_flag": sizing.get("evidence_conflict_flag"),
+                        "partial_evidence_flag": sizing.get("partial_evidence_flag"),
+                        "sizing_warning": sizing.get("sizing_warning"),
+                    },
+                )
+            else:
+                rejected += 1
+                total_rejected += 1
 
             append_jsonl(
                 event_log,
@@ -557,9 +584,7 @@ def main() -> int:
                 },
             )
 
-        if is_kill_switch_active(cfg):
-            append_jsonl(event_log, {"ts": utc_now_iso(), "event": "kill_switch_triggered", "reason": "kill_switch_file_present"})
-
+        _sync_open_positions_compat(state)
         print(
             f"[promotion] signals_processed count={len(signals)} opened={opened} rejected={rejected} "
             f"origin={signal_summary.get('selected_origin')} status={signal_summary.get('batch_status')}"
@@ -567,19 +592,14 @@ def main() -> int:
         if not args.dry_run:
             time.sleep(cfg.get("runtime", {}).get("loop_interval_sec", 30))
 
-    write_json(run_dir / "positions.json", {"open_positions": state.get("open_positions", [])})
-    counters = state.get("counters", {})
-    starting_capital_sol = float(counters.get("starting_capital_sol", state.get("starting_capital_sol", 0.0)) or 0.0)
-    realized_pnl_sol_today = float(counters.get("realized_pnl_sol_today", 0.0) or 0.0)
-    daily_loss_pct = abs(min(realized_pnl_sol_today / starting_capital_sol * 100.0, 0.0)) if starting_capital_sol > 0 else abs(min(float(counters.get("pnl_pct_today", 0.0) or 0.0), 0.0))
+    positions_payload = {"positions": state.get("positions", []), "open_positions": _state_open_positions(state)}
+    write_json(run_dir / "positions.json", positions_payload)
     summary = {
         "run_id": args.run_id,
         "mode": args.mode,
-        "trades_today": counters.get("trades_today", 0),
-        "open_positions": len(state.get("open_positions", [])),
-        "pnl_pct_today": counters.get("pnl_pct_today", 0.0),
-        "realized_pnl_sol_today": realized_pnl_sol_today,
-        "daily_loss_pct": daily_loss_pct,
+        "trades_today": state.get("counters", {}).get("trades_today", 0),
+        "open_positions": len(_state_open_positions(state)),
+        "pnl_pct_today": state.get("counters", {}).get("pnl_pct_today", 0.0),
         "consecutive_losses": state.get("consecutive_losses", 0),
         "x_cooldown_active": is_x_cooldown_active(state),
         "total_opened": total_opened,

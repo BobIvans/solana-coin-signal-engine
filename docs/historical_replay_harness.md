@@ -116,16 +116,14 @@ This harness intentionally does **not**:
 
 ## Wallet-weighting replay parity
 
-Replay now resolves scored artifacts in a mode-aware order (`scored_tokens.<mode>.json[l]` before generic `scored_tokens.json[l]`). If only a generic scored artifact is present, the harness re-scores it under the requested wallet mode before lifecycle reconstruction. Fresh replay summaries, manifests, signal/trade artifacts, and `trade_feature_matrix.jsonl` rows include `wallet_weighting_requested_mode`, `wallet_weighting_effective_mode`, `replay_score_source`, `wallet_mode_parity_status`, `historical_input_hash`, and score-layer wallet component fields so `off` / `shadow` / `on` runs can be compared over the same historical truth layer.
+Replay resolves scored artifacts in a mode-aware order (`scored_tokens.<mode>.json[l]` before generic `scored_tokens.json[l]`). If only a generic scored artifact is present, the harness re-scores it under the requested wallet mode before lifecycle reconstruction. Fresh replay summaries, manifests, signal/trade artifacts, and `trade_feature_matrix.jsonl` rows include `wallet_weighting_requested_mode`, `wallet_weighting_effective_mode`, `replay_score_source`, `wallet_mode_parity_status`, `historical_input_hash`, and score-layer wallet component fields so `off` / `shadow` / `on` runs can be compared over the same historical truth layer.
 
-Evidence-quality score penalties (`partial_evidence_penalty`, `low_confidence_evidence_penalty`) are now propagated into the replay trade feature matrix alongside existing evidence-quality summary fields.
+Evidence-quality score penalties (`partial_evidence_penalty`, `low_confidence_evidence_penalty`) are propagated into the replay trade feature matrix alongside existing evidence-quality summary fields.
 
-## Historical price-path collection
+## Candidate config propagation
 
-- Historical replay no longer assumes `price_paths` magically exist. Backfill can now emit replay-usable `price_paths` directly, including embedded `price_paths` inside `chain_backfill.jsonl` rows.
-- Missing price history must stay explicit (`missing=true`, empty `price_path`) and truncated paths must stay explicit (`truncated=true`, `price_path_status=partial`).
-- The replay loader treats backfill-emitted price paths as canonical historical context when they are present.
+Calibration candidates are now applied as real replay setting overrides. The harness merges baseline settings, root-level replay settings, and per-candidate overrides before a replay run starts, so calibration no longer silently replays on defaults while pretending to evaluate candidate parameter combinations.
 
-## artifact truth layer
+## Lifecycle artifact contract
 
-Historical replay emits a canonical artifact bundle where `trade_feature_matrix.jsonl` is the primary per-trade truth surface. `signals.jsonl`, `trades.jsonl`, `positions.json`, `replay_summary.json`, and `manifest.json` must agree on replay provenance and replay status fields.
+`trades.jsonl` must be analyzer-usable. Preferred output is a canonical buy/sell ledger. When replay writes a flattened historical lifecycle row instead, the analyzer must still treat that row as a first-class closed trade lifecycle rather than falling back to `positions.json` as the hidden primary source of truth. `positions.json` remains a support / fallback artifact, not the only way to recover closed trades.
