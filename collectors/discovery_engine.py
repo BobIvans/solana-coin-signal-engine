@@ -76,6 +76,12 @@ def build_shortlist(candidates: list[dict[str, Any]], top_k: int) -> list[dict[s
                 "buy_pressure": row.get("buy_pressure", 0.0),
                 "volume_mcap_ratio": row.get("volume_mcap_ratio", 0.0),
                 "source": row.get("source", "dexscreener"),
+                "discovery_seen_ts": row.get("discovery_seen_ts"),
+                "discovery_seen_at": row.get("discovery_seen_at"),
+                "discovery_lag_sec": row.get("discovery_lag_sec"),
+                "discovery_freshness_status": row.get("discovery_freshness_status"),
+                "delayed_launch_window_flag": row.get("delayed_launch_window_flag"),
+                "first_window_native_visibility": row.get("first_window_native_visibility"),
                 **copy_bundle_contract_fields(row),
                 **copy_cluster_provenance_fields(row),
                 **copy_linkage_contract_fields(row),
@@ -115,11 +121,20 @@ def run_discovery_once() -> dict[str, Any]:
     bundle_status_counts: dict[str, int] = {}
     bundle_origin_counts: dict[str, int] = {}
     bundle_warnings: list[str] = []
+    discovery_freshness_counts: dict[str, int] = {}
     for raw_pair in raw_pairs:
-        normalized = normalize_pair(raw_pair)
+        normalized = normalize_pair(
+            raw_pair,
+            discovery_seen_ts=int(now_ts),
+            native_window_sec=int(getattr(settings, "DISCOVERY_NATIVE_WINDOW_SEC", 15) or 15),
+            first_window_sec=int(getattr(settings, "DISCOVERY_FIRST_WINDOW_SEC", 60) or 60),
+        )
         accepted, reason = filter_pair(normalized, now_ts, settings)
         if not accepted:
             continue
+
+        discovery_status = str(normalized.get("discovery_freshness_status") or "unknown_pair_age")
+        discovery_freshness_counts[discovery_status] = discovery_freshness_counts.get(discovery_status, 0) + 1
 
         bundle_payload = safe_null_bundle_metrics(status="unavailable", warning="bundle enrichment skipped")
         try:
@@ -188,6 +203,10 @@ def run_discovery_once() -> dict[str, Any]:
             "status_counts": bundle_status_counts,
             "origin_counts": bundle_origin_counts,
             "warnings": sorted(set(bundle_warnings)),
+        },
+        "discovery_honesty": {
+            "enabled": bool(getattr(settings, "DISCOVERY_LAG_HONESTY_ENABLED", True)),
+            "freshness_counts": discovery_freshness_counts,
         },
     }
     write_json(settings.SMOKE_DIR / "discovery_status.json", status_payload)

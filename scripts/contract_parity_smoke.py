@@ -248,6 +248,14 @@ def main() -> int:
     write_json(report_path, report)
     _write_summary_md(summary_path, report)
 
+    legacy_dir = smoke_dir.parent
+    legacy_report_path = legacy_dir / "contract_parity_report.json"
+    legacy_summary_path = legacy_dir / "contract_parity_summary.md"
+    if legacy_report_path != report_path:
+        write_json(legacy_report_path, report)
+    if legacy_summary_path != summary_path:
+        _write_summary_md(legacy_summary_path, report)
+
     compact = {
         "overall_status": report["summary"]["overall_status"],
         "contract_groups_checked": report["summary"]["contract_groups_checked"],

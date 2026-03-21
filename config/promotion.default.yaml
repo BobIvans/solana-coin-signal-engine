@@ -59,3 +59,10 @@ state:
   write_session_state: true
   write_event_log: true
   write_daily_summary: true
+
+market_realism:
+  discovery_lag_honesty_enabled: true
+  tx_window_coverage_enforced: true
+  friction_model_mode: amm_approx
+  congestion_stress_enabled: true
+  enable_token_2022_safety: true
