@@ -34,3 +34,8 @@ With `RUG_ENGINE_FAILCLOSED=true`, partial results cannot end as `PASS` and are 
 - `data/processed/rug_assessed_tokens.json`
 - `data/processed/rug_events.jsonl`
 - Smoke helper: `data/processed/rug_assessed.smoke.json`
+
+## PR-SAFETY-HARDEN-3 additions
+
+- `freeze_active` is a hard blocker, matching `mint_active` safe-default semantics
+- Token-2022 mutable sellability extensions can raise `token_sellability_hard_block_flag` and force `IGNORE`

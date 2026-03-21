@@ -56,3 +56,36 @@ def test_bundle_warnings_are_non_breaking():
     assert "bundle_sell_only_flow" in result["rug_warnings"]
     assert "bundle_retry_pattern_severe" in result["rug_warnings"]
     assert result["rug_verdict"] in {"PASS", "WATCH", "IGNORE"}
+
+
+def test_hard_fail_on_active_freeze_authority():
+    result = assess_rug_risk(
+        {
+            "token_address": "token",
+            "mint_authority": None,
+            "freeze_authority": "creator",
+            "top1_holder_share": 0.05,
+            "top20_holder_share": 0.4,
+            "dev_sell_pressure_5m": 0.0,
+        },
+        DummySettings(),
+    )
+    assert result["rug_verdict"] == "IGNORE"
+
+
+def test_token_sellability_hard_block_for_token2022_mutable_risk():
+    result = assess_rug_risk(
+        {
+            "token_address": "token",
+            "mint_authority": None,
+            "freeze_authority": None,
+            "top1_holder_share": 0.05,
+            "top20_holder_share": 0.4,
+            "dev_sell_pressure_5m": 0.0,
+            "token_sellability_hard_block_flag": True,
+            "token_extension_risk_flags": ["token_2022_permanent_delegate"],
+        },
+        DummySettings(),
+    )
+    assert result["rug_verdict"] == "IGNORE"
+    assert "token_2022_permanent_delegate" in result["rug_flags"]

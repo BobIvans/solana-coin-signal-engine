@@ -211,3 +211,37 @@ def test_catastrophic_liquidity_path_is_not_benign_fill():
     )
     assert result["fill_status"] == "catastrophic_liquidity_failure"
     assert result["execution_warning"]
+def test_token_2022_permanent_delegate_is_hard_risk():
+    payload = {
+        "owner": TOKEN_PROGRAM_2022,
+        "extensions": [{"extension": "permanentDelegate", "delegate": "delegate_wallet"}],
+    }
+    out = summarize_token_program_safety(payload, transfer_fee_sellability_block_bps=300)
+    assert out["permanent_delegate_detected"] is True
+    assert out["token_sellability_hard_block_flag"] is True
+
+
+def test_token_2022_default_account_state_frozen_is_hard_risk():
+    payload = {
+        "owner": TOKEN_PROGRAM_2022,
+        "extensions": [{"extension": "defaultAccountState", "state": "Frozen"}],
+    }
+    out = summarize_token_program_safety(payload, transfer_fee_sellability_block_bps=300)
+    assert out["default_account_state_frozen"] is True
+    assert out["token_sellability_hard_block_flag"] is True
+
+
+def test_token_2022_transfer_fee_authority_active_sets_mutable_risk_flag():
+    payload = {
+        "owner": TOKEN_PROGRAM_2022,
+        "extensions": [
+            {
+                "extension": "transferFeeConfig",
+                "transferFeeConfigAuthority": "authority_wallet",
+                "newerTransferFee": {"transferFeeBasisPoints": 25},
+            }
+        ],
+    }
+    out = summarize_token_program_safety(payload, transfer_fee_sellability_block_bps=300)
+    assert out["transfer_fee_authority_active"] is True
+    assert out["token_sellability_hard_block_flag"] is True
