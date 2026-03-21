@@ -7,7 +7,7 @@ from typing import Any
 _GENERIC_SCORED_FILE_NAMES = ["scored_tokens.jsonl", "scored_tokens.json"]
 _JSONL_FILE_NAMES = {
     "entry_candidates": ["entry_candidates.json", "entry_candidates.jsonl"],
-    "signals": ["signals.jsonl", "signal_events.jsonl", "entry_events.jsonl"],
+    "signals": ["signals.jsonl", "signal_events.jsonl", "entry_events.jsonl", "trade_feature_matrix.jsonl"],
     "trades": ["trades.jsonl", "trade_events.jsonl"],
     "positions": ["positions.json"],
     "price_paths": ["price_paths.json", "price_paths.jsonl", "lifecycle_observations.jsonl", "chain_backfill.json", "chain_backfill.jsonl"],

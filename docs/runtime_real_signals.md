@@ -97,3 +97,7 @@ The smoke script writes outputs under `data/smoke/runtime_signal/` and `runs/run
 - `fetch_x_snapshots()` no longer holds the whole token batch behind a single blocking section; query fetches run with bounded per-query concurrency.
 - Status-specific cache TTL is applied at write time so degraded X states cool down faster than healthy snapshots.
 - Operational callers can pass promotion state/config through the token payload (or explicit args) so X failures actually activate cooldown policy end-to-end.
+
+## runtime truth layer
+
+Runtime loading prefers replay-produced `trade_feature_matrix.jsonl` when it exists. Repo-produced `entry_candidates.json`, `entry_events.jsonl`, `scored_tokens.json`, and legacy `trade_feature_matrix.json` remain fallback inputs rather than the canonical truth layer.

@@ -231,6 +231,7 @@ def normalize_runtime_signal(
 
     warning_text = "; ".join(dict.fromkeys(warnings)) if warnings else None
     normalized = {
+        "schema_version": row.get("schema_version") or "runtime_signal.v1",
         "signal_id": _build_signal_id(row, runtime_signal_origin, signal_ts, token_address),
         "token_address": token_address,
         "pair_address": row.get("pair_address"),

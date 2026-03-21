@@ -168,6 +168,7 @@ SCORED_REQUIRED_FIELDS = {
 }
 
 REPLAY_REQUIRED_FIELDS = {
+    "schema_version",
     "position_id",
     "regime_decision",
     "expected_hold_class",
@@ -184,6 +185,15 @@ REPLAY_REQUIRED_FIELDS = {
     "x_author_velocity_5m",
     "seller_reentry_ratio",
     "liquidity_shock_recovery_sec",
+    "replay_input_origin",
+    "replay_data_status",
+    "replay_resolution_status",
+    "wallet_weighting_requested_mode",
+    "wallet_weighting_effective_mode",
+    "replay_score_source",
+    "wallet_mode_parity_status",
+    "historical_input_hash",
+    "score_contract_version",
 }
 
 STATUS_SEVERITY = {
@@ -517,10 +527,8 @@ def compute_contract_parity_report(
 
         if presence["status"] in {"missing", "malformed", "empty"}:
             status = presence["status"]
-        elif missing_required or invalid_required_values:
+        elif missing_required or invalid_required_values or extras:
             status = "mismatch"
-        elif extras:
-            status = "warning"
         else:
             status = "ok"
 

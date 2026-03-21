@@ -3,19 +3,20 @@
   "title": "RuntimeSignal",
   "type": "object",
   "required": [
-    "signal_id",
-    "token_address",
-    "signal_ts",
-    "regime",
-    "x_status",
-    "entry_decision",
-    "regime_confidence",
-    "recommended_position_pct",
-    "reason_flags",
     "blockers",
+    "entry_decision",
+    "reason_flags",
+    "recommended_position_pct",
+    "regime",
+    "regime_confidence",
+    "runtime_signal_confidence",
     "runtime_signal_origin",
     "runtime_signal_status",
-    "runtime_signal_confidence"
+    "schema_version",
+    "signal_id",
+    "signal_ts",
+    "token_address",
+    "x_status"
   ],
   "properties": {
     "schema_version": {
@@ -104,6 +105,7 @@
         "entry_candidates",
         "scored_tokens",
         "historical_replay",
+        "historical_replay_legacy",
         "synthetic_dev",
         "unknown"
       ]
@@ -349,7 +351,42 @@
         "object",
         "null"
       ]
+    },
+    "entry_snapshot": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "runtime_origin_tier": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "canonical",
+        "fallback",
+        null
+      ]
+    },
+    "runtime_pipeline_origin": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "runtime_pipeline_status": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "runtime_pipeline_manifest": {
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
-  "additionalProperties": true
+  "additionalProperties": false
 }

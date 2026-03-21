@@ -106,6 +106,7 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 
 def load_trade_feature_matrix(paths: list[Path | str]) -> LoadedMatrix:
+    """Load canonical trade_feature_matrix.jsonl rows; legacy json fixtures are not preferred."""
     loaded_rows: list[dict[str, Any]] = []
     source_paths: list[str] = []
     for raw_path in paths:

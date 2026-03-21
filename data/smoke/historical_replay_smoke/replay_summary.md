@@ -1,0 +1,21 @@
+# Historical Replay Summary: historical_replay_smoke
+
+- replay_mode: historical
+- input_origin: historical
+- wallet_weighting_requested_mode: off
+- wallet_weighting_effective_modes: off
+- replay_score_source: generic_scored_artifact_rescored
+- wallet_mode_parity_status: comparable
+- rescored_rows: 1
+- score_contract_version: wallet_weighted_unified_score.v1
+- config_hash: 725b9d01629401b9cc1600c1c1026d9e817dd5d2b449965fb3849a611284fdae
+- historical_input_hash: 46c11c14e4d871102fed1fd99d0d646ba29c4846ee76a38ebebc7d79ae7f9e68
+- scored_input_file: tests/fixtures/historical_replay/full_win/scored_tokens.jsonl
+- historical_rows_used: 1
+- partial_rows: 0
+- unresolved_rows: 0
+- ignored_rows: 0
+- synthetic_fallback_used: False
+- signals: 1
+- trades: 1
+- trade_feature_matrix_rows: 1
