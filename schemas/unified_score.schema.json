@@ -11,7 +11,6 @@
     "token_address",
     "spam_penalty",
     "scored_at",
-<<<<<<< HEAD
     "bundle_aggression_bonus",
     "score_inputs_status",
     "wallet_score_component_raw",
@@ -33,9 +32,7 @@
     "wallet_score_component_capped",
     "bundle_sell_heavy_penalty",
     "onchain_core",
-    "early_signal_bonus"
-=======
-    "contract_version",
+    "early_signal_bonus",
     "smart_wallet_family_ids",
     "smart_wallet_independent_family_ids",
     "smart_wallet_family_origins",
@@ -47,7 +44,6 @@
     "smart_wallet_family_member_count_max",
     "smart_wallet_family_shared_funder_flag",
     "smart_wallet_family_creator_link_flag"
->>>>>>> origin/main
   ],
   "properties": {
     "token_address": {
@@ -320,7 +316,6 @@
         "null"
       ]
     },
-<<<<<<< HEAD
     "final_score_pre_wallet": {
       "type": "number",
       "minimum": 0,
@@ -363,7 +358,7 @@
     },
     "wallet_score_explain": {
       "type": "object"
-=======
+    },
     "smart_wallet_family_ids": {
       "type": "array",
       "items": {
@@ -416,7 +411,6 @@
     },
     "smart_wallet_family_creator_link_flag": {
       "type": "boolean"
->>>>>>> origin/main
     }
   },
   "additionalProperties": true
