@@ -97,7 +97,7 @@ The driver supports wallet weighting comparisons with:
 
 - `off`
 - `on`
-- `shadow` (currently routed through the same deterministic harness while preserving a distinct CLI mode)
+- `shadow` (through the same canonical unified scorer contract, with wallet deltas logged but not applied)
 
 ## Smoke mode
 
@@ -109,7 +109,7 @@ This harness intentionally does **not**:
 
 - place live orders
 - integrate with exchanges
-- redesign the unified score
+- introduce an alternative unified score truth path
 - redesign regime logic
 - redesign exit logic
 - fabricate complete PnL when historical evidence is incomplete

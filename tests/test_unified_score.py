@@ -310,17 +310,73 @@ def test_linkage_penalties_apply_conservatively_when_confident():
     assert "shared_funder_penalty" in out["score_flags"]
 
 
-def test_analytics_unified_score_is_wallet_neutral():
+def test_analytics_unified_score_off_mode_preserves_pre_wallet_score():
     settings = load_settings()
     token = {
         **_base_token(),
+        "timestamp": "2026-03-18T10:00:00Z",
+        "wallet_registry_status": "validated",
         "wallet_features": {
+            "smart_wallet_score_sum": 12.0,
             "smart_wallet_tier1_hits": 1,
             "smart_wallet_tier2_hits": 1,
             "smart_wallet_early_entry_hits": 1,
+            "smart_wallet_active_hits": 1,
+            "smart_wallet_registry_confidence": "high",
             "smart_wallet_netflow_bias": 0.0,
         },
     }
-    out = score_token(token, settings)
-    assert out["wallet_adjustment"]["wallet_bonus_score"] > 0
+    out = score_token(token, settings, wallet_weighting_mode="off")
+    assert out["wallet_weighting_effective_mode"] == "off"
+    assert out["wallet_score_component_applied"] == 0.0
+    assert out["wallet_adjustment"]["applied_delta"] == 0.0
     assert out["final_score"] == out["final_score_pre_wallet"]
+
+
+def test_analytics_unified_score_shadow_mode_logs_wallet_component_without_applying():
+    settings = load_settings()
+    token = {
+        **_base_token(),
+        "timestamp": "2026-03-18T10:00:00Z",
+        "wallet_registry_status": "validated",
+        "wallet_features": {
+            "smart_wallet_score_sum": 12.0,
+            "smart_wallet_tier1_hits": 1,
+            "smart_wallet_tier2_hits": 1,
+            "smart_wallet_early_entry_hits": 1,
+            "smart_wallet_active_hits": 1,
+            "smart_wallet_registry_confidence": "high",
+            "smart_wallet_netflow_bias": 0.0,
+        },
+    }
+    out = score_token(token, settings, wallet_weighting_mode="shadow")
+    assert out["wallet_weighting_effective_mode"] == "shadow"
+    assert out["wallet_score_component_applied_shadow"] > 0.0
+    assert out["wallet_score_component_applied"] == 0.0
+    assert out["wallet_adjustment"]["shadow_delta"] > 0.0
+    assert out["final_score"] == out["final_score_pre_wallet"]
+
+
+def test_analytics_unified_score_on_mode_applies_wallet_component_once():
+    settings = load_settings()
+    token = {
+        **_base_token(),
+        "timestamp": "2026-03-18T10:00:00Z",
+        "wallet_registry_status": "validated",
+        "wallet_features": {
+            "smart_wallet_score_sum": 12.0,
+            "smart_wallet_tier1_hits": 1,
+            "smart_wallet_tier2_hits": 1,
+            "smart_wallet_early_entry_hits": 1,
+            "smart_wallet_active_hits": 1,
+            "smart_wallet_registry_confidence": "high",
+            "smart_wallet_netflow_bias": 0.0,
+        },
+    }
+    out = score_token(token, settings, wallet_weighting_mode="on")
+    assert out["wallet_weighting_effective_mode"] == "on"
+    assert out["wallet_score_component_applied"] > 0.0
+    assert out["wallet_adjustment"]["applied_delta"] == out["wallet_score_component_applied"]
+    assert out["final_score"] == pytest.approx(
+        out["final_score_pre_wallet"] + out["wallet_score_component_applied"]
+    )

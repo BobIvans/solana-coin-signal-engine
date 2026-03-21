@@ -4,15 +4,16 @@
   "type": "object",
   "required": [
     "final_score_pre_wallet",
-    "final_score",
+    "wallet_score_explain",
     "wallet_weighting_mode",
-    "wallet_weighting_effective_mode",
-    "wallet_score_component_raw",
-    "wallet_score_component_applied",
-    "wallet_score_component_capped",
     "wallet_score_component_reason",
+    "wallet_score_component_raw",
+    "wallet_score_component_capped",
+    "wallet_weighting_effective_mode",
     "wallet_registry_status",
-    "wallet_score_explain"
+    "wallet_score_component_applied_shadow",
+    "wallet_score_component_applied",
+    "final_score"
   ],
   "properties": {
     "mint": {
@@ -131,6 +132,15 @@
         }
       },
       "additionalProperties": true
+    },
+    "wallet_score_component_applied_shadow": {
+      "type": "number"
+    },
+    "token_address": {
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
   "additionalProperties": true
