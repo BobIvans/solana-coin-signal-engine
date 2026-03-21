@@ -15,6 +15,13 @@ from utils.clock import utc_now_iso
 from utils.io import append_jsonl, ensure_dir, read_json, write_json
 
 
+def _write_jsonl(path: Path, rows: list[dict]) -> None:
+    path.write_text(
+        "\n".join(json.dumps(row, ensure_ascii=False) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+
+
 def _fixture_payload() -> dict:
     now = utc_now_iso()
     return {
@@ -72,7 +79,10 @@ def _fixture_payload() -> dict:
 
 
 def main() -> int:
-    smoke_dir = ensure_dir(REPO_ROOT / "data/smoke/runtime_signal")
+    smoke_dir_path = REPO_ROOT / "data/smoke/runtime_signal"
+    if smoke_dir_path.exists():
+        shutil.rmtree(smoke_dir_path)
+    smoke_dir = ensure_dir(smoke_dir_path)
     processed_dir = ensure_dir(smoke_dir / "processed")
     runs_dir = ensure_dir(REPO_ROOT / "runs")
     run_id = "runtime_signal_smoke"
@@ -81,7 +91,11 @@ def main() -> int:
         shutil.rmtree(run_dir)
 
     payload = _fixture_payload()
-    write_json(processed_dir / "entry_candidates.json", payload)
+    matrix_rows = [
+        {**row, "schema_version": row.get("schema_version") or "trade_feature_matrix.v1"}
+        for row in payload["tokens"]
+    ]
+    _write_jsonl(processed_dir / "trade_feature_matrix.jsonl", matrix_rows)
     append_jsonl(smoke_dir / "runtime_signal_events.jsonl", {"ts": utc_now_iso(), "event": "fixture_written", "count": len(payload["tokens"])})
 
     cmd = [

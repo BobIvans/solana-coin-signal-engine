@@ -10,3 +10,13 @@ data/smoke/linkage_status.json
 FETCH_HEAD
 pr-*.patch
 pr-*-git.patch
+
+# Generated smoke outputs
+data/smoke/contract_parity_fixture/
+data/smoke/contract_parity_report.json
+data/smoke/contract_parity_summary.md
+data/smoke/historical_replay_smoke/
+data/smoke/historical_replay_summary.json
+data/smoke/historical_replay_summary.md
+data/smoke/historical_trade_feature_matrix.jsonl
+data/smoke/runtime_signal/
