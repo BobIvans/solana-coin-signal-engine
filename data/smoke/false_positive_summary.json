@@ -15,7 +15,7 @@
       "exit_reason": null,
       "family": "creator_linked_early_buyers",
       "replay_label": "blocked_no_entry",
-      "score_regime_candidate": "ENTRY_CANDIDATE"
+      "score_regime_candidate": "WATCHLIST"
     },
     {
       "case_name": "degraded_x_ambiguous_onchain",
@@ -47,7 +47,7 @@
       "exit_reason": null,
       "family": "retry_heavy_sniper_loop",
       "replay_label": "blocked_no_entry",
-      "score_regime_candidate": "ENTRY_CANDIDATE"
+      "score_regime_candidate": "WATCHLIST"
     },
     {
       "case_name": "sell_heavy_bundle_distribution",
@@ -63,7 +63,7 @@
       "exit_reason": null,
       "family": "single_cluster_fake_strength",
       "replay_label": "blocked_no_entry",
-      "score_regime_candidate": "ENTRY_CANDIDATE"
+      "score_regime_candidate": "WATCHLIST"
     }
   ],
   "contract_version": "false_positive_fixture_suite.v1",
@@ -76,7 +76,7 @@
     "sell_heavy_bundle_distribution",
     "single_cluster_fake_strength"
   ],
-  "generated_at": "2026-03-20T13:15:16Z",
+  "generated_at": "2026-03-20T23:20:29Z",
   "status": "ok",
   "total_cases": 7,
   "validation_warnings": []

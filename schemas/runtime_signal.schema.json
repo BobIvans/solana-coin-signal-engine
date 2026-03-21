@@ -18,35 +18,242 @@
     "runtime_signal_confidence"
   ],
   "properties": {
-    "schema_version": {"type": ["string", "null"]},
-    "metadata": {"type": ["object", "null"]},
-    "signal_id": {"type": "string", "minLength": 1},
-    "token_address": {"type": "string", "minLength": 1},
-    "pair_address": {"type": ["string", "null"]},
-    "symbol": {"type": ["string", "null"]},
-    "signal_ts": {"type": "string", "minLength": 1},
-    "regime": {"type": "string"},
-    "x_status": {"type": "string"},
-    "entry_decision": {"type": "string"},
-    "regime_confidence": {"type": "number", "minimum": 0, "maximum": 1},
-    "recommended_position_pct": {"type": "number", "minimum": 0, "maximum": 1},
-    "reason_flags": {"type": "array", "items": {"type": "string"}},
-    "blockers": {"type": "array", "items": {"type": "string"}},
-    "effective_signal_status": {"type": ["string", "null"]},
-    "source_artifact": {"type": ["string", "null"]},
+    "schema_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "metadata": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "signal_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "token_address": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pair_address": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "symbol": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "signal_ts": {
+      "type": "string",
+      "minLength": 1
+    },
+    "regime": {
+      "type": "string"
+    },
+    "x_status": {
+      "type": "string"
+    },
+    "entry_decision": {
+      "type": "string"
+    },
+    "regime_confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "recommended_position_pct": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "reason_flags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "effective_signal_status": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "source_artifact": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "runtime_signal_origin": {
       "type": "string",
-      "enum": ["entry_events", "entry_candidates", "scored_tokens", "historical_replay", "synthetic_dev", "unknown"]
+      "enum": [
+        "entry_events",
+        "entry_candidates",
+        "scored_tokens",
+        "historical_replay",
+        "synthetic_dev",
+        "unknown"
+      ]
     },
-    "runtime_signal_status": {"type": "string", "enum": ["ok", "partial", "invalid"]},
-    "runtime_signal_warning": {"type": ["string", "null"]},
-    "runtime_signal_confidence": {"type": "number", "minimum": 0, "maximum": 1},
-    "runtime_signal_partial_flag": {"type": ["boolean", "null"]},
-    "entry_confidence": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
-    "entry_reason": {"type": ["string", "null"]},
-    "warnings": {"type": ["array", "null"], "items": {"type": "string"}},
-    "raw_signal": {"type": ["object", "null"]},
-    "metadata_status": {"type": ["string", "null"]}
+    "runtime_signal_status": {
+      "type": "string",
+      "enum": [
+        "ok",
+        "partial",
+        "invalid"
+      ]
+    },
+    "runtime_signal_warning": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "runtime_signal_confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "runtime_signal_partial_flag": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "entry_confidence": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "entry_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "warnings": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "raw_signal": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "metadata_status": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "smart_wallet_family_ids": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "smart_wallet_independent_family_ids": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "smart_wallet_family_origins": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "smart_wallet_family_statuses": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "smart_wallet_family_reason_codes": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "smart_wallet_family_unique_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "smart_wallet_independent_family_unique_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "smart_wallet_family_confidence_max": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "smart_wallet_family_member_count_max": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "smart_wallet_family_shared_funder_flag": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "smart_wallet_family_creator_link_flag": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    }
   },
   "additionalProperties": true
 }

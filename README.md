@@ -270,6 +270,7 @@ Highlights:
 - provenance-aware confidence via `wallet_family_origin`, `wallet_family_confidence`, `wallet_family_reason_codes`, and `wallet_family_status`
 - additive registry integration through `scripts/build_wallet_registry.py`
 - validated-registry propagation for downstream enrichment consumers
+- runtime / replay propagation of aggregated token-facing wallet-family summary fields without forcing a singular token-level family id
 - smoke outputs under `data/smoke/`
 
 Evidence lanes include cluster overlap, shared funders, repeated launch overlap, registry hints, linkage-group hints, and creator/dev overlap flags.

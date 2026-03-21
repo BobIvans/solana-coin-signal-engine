@@ -60,6 +60,7 @@ def test_unified_and_entry_settings_coexist():
     assert isinstance(settings.UNIFIED_SCORING_FAILOPEN, bool)
     assert isinstance(settings.UNIFIED_SCORING_REQUIRE_X, bool)
     assert settings.UNIFIED_SCORE_WATCH_THRESHOLD > 0
+    assert settings.UNIFIED_SCORE_PARTIAL_REVIEW_BUFFER >= 0
     assert isinstance(settings.ENTRY_SELECTOR_ENABLED, bool)
     assert settings.ENTRY_TREND_SCORE_MIN >= settings.ENTRY_SCALP_SCORE_MIN
 

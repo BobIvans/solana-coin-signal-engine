@@ -4,6 +4,8 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Any
 
+from utils.wallet_family_contract_fields import default_wallet_family_contract_fields
+
 _VALID_ENTRY_DECISIONS = {"SCALP", "TREND", "IGNORE"}
 _VALID_REGIMES = {"SCALP", "TREND", "UNKNOWN", "IGNORE"}
 _VALID_X_STATUS = {"healthy", "degraded", "missing", "error", "unknown"}
@@ -32,6 +34,30 @@ def _as_float(value: Any, *, default: float | None = None) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _as_int(value: Any, *, default: int = 0) -> int:
+    try:
+        if value in (None, ""):
+            return default
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_bool(value: Any, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "y", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "n", "off", ""}:
+            return False
+        return default
+    return bool(value)
 
 
 def _normalized_decision(row: dict[str, Any]) -> str:
@@ -65,6 +91,49 @@ def _build_signal_id(row: dict[str, Any], origin: str, ts: str, token_address: s
         return existing
     digest = hashlib.sha1(f"{origin}:{token_address}:{ts}".encode("utf-8")).hexdigest()[:12]
     return f"runtime_{digest}"
+
+
+def _normalized_wallet_family_fields(row: dict[str, Any]) -> dict[str, Any]:
+    defaults = default_wallet_family_contract_fields()
+    return {
+        "smart_wallet_family_ids": _as_list(row.get("smart_wallet_family_ids", defaults["smart_wallet_family_ids"])),
+        "smart_wallet_independent_family_ids": _as_list(
+            row.get("smart_wallet_independent_family_ids", defaults["smart_wallet_independent_family_ids"])
+        ),
+        "smart_wallet_family_origins": _as_list(row.get("smart_wallet_family_origins", defaults["smart_wallet_family_origins"])),
+        "smart_wallet_family_statuses": _as_list(row.get("smart_wallet_family_statuses", defaults["smart_wallet_family_statuses"])),
+        "smart_wallet_family_reason_codes": _as_list(
+            row.get("smart_wallet_family_reason_codes", defaults["smart_wallet_family_reason_codes"])
+        ),
+        "smart_wallet_family_unique_count": _as_int(
+            row.get("smart_wallet_family_unique_count", defaults["smart_wallet_family_unique_count"]),
+            default=defaults["smart_wallet_family_unique_count"],
+        ),
+        "smart_wallet_independent_family_unique_count": _as_int(
+            row.get(
+                "smart_wallet_independent_family_unique_count",
+                defaults["smart_wallet_independent_family_unique_count"],
+            ),
+            default=defaults["smart_wallet_independent_family_unique_count"],
+        ),
+        "smart_wallet_family_confidence_max": _as_float(
+            row.get("smart_wallet_family_confidence_max", defaults["smart_wallet_family_confidence_max"]),
+            default=defaults["smart_wallet_family_confidence_max"],
+        )
+        or 0.0,
+        "smart_wallet_family_member_count_max": _as_int(
+            row.get("smart_wallet_family_member_count_max", defaults["smart_wallet_family_member_count_max"]),
+            default=defaults["smart_wallet_family_member_count_max"],
+        ),
+        "smart_wallet_family_shared_funder_flag": _as_bool(
+            row.get("smart_wallet_family_shared_funder_flag", defaults["smart_wallet_family_shared_funder_flag"]),
+            default=defaults["smart_wallet_family_shared_funder_flag"],
+        ),
+        "smart_wallet_family_creator_link_flag": _as_bool(
+            row.get("smart_wallet_family_creator_link_flag", defaults["smart_wallet_family_creator_link_flag"]),
+            default=defaults["smart_wallet_family_creator_link_flag"],
+        ),
+    }
 
 
 def normalize_runtime_signal(
@@ -147,6 +216,7 @@ def normalize_runtime_signal(
         "entry_confidence": None if entry_confidence is None else round(entry_confidence, 4),
         "entry_reason": row.get("entry_reason") or row.get("reason"),
         "entry_snapshot": row.get("entry_snapshot") or {},
+        **_normalized_wallet_family_fields(row),
         "raw_signal": row,
     }
     return normalized

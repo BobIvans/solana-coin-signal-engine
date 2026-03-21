@@ -68,10 +68,70 @@ def test_wallet_registry_bias_counts_are_deterministic_and_capped():
         "validated_size": 4,
         "hot_set_size": 3,
         "validated_wallets": {
-            "hot1": {"wallet": "hot1", "tier": "tier_1", "status": "active", "is_hot": True, "early_entry_positive": False},
-            "hot2": {"wallet": "hot2", "tier": "tier_2", "status": "active", "is_hot": True, "early_entry_positive": True},
-            "watch1": {"wallet": "watch1", "tier": "tier_3", "status": "watch_pending_validation", "is_hot": False, "early_entry_positive": False},
-            "watch2": {"wallet": "watch2", "tier": "tier_3", "status": "watch", "is_hot": True, "early_entry_positive": False},
+            "hot1": {
+                "wallet": "hot1",
+                "tier": "tier_1",
+                "status": "active",
+                "is_hot": True,
+                "early_entry_positive": False,
+                "wallet_family_id": "fam_alpha",
+                "independent_family_id": "ifam_alpha",
+                "wallet_family_confidence": 0.82,
+                "wallet_family_origin": "graph_evidence",
+                "wallet_family_reason_codes": ["shared_cluster", "creator_link"],
+                "wallet_family_member_count": 3,
+                "wallet_family_shared_funder_flag": True,
+                "wallet_family_creator_link_flag": True,
+                "wallet_family_status": "ok",
+            },
+            "hot2": {
+                "wallet": "hot2",
+                "tier": "tier_2",
+                "status": "active",
+                "is_hot": True,
+                "early_entry_positive": True,
+                "wallet_family_id": "fam_alpha",
+                "independent_family_id": "ifam_beta",
+                "wallet_family_confidence": 0.91,
+                "wallet_family_origin": "mixed_evidence",
+                "wallet_family_reason_codes": ["shared_funder"],
+                "wallet_family_member_count": 5,
+                "wallet_family_shared_funder_flag": True,
+                "wallet_family_creator_link_flag": False,
+                "wallet_family_status": "partial",
+            },
+            "watch1": {
+                "wallet": "watch1",
+                "tier": "tier_3",
+                "status": "watch_pending_validation",
+                "is_hot": False,
+                "early_entry_positive": False,
+                "wallet_family_id": "fam_beta",
+                "independent_family_id": None,
+                "wallet_family_confidence": 0.55,
+                "wallet_family_origin": "registry_evidence",
+                "wallet_family_reason_codes": ["registry_hint"],
+                "wallet_family_member_count": 2,
+                "wallet_family_shared_funder_flag": False,
+                "wallet_family_creator_link_flag": False,
+                "wallet_family_status": "ok",
+            },
+            "watch2": {
+                "wallet": "watch2",
+                "tier": "tier_3",
+                "status": "watch",
+                "is_hot": True,
+                "early_entry_positive": False,
+                "wallet_family_id": None,
+                "independent_family_id": None,
+                "wallet_family_confidence": 0.0,
+                "wallet_family_origin": "missing",
+                "wallet_family_reason_codes": [],
+                "wallet_family_member_count": 0,
+                "wallet_family_shared_funder_flag": False,
+                "wallet_family_creator_link_flag": False,
+                "wallet_family_status": "missing",
+            },
         },
     }
     first = compute_wallet_registry_bias(["watch1", "hot1", "hot2", "hot1", "watch2"], lookup)
@@ -89,3 +149,14 @@ def test_wallet_registry_bias_counts_are_deterministic_and_capped():
     assert first["smart_wallet_conviction_bonus"] <= CONVICTION_BONUS_CAP
     assert first["smart_wallet_netflow_bias"] is None
     assert first["smart_wallet_dispersion_score"] > 0
+    assert first["smart_wallet_family_ids"] == ["fam_alpha", "fam_beta"]
+    assert first["smart_wallet_independent_family_ids"] == ["ifam_alpha", "ifam_beta"]
+    assert first["smart_wallet_family_origins"] == ["graph_evidence", "mixed_evidence", "registry_evidence"]
+    assert first["smart_wallet_family_statuses"] == ["ok", "partial"]
+    assert first["smart_wallet_family_reason_codes"] == ["creator_link", "registry_hint", "shared_cluster", "shared_funder"]
+    assert first["smart_wallet_family_unique_count"] == 2
+    assert first["smart_wallet_independent_family_unique_count"] == 2
+    assert first["smart_wallet_family_confidence_max"] == 0.91
+    assert first["smart_wallet_family_member_count_max"] == 5
+    assert first["smart_wallet_family_shared_funder_flag"] is True
+    assert first["smart_wallet_family_creator_link_flag"] is True

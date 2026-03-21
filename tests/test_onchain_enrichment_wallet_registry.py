@@ -228,6 +228,10 @@ def test_onchain_enrichment_smoke_degrades_when_registry_missing(monkeypatch, tm
     assert token["smart_wallet_tier1_hits"] == 0
     assert token["smart_wallet_registry_confidence"] == "low"
     assert token["smart_wallet_dispersion_score"] is None
+    assert token["smart_wallet_family_ids"] == []
+    assert token["smart_wallet_family_origins"] == []
+    assert token["smart_wallet_family_confidence_max"] == 0.0
+    assert token["smart_wallet_family_shared_funder_flag"] is False
     assert token["smart_wallet_hit_wallets"] == ["hot1", "watch1"]
     assert token["bundle_composition_dominant"] == "unknown"
     assert token["bundle_tip_efficiency"] is None
@@ -273,6 +277,17 @@ def test_enriched_schema_declares_wallet_registry_fields_and_accepts_smoke_recor
         "tx_fetch_mode",
         "tx_batch_record_count",
         "tx_lookup_source",
+        "smart_wallet_family_ids",
+        "smart_wallet_independent_family_ids",
+        "smart_wallet_family_origins",
+        "smart_wallet_family_statuses",
+        "smart_wallet_family_reason_codes",
+        "smart_wallet_family_unique_count",
+        "smart_wallet_independent_family_unique_count",
+        "smart_wallet_family_confidence_max",
+        "smart_wallet_family_member_count_max",
+        "smart_wallet_family_shared_funder_flag",
+        "smart_wallet_family_creator_link_flag",
     }.issubset(required)
     assert {"bundle_composition_dominant", "bundle_tip_efficiency", "bundle_failure_retry_pattern", "cross_block_bundle_correlation"}.issubset(token_schema["properties"].keys())
 

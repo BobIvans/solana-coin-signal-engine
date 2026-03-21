@@ -113,3 +113,24 @@ def test_creator_linked_cluster_blocks_trend_but_keeps_scalp_available():
     assert result["entry_decision"] == "SCALP"
     assert result["expected_hold_class"] == "short"
     assert "trend_creator_cluster_linked" in result["regime_blockers"]
+
+
+def test_entry_result_propagates_wallet_family_summary_fields():
+    token = _token()
+    token.update({
+        "smart_wallet_family_ids": ["fam_a"],
+        "smart_wallet_independent_family_ids": ["ifam_a"],
+        "smart_wallet_family_origins": ["graph_evidence"],
+        "smart_wallet_family_statuses": ["ok"],
+        "smart_wallet_family_reason_codes": ["shared_cluster"],
+        "smart_wallet_family_unique_count": 1,
+        "smart_wallet_independent_family_unique_count": 1,
+        "smart_wallet_family_confidence_max": 0.74,
+        "smart_wallet_family_member_count_max": 3,
+        "smart_wallet_family_shared_funder_flag": True,
+        "smart_wallet_family_creator_link_flag": False,
+    })
+    result = decide_entry(token, DummySettings())
+    assert result["smart_wallet_family_ids"] == ["fam_a"]
+    assert result["smart_wallet_family_confidence_max"] == 0.74
+    assert result["smart_wallet_family_shared_funder_flag"] is True

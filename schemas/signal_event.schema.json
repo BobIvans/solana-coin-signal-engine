@@ -395,6 +395,92 @@
     },
     "contract_version": {
       "type": "string"
+    },
+    "smart_wallet_family_ids": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "smart_wallet_independent_family_ids": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "smart_wallet_family_origins": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "smart_wallet_family_statuses": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "smart_wallet_family_reason_codes": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "smart_wallet_family_unique_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "smart_wallet_independent_family_unique_count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "smart_wallet_family_confidence_max": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "smart_wallet_family_member_count_max": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "smart_wallet_family_shared_funder_flag": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "smart_wallet_family_creator_link_flag": {
+      "type": [
+        "boolean",
+        "null"
+      ]
     }
   },
   "additionalProperties": true

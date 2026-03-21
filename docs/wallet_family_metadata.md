@@ -67,6 +67,27 @@ Family ids are derived from the canonical sorted member set.
 That keeps ids stable across reruns when family membership is unchanged.
 If the member set changes, the derived id changes too, which is acceptable and explicit.
 
+## Wallet-level metadata vs token-facing operational summary
+
+Wallet-level family fields stay in the validated registry and family metadata outputs.
+Operational token / signal / trade / replay artifacts must not invent a singular `wallet_family_id` for the whole token because one token can match multiple smart-wallet families.
+
+Instead, downstream runtime-facing artifacts carry an aggregated token-facing summary built from matched smart-wallet records:
+
+- `smart_wallet_family_ids`
+- `smart_wallet_independent_family_ids`
+- `smart_wallet_family_origins`
+- `smart_wallet_family_statuses`
+- `smart_wallet_family_reason_codes`
+- `smart_wallet_family_unique_count`
+- `smart_wallet_independent_family_unique_count`
+- `smart_wallet_family_confidence_max`
+- `smart_wallet_family_member_count_max`
+- `smart_wallet_family_shared_funder_flag`
+- `smart_wallet_family_creator_link_flag`
+
+Fresh enriched / scored / entry / runtime / replay artifacts should emit explicit null-safe defaults for this summary (`[]`, `0`, `0.0`, `False`) so the layer stays visible even when older payloads or empty matches are present.
+
 ## Persistent outputs
 
 This PR adds:

@@ -23,6 +23,10 @@ from utils.short_horizon_contract_fields import (
     copy_continuation_metadata_fields,
     copy_short_horizon_contract_fields,
 )
+from utils.wallet_family_contract_fields import (
+    SMART_WALLET_FAMILY_CONTRACT_FIELDS,
+    copy_wallet_family_contract_fields,
+)
 
 _CONTRACT_VERSION = "replay_harness.v1"
 _TRADE_FEATURE_MATRIX_SCHEMA_VERSION = "trade_feature_matrix.v1"
@@ -106,7 +110,7 @@ _TRADE_FEATURE_MATRIX_FIELDS = [
     "linkage_risk_score", "creator_funder_overlap_count", "buyer_funder_overlap_count", "funder_overlap_count",
     "linkage_reason_codes", "linkage_confidence", "linkage_metric_origin", "linkage_status", "linkage_warning",
     "smart_wallet_score_sum", "smart_wallet_tier1_hits", "smart_wallet_tier2_hits", "smart_wallet_unique_count",
-    "smart_wallet_early_entry_hits", "smart_wallet_netflow_bias", "exit_decision", "exit_reason_final", "exit_flags",
+    "smart_wallet_early_entry_hits", "smart_wallet_netflow_bias", *SMART_WALLET_FAMILY_CONTRACT_FIELDS, "exit_decision", "exit_reason_final", "exit_flags",
     "exit_warnings", "hold_sec", "gross_pnl_pct", "net_pnl_pct", "mfe_pct", "mae_pct", "time_to_first_profit_sec",
     "mfe_pct_240s", "mae_pct_240s", "trend_survival_15m", "trend_survival_60m", "wallet_weighting", "dry_run",
     "synthetic_trade_flag", "replay_input_origin", "replay_data_status", "replay_resolution_status", "synthetic_assist_flag",
@@ -389,6 +393,7 @@ def _build_replay_contract_fields(
         **copy_linkage_contract_fields(base_context, fallback=fallback),
         **copy_short_horizon_contract_fields(base_context, fallback=fallback),
         **copy_continuation_metadata_fields(base_context, fallback=fallback),
+        **copy_wallet_family_contract_fields(base_context, fallback=fallback),
     }
 
 

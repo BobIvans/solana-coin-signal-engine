@@ -38,6 +38,7 @@ class FalsePositiveSettings:
     UNIFIED_SCORE_PARTIAL_DATA_PENALTY = 2.5
     UNIFIED_SCORE_ENTRY_THRESHOLD = 72.0
     UNIFIED_SCORE_WATCH_THRESHOLD = 55.0
+    UNIFIED_SCORE_PARTIAL_REVIEW_BUFFER = 1.0
     UNIFIED_SCORING_REQUIRE_X = False
     UNIFIED_SCORING_FAILOPEN = False
     UNIFIED_SCORE_CONTRACT_VERSION = "unified_score_v1"
@@ -516,7 +517,7 @@ _FALSE_POSITIVE_CASES: dict[str, dict[str, Any]] = {
             "entry_decision": "IGNORE",
         },
         "expected_replay_behavior": {"replay_label": "blocked_no_entry"},
-        "notes": "Partial-data caution should remain explicit instead of silently defaulting to confidence.",
+        "notes": "Partial-data caution should remain operator-visible as WATCHLIST on the score layer while entry stays fail-closed at IGNORE.",
     },
 }
 

@@ -333,6 +333,7 @@ def test_analytics_unified_score_off_mode_preserves_pre_wallet_score():
     assert out["final_score"] == out["final_score_pre_wallet"]
 
 
+<<<<<<< HEAD
 def test_analytics_unified_score_shadow_mode_logs_wallet_component_without_applying():
     settings = load_settings()
     token = {
@@ -380,3 +381,25 @@ def test_analytics_unified_score_on_mode_applies_wallet_component_once():
     assert out["final_score"] == pytest.approx(
         out["final_score_pre_wallet"] + out["wallet_score_component_applied"]
     )
+=======
+def test_unified_score_propagates_wallet_family_summary_fields():
+    settings = load_settings()
+    token = {
+        **_base_token(),
+        "smart_wallet_family_ids": ["fam_a"],
+        "smart_wallet_independent_family_ids": ["ifam_a"],
+        "smart_wallet_family_origins": ["graph_evidence"],
+        "smart_wallet_family_statuses": ["ok"],
+        "smart_wallet_family_reason_codes": ["shared_cluster"],
+        "smart_wallet_family_unique_count": 1,
+        "smart_wallet_independent_family_unique_count": 1,
+        "smart_wallet_family_confidence_max": 0.84,
+        "smart_wallet_family_member_count_max": 4,
+        "smart_wallet_family_shared_funder_flag": True,
+        "smart_wallet_family_creator_link_flag": False,
+    }
+    out = score_token(token, settings)
+    assert out["smart_wallet_family_ids"] == ["fam_a"]
+    assert out["smart_wallet_family_confidence_max"] == 0.84
+    assert out["smart_wallet_family_shared_funder_flag"] is True
+>>>>>>> origin/main

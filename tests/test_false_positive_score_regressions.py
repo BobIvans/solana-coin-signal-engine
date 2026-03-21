@@ -44,3 +44,11 @@ def test_false_positive_score_expectations():
 
         if "regime_candidate" in expected:
             assert scored["regime_candidate"] == expected["regime_candidate"]
+
+
+def test_partial_evidence_false_confidence_remains_watchlist_at_score_layer():
+    case = get_false_positive_case("partial_evidence_false_confidence")
+    scored = score_false_positive_case("partial_evidence_false_confidence")
+
+    assert scored["regime_candidate"] == case["expected_score_signals"]["regime_candidate"]
+    assert "watchlist_partial_evidence_review" in scored.get("score_warnings", [])

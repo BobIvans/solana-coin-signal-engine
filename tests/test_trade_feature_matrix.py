@@ -111,6 +111,17 @@ REQUIRED_MATRIX_KEYS = [
     "smart_wallet_unique_count",
     "smart_wallet_early_entry_hits",
     "smart_wallet_netflow_bias",
+    "smart_wallet_family_ids",
+    "smart_wallet_independent_family_ids",
+    "smart_wallet_family_origins",
+    "smart_wallet_family_statuses",
+    "smart_wallet_family_reason_codes",
+    "smart_wallet_family_unique_count",
+    "smart_wallet_independent_family_unique_count",
+    "smart_wallet_family_confidence_max",
+    "smart_wallet_family_member_count_max",
+    "smart_wallet_family_shared_funder_flag",
+    "smart_wallet_family_creator_link_flag",
     "exit_decision",
     "exit_reason_final",
     "exit_flags",
@@ -218,6 +229,9 @@ def test_trade_feature_matrix_handles_legacy_payloads_with_null_safe_placeholder
     assert row["net_unique_buyers_60s"] is None
     assert row["x_author_velocity_5m"] is None
     assert row["liquidity_shock_recovery_sec"] is None
+    assert row["smart_wallet_family_ids"] == []
+    assert row["smart_wallet_family_confidence_max"] == 0.0
+    assert row["smart_wallet_family_shared_funder_flag"] is False
     assert row["exit_decision"] is None
     assert row["gross_pnl_pct"] is None
     assert row["schema_version"] == "trade_feature_matrix.v1"
@@ -320,6 +334,17 @@ def test_trade_feature_matrix_preserves_enriched_payload_fields():
                     "smart_wallet_early_entry_hits": 2,
                     "smart_wallet_netflow_bias": 0.35,
                 },
+                "smart_wallet_family_ids": ["fam_a", "fam_b"],
+                "smart_wallet_independent_family_ids": ["ifam_a"],
+                "smart_wallet_family_origins": ["graph_evidence", "mixed_evidence"],
+                "smart_wallet_family_statuses": ["ok", "partial"],
+                "smart_wallet_family_reason_codes": ["shared_funder", "shared_cluster"],
+                "smart_wallet_family_unique_count": 2,
+                "smart_wallet_independent_family_unique_count": 1,
+                "smart_wallet_family_confidence_max": 0.93,
+                "smart_wallet_family_member_count_max": 6,
+                "smart_wallet_family_shared_funder_flag": True,
+                "smart_wallet_family_creator_link_flag": False,
             }
         ],
     )
@@ -346,6 +371,10 @@ def test_trade_feature_matrix_preserves_enriched_payload_fields():
     assert row["smart_wallet_score_sum"] == 14.5
     assert row["smart_wallet_tier1_hits"] == 2
     assert row["smart_wallet_netflow_bias"] == 0.35
+    assert row["smart_wallet_family_ids"] == ["fam_a", "fam_b"]
+    assert row["smart_wallet_family_reason_codes"] == ["shared_funder", "shared_cluster"]
+    assert row["smart_wallet_family_confidence_max"] == 0.93
+    assert row["smart_wallet_family_shared_funder_flag"] is True
     assert row["net_unique_buyers_60s"] == 6
     assert row["smart_wallet_dispersion_score"] == 0.55
     assert row["x_author_velocity_5m"] == 0.6

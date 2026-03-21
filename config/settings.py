@@ -102,6 +102,7 @@ class Settings:
     UNIFIED_SCORING_REQUIRE_X: bool
     UNIFIED_SCORE_ENTRY_THRESHOLD: float
     UNIFIED_SCORE_WATCH_THRESHOLD: float
+    UNIFIED_SCORE_PARTIAL_REVIEW_BUFFER: float
     UNIFIED_SCORE_IGNORE_RUG_THRESHOLD: float
     UNIFIED_SCORE_X_DEGRADED_PENALTY: float
     UNIFIED_SCORE_PARTIAL_DATA_PENALTY: float
@@ -272,6 +273,13 @@ def _as_positive_float(raw_value: Any, *, key: str) -> float:
     value = float(raw_value)
     if value <= 0:
         raise ValueError(f"{key} must be > 0")
+    return value
+
+
+def _as_non_negative_float(raw_value: Any, *, key: str) -> float:
+    value = float(raw_value)
+    if value < 0:
+        raise ValueError(f"{key} must be >= 0")
     return value
 
 
@@ -552,6 +560,10 @@ def load_settings() -> Settings:
         ),
         UNIFIED_SCORE_WATCH_THRESHOLD=float(
             _get_env(merged, "UNIFIED_SCORE_WATCH_THRESHOLD", "68")
+        ),
+        UNIFIED_SCORE_PARTIAL_REVIEW_BUFFER=_as_non_negative_float(
+            _get_env(merged, "UNIFIED_SCORE_PARTIAL_REVIEW_BUFFER", "1.0"),
+            key="UNIFIED_SCORE_PARTIAL_REVIEW_BUFFER",
         ),
         UNIFIED_SCORE_IGNORE_RUG_THRESHOLD=_as_unit_float(
             _get_env(merged, "UNIFIED_SCORE_IGNORE_RUG_THRESHOLD", "0.55"),

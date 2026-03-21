@@ -10,6 +10,7 @@ from utils.bundle_contract_fields import (
 )
 from utils.short_horizon_contract_fields import CONTINUATION_METADATA_FIELDS
 from utils.provenance_enums import BUNDLE_PROVENANCE_ORIGINS, CLUSTER_PROVENANCE_ORIGINS, LINKAGE_PROVENANCE_ORIGINS
+from utils.wallet_family_contract_fields import SMART_WALLET_FAMILY_CONTRACT_FIELDS
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -22,7 +23,7 @@ def _schema_properties(schema_name: str) -> dict[str, object]:
 def test_signal_event_schema_exposes_provenance_field_groups() -> None:
     properties = _schema_properties('signal_event.schema.json')
 
-    for field in [*BUNDLE_PROVENANCE_FIELDS, *CLUSTER_PROVENANCE_FIELDS, *LINKAGE_CONTRACT_FIELDS, *CONTINUATION_METADATA_FIELDS]:
+    for field in [*BUNDLE_PROVENANCE_FIELDS, *CLUSTER_PROVENANCE_FIELDS, *LINKAGE_CONTRACT_FIELDS, *CONTINUATION_METADATA_FIELDS, *SMART_WALLET_FAMILY_CONTRACT_FIELDS]:
         assert field in properties
 
     assert properties['linkage_reason_codes'] == {
@@ -44,7 +45,7 @@ def test_signal_event_schema_exposes_provenance_field_groups() -> None:
 def test_trade_event_schema_exposes_provenance_field_groups() -> None:
     properties = _schema_properties('trade_event.schema.json')
 
-    for field in [*BUNDLE_PROVENANCE_FIELDS, *CLUSTER_PROVENANCE_FIELDS, *LINKAGE_CONTRACT_FIELDS, *CONTINUATION_METADATA_FIELDS]:
+    for field in [*BUNDLE_PROVENANCE_FIELDS, *CLUSTER_PROVENANCE_FIELDS, *LINKAGE_CONTRACT_FIELDS, *CONTINUATION_METADATA_FIELDS, *SMART_WALLET_FAMILY_CONTRACT_FIELDS]:
         assert field in properties
 
     assert properties['linkage_reason_codes'] == {
