@@ -322,3 +322,6 @@ Artifacts written by the smoke path:
 
 See `docs/offline_feature_importance.md` for the target definitions, grouping logic, methods, caveats, and honesty policy.
 
+
+
+- unified scoring now emits explicit evidence-quality penalties (`partial_evidence_penalty`, `low_confidence_evidence_penalty`) derived from a shared evidence-quality summary helper used by both score and sizing layers.

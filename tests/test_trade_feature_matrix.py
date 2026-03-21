@@ -35,6 +35,8 @@ REQUIRED_MATRIX_KEYS = [
     "evidence_quality_score",
     "evidence_conflict_flag",
     "partial_evidence_flag",
+    "partial_evidence_penalty",
+    "low_confidence_evidence_penalty",
     "final_score",
     "onchain_core",
     "early_signal_bonus",

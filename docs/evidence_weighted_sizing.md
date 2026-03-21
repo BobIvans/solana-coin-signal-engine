@@ -4,6 +4,10 @@ This repo now applies an additive **evidence-weighted sizing** layer after exist
 
 ## Intent
 
+Sizing now uses the same shared evidence-quality summary helper as unified scoring (`analytics/evidence_quality.py`).
+This avoids score/sizing drift while keeping sizing-specific multiplier logic separate.
+
+
 The sizing layer does **not** redesign score, regime, or hard-guard logic.
 It only refines allowed paper/runtime size conservatively when the evidence behind a signal is incomplete, degraded, conflicting, or risky.
 

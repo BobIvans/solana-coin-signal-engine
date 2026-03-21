@@ -43,7 +43,13 @@
     "smart_wallet_family_confidence_max",
     "smart_wallet_family_member_count_max",
     "smart_wallet_family_shared_funder_flag",
-    "smart_wallet_family_creator_link_flag"
+    "smart_wallet_family_creator_link_flag",
+    "partial_evidence_penalty",
+    "low_confidence_evidence_penalty",
+    "evidence_quality_score",
+    "evidence_conflict_flag",
+    "partial_evidence_flag",
+    "evidence_coverage_ratio"
   ],
   "properties": {
     "token_address": {
@@ -411,6 +417,44 @@
     },
     "smart_wallet_family_creator_link_flag": {
       "type": "boolean"
+    },
+    "evidence_quality_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "evidence_conflict_flag": {
+      "type": "boolean"
+    },
+    "partial_evidence_flag": {
+      "type": "boolean"
+    },
+    "evidence_coverage_ratio": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "evidence_available": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence_scores": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "number"
+      }
+    },
+    "partial_evidence_penalty": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "low_confidence_evidence_penalty": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 10
     }
   },
   "additionalProperties": true

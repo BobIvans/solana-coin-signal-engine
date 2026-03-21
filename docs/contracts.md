@@ -298,6 +298,11 @@ The replay feature matrix is also the preferred source for analyzer evidence-qua
 - `partial_evidence_flag`
 - `evidence_quality_score`
 - `evidence_conflict_flag`
+- `evidence_coverage_ratio`
+- `partial_evidence_penalty`
+- `low_confidence_evidence_penalty`
+- `evidence_available`
+- `evidence_scores`
 - `sizing_confidence`
 - `x_status`
 - `linkage_risk_score`

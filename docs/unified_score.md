@@ -73,3 +73,25 @@ Recommended rollout path:
 1. `off`
 2. `shadow`
 3. `on`
+
+## Evidence-quality caution components
+
+Unified score now consumes a shared evidence-quality summary from `analytics/evidence_quality.py`.
+
+That summary is used by both:
+
+- `analytics/unified_score.py` for explicit score-visible caution penalties
+- `analytics/evidence_weighted_sizing.py` for conservative position-size reductions
+
+The canonical scored-token contract now emits:
+
+- `evidence_quality_score`
+- `evidence_conflict_flag`
+- `partial_evidence_flag`
+- `evidence_coverage_ratio`
+- `evidence_available`
+- `evidence_scores`
+- `partial_evidence_penalty`
+- `low_confidence_evidence_penalty`
+
+These two penalties are part of `final_score_pre_wallet`; they are not decorative side-channel fields.
