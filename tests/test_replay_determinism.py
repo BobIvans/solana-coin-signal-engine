@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 
-def _run(run_id: str):
+def _run(run_id: str, wallet_weighting: str = "off"):
     cmd = [
         sys.executable,
         "scripts/replay_7d.py",
@@ -18,6 +18,8 @@ def _run(run_id: str):
         "42",
         "--run-id",
         run_id,
+        "--wallet-weighting",
+        wallet_weighting,
         "--dry-run",
         "--start-ts",
         "2026-03-09T00:00:00Z",
@@ -26,8 +28,11 @@ def _run(run_id: str):
     ]
     subprocess.run(cmd, check=True)
     base = Path("runs") / run_id
+    manifest = json.loads((base / "manifest.json").read_text())
     return (
-        json.loads((base / "manifest.json").read_text())["config_hash"],
+        manifest["config_hash"],
+        manifest["historical_input_hash"],
+        manifest["wallet_weighting_requested_mode"],
         (base / "signals.jsonl").read_text(),
         (base / "trades.jsonl").read_text(),
         (base / "trade_feature_matrix.jsonl").read_text(),
@@ -36,6 +41,6 @@ def _run(run_id: str):
 
 
 def test_replay_is_deterministic_for_same_seed_and_window():
-    out1 = _run("det_run")
-    out2 = _run("det_run")
+    out1 = _run("det_run", wallet_weighting="shadow")
+    out2 = _run("det_run", wallet_weighting="shadow")
     assert out1 == out2

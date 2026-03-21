@@ -70,6 +70,9 @@ The summary reports:
 
 ### Run historical replay
 
+Replay comparisons for `--wallet-weighting off|shadow|on` are mode-aware: the harness prefers `scored_tokens.<mode>.json[l]`, otherwise it re-scores generic scored artifacts under the requested mode and records parity metadata (`replay_score_source`, `wallet_mode_parity_status`, `historical_input_hash`) in summary / manifest / matrix outputs.
+
+
 ```bash
 python scripts/replay_7d.py \
   --run-id example_replay \

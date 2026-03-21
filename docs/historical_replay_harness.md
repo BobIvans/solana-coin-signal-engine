@@ -97,7 +97,7 @@ The driver supports wallet weighting comparisons with:
 
 - `off`
 - `on`
-- `shadow` (currently routed through the same deterministic harness while preserving a distinct CLI mode)
+- `shadow` (true replay rescore mode; no CLI remap to `on`)
 
 ## Smoke mode
 
@@ -113,3 +113,7 @@ This harness intentionally does **not**:
 - redesign regime logic
 - redesign exit logic
 - fabricate complete PnL when historical evidence is incomplete
+
+## Wallet-weighting replay parity
+
+Replay now resolves scored artifacts in a mode-aware order (`scored_tokens.<mode>.json[l]` before generic `scored_tokens.json[l]`). If only a generic scored artifact is present, the harness re-scores it under the requested wallet mode before lifecycle reconstruction. Fresh replay summaries, manifests, signal/trade artifacts, and `trade_feature_matrix.jsonl` rows include `wallet_weighting_requested_mode`, `wallet_weighting_effective_mode`, `replay_score_source`, `wallet_mode_parity_status`, `historical_input_hash`, and score-layer wallet component fields so `off` / `shadow` / `on` runs can be compared over the same historical truth layer.

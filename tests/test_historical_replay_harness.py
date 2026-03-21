@@ -23,10 +23,19 @@ def test_historical_replay_reconstructs_resolved_winning_trade(tmp_path):
 
     assert summary["historical_rows_used"] == 1
     assert summary["partial_rows"] == 0
+    assert summary["wallet_weighting_requested_mode"] == "off"
+    assert summary["replay_score_source"] == "generic_scored_artifact_rescored"
+    assert summary["wallet_mode_parity_status"] == "comparable"
+    assert summary["historical_input_hash"]
     assert trade["replay_resolution_status"] == "resolved"
+    assert trade["replay_score_source"] == "generic_scored_artifact_rescored"
+    assert trade["wallet_mode_parity_status"] == "comparable"
     assert trade["net_pnl_pct"] > 0
     assert row["replay_input_origin"] == "historical"
     assert row["replay_data_status"] == "historical"
+    assert row["replay_score_source"] == "generic_scored_artifact_rescored"
+    assert row["wallet_mode_parity_status"] == "comparable"
+    assert row["historical_input_hash"] == summary["historical_input_hash"]
     assert row["synthetic_assist_flag"] is False
 
 

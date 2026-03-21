@@ -15,6 +15,20 @@ from utils.wallet_family_contract_fields import SMART_WALLET_FAMILY_CONTRACT_FIE
 ROOT = Path(__file__).resolve().parents[1]
 
 
+REPLAY_PARITY_FIELDS = [
+    'final_score_pre_wallet',
+    'wallet_weighting_requested_mode',
+    'wallet_weighting_effective_mode',
+    'wallet_score_component_raw',
+    'wallet_score_component_applied',
+    'wallet_score_component_applied_shadow',
+    'replay_score_source',
+    'wallet_mode_parity_status',
+    'score_contract_version',
+    'historical_input_hash',
+]
+
+
 def _schema_properties(schema_name: str) -> dict[str, object]:
     schema_path = ROOT / 'schemas' / schema_name
     return json.loads(schema_path.read_text(encoding='utf-8'))['properties']
@@ -23,7 +37,7 @@ def _schema_properties(schema_name: str) -> dict[str, object]:
 def test_signal_event_schema_exposes_provenance_field_groups() -> None:
     properties = _schema_properties('signal_event.schema.json')
 
-    for field in [*BUNDLE_PROVENANCE_FIELDS, *CLUSTER_PROVENANCE_FIELDS, *LINKAGE_CONTRACT_FIELDS, *CONTINUATION_METADATA_FIELDS, *SMART_WALLET_FAMILY_CONTRACT_FIELDS]:
+    for field in [*BUNDLE_PROVENANCE_FIELDS, *CLUSTER_PROVENANCE_FIELDS, *LINKAGE_CONTRACT_FIELDS, *CONTINUATION_METADATA_FIELDS, *SMART_WALLET_FAMILY_CONTRACT_FIELDS, *REPLAY_PARITY_FIELDS]:
         assert field in properties
 
     assert properties['linkage_reason_codes'] == {
@@ -45,7 +59,7 @@ def test_signal_event_schema_exposes_provenance_field_groups() -> None:
 def test_trade_event_schema_exposes_provenance_field_groups() -> None:
     properties = _schema_properties('trade_event.schema.json')
 
-    for field in [*BUNDLE_PROVENANCE_FIELDS, *CLUSTER_PROVENANCE_FIELDS, *LINKAGE_CONTRACT_FIELDS, *CONTINUATION_METADATA_FIELDS, *SMART_WALLET_FAMILY_CONTRACT_FIELDS]:
+    for field in [*BUNDLE_PROVENANCE_FIELDS, *CLUSTER_PROVENANCE_FIELDS, *LINKAGE_CONTRACT_FIELDS, *CONTINUATION_METADATA_FIELDS, *SMART_WALLET_FAMILY_CONTRACT_FIELDS, *REPLAY_PARITY_FIELDS]:
         assert field in properties
 
     assert properties['linkage_reason_codes'] == {
