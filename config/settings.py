@@ -121,6 +121,15 @@ class Settings:
     UNIFIED_SCORE_BUNDLE_SELL_HEAVY_PENALTY_MAX: float
     UNIFIED_SCORE_RETRY_MANIPULATION_PENALTY_MAX: float
     UNIFIED_SCORE_CONTRACT_VERSION: str
+    WALLET_WEIGHTING_MODE: str
+    WALLET_WEIGHTING_CAP_TIER1: float
+    WALLET_WEIGHTING_CAP_TIER2: float
+    WALLET_WEIGHTING_CAP_TIER3: float
+    WALLET_WEIGHTING_CAP_WATCH_ONLY: float
+    WALLET_WEIGHTING_SCORE_SUM_MAX: float
+    WALLET_WEIGHTING_TIER_HIT_STRENGTH_MAX: float
+    WALLET_WEIGHTING_EARLY_ENTRY_MAX: float
+    WALLET_WEIGHTING_CONVICTION_MAX: float
 
     # Entry selector (PR-7)
     ENTRY_SELECTOR_ENABLED: bool
@@ -624,6 +633,41 @@ def load_settings() -> Settings:
         ),
         UNIFIED_SCORE_CONTRACT_VERSION=str(
             _get_env(merged, "UNIFIED_SCORE_CONTRACT_VERSION", "unified_score_v1")
+        ),
+        WALLET_WEIGHTING_MODE=str(
+            _get_env(merged, "WALLET_WEIGHTING_MODE", "shadow")
+        ).strip().lower(),
+        WALLET_WEIGHTING_CAP_TIER1=_as_positive_float(
+            _get_env(merged, "WALLET_WEIGHTING_CAP_TIER1", "8.0"),
+            key="WALLET_WEIGHTING_CAP_TIER1",
+        ),
+        WALLET_WEIGHTING_CAP_TIER2=_as_positive_float(
+            _get_env(merged, "WALLET_WEIGHTING_CAP_TIER2", "5.0"),
+            key="WALLET_WEIGHTING_CAP_TIER2",
+        ),
+        WALLET_WEIGHTING_CAP_TIER3=_as_positive_float(
+            _get_env(merged, "WALLET_WEIGHTING_CAP_TIER3", "3.0"),
+            key="WALLET_WEIGHTING_CAP_TIER3",
+        ),
+        WALLET_WEIGHTING_CAP_WATCH_ONLY=_as_positive_float(
+            _get_env(merged, "WALLET_WEIGHTING_CAP_WATCH_ONLY", "1.0"),
+            key="WALLET_WEIGHTING_CAP_WATCH_ONLY",
+        ),
+        WALLET_WEIGHTING_SCORE_SUM_MAX=_as_positive_float(
+            _get_env(merged, "WALLET_WEIGHTING_SCORE_SUM_MAX", "20.0"),
+            key="WALLET_WEIGHTING_SCORE_SUM_MAX",
+        ),
+        WALLET_WEIGHTING_TIER_HIT_STRENGTH_MAX=_as_positive_float(
+            _get_env(merged, "WALLET_WEIGHTING_TIER_HIT_STRENGTH_MAX", "6.0"),
+            key="WALLET_WEIGHTING_TIER_HIT_STRENGTH_MAX",
+        ),
+        WALLET_WEIGHTING_EARLY_ENTRY_MAX=_as_positive_float(
+            _get_env(merged, "WALLET_WEIGHTING_EARLY_ENTRY_MAX", "2.0"),
+            key="WALLET_WEIGHTING_EARLY_ENTRY_MAX",
+        ),
+        WALLET_WEIGHTING_CONVICTION_MAX=_as_positive_float(
+            _get_env(merged, "WALLET_WEIGHTING_CONVICTION_MAX", "3.0"),
+            key="WALLET_WEIGHTING_CONVICTION_MAX",
         ),
         ENTRY_SELECTOR_ENABLED=_as_bool(
             _get_env(merged, "ENTRY_SELECTOR_ENABLED", "true"),

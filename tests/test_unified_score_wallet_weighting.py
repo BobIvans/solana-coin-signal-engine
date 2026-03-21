@@ -1,11 +1,13 @@
-
 import json
 from pathlib import Path
 
 import pytest
 
+from analytics.unified_score import score_token as analytics_score_token
+from config.settings import load_settings
 from scoring.unified_score import (
     DEFAULT_WALLET_WEIGHTING_MODE,
+    canonicalize_scoring_input,
     score_token,
     score_tokens,
 )
@@ -37,6 +39,28 @@ def _base_token(**overrides):
     return token
 
 
+def _assert_semantic_parity(wrapper_token: dict, analytics_token: dict) -> None:
+    for key in (
+        "final_score_pre_wallet",
+        "final_score",
+        "regime_candidate",
+        "wallet_weighting_mode",
+        "wallet_weighting_effective_mode",
+        "wallet_registry_status",
+        "wallet_score_component_raw",
+        "wallet_score_component_applied",
+        "wallet_score_component_applied_shadow",
+        "wallet_score_component_capped",
+        "wallet_score_component_reason",
+        "wallet_score_explain",
+        "wallet_adjustment",
+        "score_flags",
+        "score_warnings",
+        "scored_at",
+    ):
+        assert wrapper_token[key] == analytics_token[key]
+
+
 def test_default_mode_is_shadow():
     assert DEFAULT_WALLET_WEIGHTING_MODE == "shadow"
 
@@ -52,6 +76,7 @@ def test_shadow_mode_computes_component_but_does_not_change_final_score():
     token = score_token(_base_token(), wallet_weighting_mode="shadow")
     assert token["wallet_score_component_raw"] > 0.0
     assert token["wallet_score_component_applied"] == 0.0
+    assert token["wallet_score_component_applied_shadow"] > 0.0
     assert token["final_score"] == token["final_score_pre_wallet"]
 
 
@@ -59,7 +84,9 @@ def test_on_mode_applies_bounded_wallet_adjustment_exactly_once():
     token = score_token(_base_token(), wallet_weighting_mode="on")
     assert token["wallet_score_component_applied"] > 0.0
     assert token["wallet_score_component_applied"] <= 8.0
-    assert token["final_score"] == pytest.approx(token["final_score_pre_wallet"] + token["wallet_score_component_applied"])
+    assert token["final_score"] == pytest.approx(
+        token["final_score_pre_wallet"] + token["wallet_score_component_applied"]
+    )
 
 
 def test_degraded_registry_forces_zero_wallet_adjustment():
@@ -69,6 +96,7 @@ def test_degraded_registry_forces_zero_wallet_adjustment():
     )
     assert token["wallet_score_component_raw"] == 0.0
     assert token["wallet_score_component_applied"] == 0.0
+    assert token["wallet_score_component_applied_shadow"] == 0.0
     assert token["wallet_weighting_effective_mode"] == "degraded_zero"
     assert token["final_score"] == token["final_score_pre_wallet"]
 
@@ -104,6 +132,22 @@ def test_deterministic_outputs_are_stable():
     assert first == second
 
 
+def test_scoring_wrapper_matches_analytics_canonical_output_for_same_mode():
+    legacy_token = _base_token(mint="mint_parity", token_id="mint_parity")
+    canonical_token = canonicalize_scoring_input(legacy_token)
+    settings = load_settings()
+
+    wrapper = score_token(legacy_token, wallet_weighting_mode="on")
+    analytics = analytics_score_token(
+        canonical_token,
+        settings,
+        wallet_weighting_mode="on",
+        scored_at=canonical_token["timestamp"],
+    )
+
+    _assert_semantic_parity(wrapper, analytics)
+
+
 def test_score_tokens_emits_events_and_sorted_output():
     scored, events = score_tokens(
         shortlist=[_base_token(mint="mint_b", token_id="mint_b"), _base_token(mint="mint_a", token_id="mint_a")],
@@ -120,7 +164,12 @@ def test_score_tokens_emits_events_and_sorted_output():
 def test_schema_validates_scored_output():
     jsonschema = pytest.importorskip("jsonschema")
     root = Path(__file__).resolve().parents[1]
-    schema_path = root / "schemas" / "unified_score.wallet_weighting.schema.json"
-    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    wallet_schema = json.loads(
+        (root / "schemas" / "unified_score.wallet_weighting.schema.json").read_text(encoding="utf-8")
+    )
+    main_schema = json.loads(
+        (root / "schemas" / "unified_score.schema.json").read_text(encoding="utf-8")
+    )
     token = score_token(_base_token(), "on")
-    jsonschema.validate(token, schema)
+    jsonschema.validate(token, wallet_schema)
+    jsonschema.validate(token, main_schema)
