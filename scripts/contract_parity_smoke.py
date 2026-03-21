@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -115,8 +116,8 @@ def _enriched_row() -> dict:
     }
 
 
-def _build_fixture_root(root: Path) -> Path:
-    fixture_root = ensure_dir(root / "data" / "smoke" / "contract_parity_fixture")
+def _build_fixture_root(base_dir: Path) -> Path:
+    fixture_root = ensure_dir(base_dir / "contract_parity_fixture")
     ensure_dir(fixture_root / "data" / "processed")
     ensure_dir(fixture_root / "docs")
 
@@ -234,8 +235,12 @@ def _write_summary_md(path: Path, report: dict) -> None:
 
 
 def main() -> int:
-    smoke_dir = ensure_dir(REPO_ROOT / "data" / "smoke")
-    fixture_root = _build_fixture_root(REPO_ROOT)
+    parser = argparse.ArgumentParser(description="Deterministic smoke runner for contract parity and docs sync")
+    parser.add_argument("--base-dir", default=str(REPO_ROOT / "data" / "smoke" / "contract_parity"), help="Base directory for isolated contract parity smoke artifacts")
+    args = parser.parse_args()
+
+    smoke_dir = ensure_dir(Path(args.base_dir).expanduser().resolve())
+    fixture_root = _build_fixture_root(smoke_dir)
     report = compute_contract_parity_report(fixture_root, include_docs_sync=True)
 
     report_path = smoke_dir / "contract_parity_report.json"

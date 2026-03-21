@@ -116,6 +116,9 @@ def test_compute_analyzer_slices_rich_groups():
 
     continuation = payload["slice_groups"]["continuation"]
     assert continuation["failed_liquidity_refill_underperformance"]["expectancy"] < 0
+    assert continuation["weak_reentry_underperformance"]["sample_size"] >= 1
+    assert continuation["shock_not_recovered_underperformance"]["sample_size"] >= 1
+    assert continuation["shock_not_recovered_underperformance"]["expectancy"] < 0
     assert continuation["organic_buyer_flow_positive_slices"]["expectancy"] > 0
 
     degraded = payload["slice_groups"]["degraded_x"]
@@ -270,6 +273,10 @@ def test_run_post_run_analysis_writes_analyzer_slice_outputs(tmp_path):
     recommendations = read_json(Path(result["recommendations_path"]))
     assert recommendations["analyzer_slices"]["metadata"]["contract_version"] == "analyzer_slices.v1"
     assert any(rec["type"] == "slice_manual_review" for rec in recommendations["recommendations"])
+
+    summary = read_json(Path(result["summary_path"]))
+    assert summary["analyzer_slice_source"] == "trade_feature_matrix"
+    assert summary["missing_evidence_quality_slices"] == []
 
     report = Path(result["report_path"]).read_text(encoding="utf-8")
     assert "## regime diagnostics" in report
