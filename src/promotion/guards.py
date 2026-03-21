@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from analytics.evidence_weighted_sizing import compute_evidence_weighted_size
 
-from .cooldowns import is_x_cooldown_active, resolve_degraded_x_policy
+from .cooldowns import is_x_cooldown_active, resolve_degraded_x_guard, resolve_degraded_x_policy
 from .kill_switch import is_kill_switch_active
 
 
@@ -59,15 +59,21 @@ def evaluate_entry_guards(signal: dict, state: dict, config: dict) -> dict:
     if regime not in allowed:
         hard_block_reasons.append("regime_not_allowed")
 
+    x_guard = resolve_degraded_x_guard(mode, state, config)
     if is_x_cooldown_active(state):
-        policy = resolve_degraded_x_policy(mode, config)
-        if mode in {"constrained_paper", "expanded_paper"} and policy in {"watchlist_only", "pause_new_entries"}:
+        if mode in {"constrained_paper", "expanded_paper"} and x_guard["active_policy"] in {"watchlist_only", "pause_new_entries"}:
             hard_block_reasons.append("x_cooldown_policy_block")
         else:
             soft_reasons.append("x_cooldown_reduced")
 
     if signal.get("x_status") == "degraded":
         soft_reasons.append("x_status_degraded")
+        if x_guard["budget_exhausted"]:
+            hard_block_reasons.append("degraded_x_budget_exhausted")
+        if x_guard["escalated"] and x_guard["active_policy"] == "watchlist_only":
+            hard_block_reasons.append("degraded_x_escalated_to_watchlist_only")
+        elif x_guard["escalated"] and x_guard["active_policy"] == "pause_new_entries":
+            hard_block_reasons.append("degraded_x_escalated_to_pause_new_entries")
 
     if state.get("force_watchlist_only"):
         hard_block_reasons.append("watchlist_forced")
@@ -76,6 +82,7 @@ def evaluate_entry_guards(signal: dict, state: dict, config: dict) -> dict:
         "hard_block": len(hard_block_reasons) > 0,
         "hard_block_reasons": hard_block_reasons,
         "soft_reasons": soft_reasons,
+        "degraded_x_guard": x_guard,
     }
 
 
@@ -91,15 +98,25 @@ def _base_policy_position_scale_details(signal: dict, state: dict, config: dict)
     reason_codes: list[str] = []
 
     if signal.get("x_status") == "degraded":
-        policy = resolve_degraded_x_policy(mode, config)
-        if policy == "reduced_size":
+        x_guard = resolve_degraded_x_guard(mode, state, config)
+        policy = x_guard["active_policy"] if x_guard["active_policy"] else resolve_degraded_x_policy(mode, config)
+        if x_guard["budget_exhausted"]:
+            scale = 0.0
+            origin = "degraded_x_guardrail"
+            reason_codes.append("degraded_x_budget_exhausted")
+        elif policy == "reduced_size":
             scale = round(mode_scale * 0.5, 4)
             origin = "degraded_x_policy"
             reason_codes.append("x_status_degraded_size_reduced")
         elif policy in {"watchlist_only", "pause_new_entries"}:
             scale = 0.0
-            origin = "degraded_x_policy"
-            reason_codes.append("x_status_degraded_entry_blocked")
+            origin = "degraded_x_guardrail" if x_guard["escalated"] else "degraded_x_policy"
+            if x_guard["escalated"] and policy == "watchlist_only":
+                reason_codes.append("degraded_x_escalated_to_watchlist_only")
+            elif x_guard["escalated"] and policy == "pause_new_entries":
+                reason_codes.append("degraded_x_escalated_to_pause_new_entries")
+            else:
+                reason_codes.append("x_status_degraded_entry_blocked")
 
     return {
         "mode_position_scale": round(mode_scale, 4),

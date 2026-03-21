@@ -16,7 +16,13 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.promotion.cooldowns import is_x_cooldown_active
+from src.promotion.cooldowns import (
+    is_x_cooldown_active,
+    observe_x_signal,
+    register_degraded_x_entry_attempt,
+    register_degraded_x_entry_opened,
+    resolve_degraded_x_guard,
+)
 from src.promotion.counters import roll_daily_state_if_needed, update_trade_counters
 from src.promotion.guards import compute_position_sizing, evaluate_entry_guards, should_block_entry
 from src.promotion.io import append_jsonl, write_json
@@ -292,8 +298,63 @@ def _build_market_states(signals: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return list(seen.values())
 
 
+def _runtime_market_state_cache(state: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return state.setdefault("runtime_market_state_cache", {})
+
+
+def _update_runtime_market_state_cache(state: dict[str, Any], market_states: list[dict[str, Any]]) -> None:
+    cache = _runtime_market_state_cache(state)
+    for market in market_states:
+        token = str(market.get("token_address") or "")
+        if not token:
+            continue
+        cache[token] = {**dict(market), "cached_at": str(market.get("now_ts") or utc_now_iso())}
+
+
+def _classify_fallback_status(current: dict[str, Any]) -> tuple[str, float, str]:
+    present = [
+        current.get("price_usd_now") is not None,
+        current.get("liquidity_usd_now") is not None,
+        current.get("buy_pressure_now") is not None,
+        current.get("volume_velocity_now") is not None,
+        current.get("x_status_now") is not None or current.get("x_validation_score_now") is not None,
+    ]
+    coverage = round(sum(1 for item in present if item) / len(present), 4)
+    if current.get("price_usd_now") is not None and coverage <= 0.4:
+        return "fallback_price_only", coverage, "position_missing_from_fresh_signals_price_only_fallback"
+    return "fallback_partial", coverage, "position_missing_from_fresh_signals_partial_fallback"
+
+
+def _summarize_current_states(current_states: list[dict[str, Any]]) -> dict[str, int]:
+    summary = {
+        "runtime_current_state_live_count": 0,
+        "runtime_current_state_fallback_count": 0,
+        "runtime_current_state_stale_count": 0,
+        "runtime_current_state_refresh_failed_count": 0,
+    }
+    for current in current_states:
+        status = str(current.get("runtime_current_state_status") or "unknown")
+        if status == "live_refresh":
+            summary["runtime_current_state_live_count"] += 1
+        elif status in {"fallback_price_only", "fallback_partial"}:
+            summary["runtime_current_state_fallback_count"] += 1
+        elif status == "stale_entry_snapshot":
+            summary["runtime_current_state_stale_count"] += 1
+        elif status == "refresh_failed":
+            summary["runtime_current_state_refresh_failed_count"] += 1
+    return summary
+
+
+def _accumulate_runtime_metrics(state: dict[str, Any], current_state_summary: dict[str, int]) -> None:
+    metrics = state.setdefault("runtime_metrics", {})
+    for key, value in current_state_summary.items():
+        metrics[key] = int(metrics.get(key, 0)) + int(value or 0)
+
+
 def _build_current_states(state: dict[str, Any], signals: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    market_by_token = {str(item.get("token_address") or ""): item for item in _build_market_states(signals)}
+    market_states = _build_market_states(signals)
+    market_by_token = {str(item.get("token_address") or ""): item for item in market_states}
+    cache = _runtime_market_state_cache(state)
     current_states: list[dict[str, Any]] = []
     for position in _state_open_positions(state):
         token = str(position.get("token_address") or "")
@@ -310,10 +371,39 @@ def _build_current_states(state: dict[str, Any], signals: list[dict[str, Any]]) 
         current.setdefault("bundle_cluster_score_now", entry_snapshot.get("bundle_cluster_score"))
         current.setdefault("wallet_features", entry_snapshot.get("wallet_features") or {})
         current.setdefault("now_ts", utc_now_iso())
-        if token not in market_by_token:
-            current["runtime_current_state_status"] = "stale_entry_snapshot"
-        else:
+
+        if token in market_by_token:
+            current["runtime_current_state_origin"] = "fresh_signal_batch"
             current["runtime_current_state_status"] = "live_refresh"
+            current["runtime_current_state_warning"] = None
+            current["runtime_current_state_confidence"] = 1.0
+            cache[token] = {**dict(current), "cached_at": str(current.get("now_ts") or utc_now_iso())}
+        else:
+            cached = dict(cache.get(token) or {})
+            if cached:
+                cached.setdefault("token_address", token)
+                cached.setdefault("price_usd_now", current.get("price_usd_now"))
+                cached.setdefault("price_usd", cached.get("price_usd_now", current.get("price_usd")))
+                cached.setdefault("liquidity_usd_now", current.get("liquidity_usd_now"))
+                cached.setdefault("buy_pressure_now", current.get("buy_pressure_now"))
+                cached.setdefault("volume_velocity_now", current.get("volume_velocity_now"))
+                cached.setdefault("x_validation_score_now", current.get("x_validation_score_now"))
+                cached.setdefault("x_status_now", current.get("x_status_now"))
+                cached.setdefault("bundle_cluster_score_now", current.get("bundle_cluster_score_now"))
+                cached.setdefault("wallet_features", current.get("wallet_features") or {})
+                cached["now_ts"] = utc_now_iso()
+                status, confidence, warning = _classify_fallback_status(cached)
+                current = {**current, **cached}
+                current["runtime_current_state_origin"] = "position_state_cache"
+                current["runtime_current_state_status"] = status
+                current["runtime_current_state_warning"] = warning
+                current["runtime_current_state_confidence"] = confidence
+            else:
+                current["runtime_current_state_origin"] = "entry_snapshot"
+                current["runtime_current_state_status"] = "stale_entry_snapshot"
+                current["runtime_current_state_warning"] = "position_missing_from_fresh_signals_and_no_cached_refresh"
+                current["runtime_current_state_confidence"] = 0.0
+
         current_states.append(current)
     return current_states
 
@@ -407,6 +497,7 @@ def main() -> int:
     total_rejected = 0
     total_invalid = 0
     latest_signal_summary: dict[str, object] = {"batch_status": "missing", "origin_counts": {}, "status_counts": {}, "warnings": [], "origin_tier": None, "runtime_pipeline_origin": None, "runtime_pipeline_status": None, "runtime_pipeline_manifest": None}
+    state.setdefault("runtime_metrics", {})
 
     for loop_idx in range(args.max_loops):
         roll_daily_state_if_needed(state)
@@ -417,6 +508,17 @@ def main() -> int:
         rejected = 0
 
         current_states = _build_current_states(state, signals)
+        current_state_summary = _summarize_current_states(current_states)
+        _accumulate_runtime_metrics(state, current_state_summary)
+        append_jsonl(
+            event_log,
+            {
+                "ts": utc_now_iso(),
+                "event": "runtime_current_state_refresh_completed",
+                "run_id": args.run_id,
+                **current_state_summary,
+            },
+        )
         if _state_open_positions(state):
             run_mark_to_market(state, current_states, trading_settings)
             exit_signals = decide_exits(_state_open_positions(state), current_states, trading_settings)
@@ -435,7 +537,24 @@ def main() -> int:
             )
 
         market_states = _build_market_states(signals)
+        _update_runtime_market_state_cache(state, market_states)
         for signal in signals:
+            token_address = str(signal.get("token_address") or "").strip()
+            if not token_address:
+                total_invalid += 1
+                append_jsonl(
+                    event_log,
+                    {
+                        "ts": utc_now_iso(),
+                        "event": "runtime_signal_invalid",
+                        "run_id": args.run_id,
+                        "signal_id": signal.get("signal_id"),
+                        "reason": "missing_token_address",
+                    },
+                )
+                continue
+
+            observe_x_signal(signal, state, cfg)
             guard_results = evaluate_entry_guards(signal, state, cfg)
             sizing = compute_position_sizing(signal, state, cfg)
             scale = float(sizing.get("effective_position_scale", 0.0))
@@ -469,6 +588,9 @@ def main() -> int:
             signal["entry_snapshot"].setdefault("x_status", signal.get("x_status"))
             signal["contract_version"] = trading_settings.PAPER_CONTRACT_VERSION
 
+            if signal.get("x_status") == "degraded":
+                register_degraded_x_entry_attempt(state, blocked=bool(should_block_entry(guard_results) or scale <= 0))
+
             if should_block_entry(guard_results) or scale <= 0:
                 rejected += 1
                 total_rejected += 1
@@ -483,6 +605,7 @@ def main() -> int:
                         "decision_reason_codes": guard_results.get("hard_block_reasons", []) or sizing.get("sizing_reason_codes", []),
                         "x_status": signal.get("x_status", "healthy"),
                         "guard_results": guard_results,
+                        "degraded_x_guard": guard_results.get("degraded_x_guard", {}),
                         "effective_position_scale": scale,
                         "signal_origin": signal.get("runtime_signal_origin"),
                         "signal_status": signal.get("runtime_signal_status"),
@@ -510,6 +633,7 @@ def main() -> int:
                         "signal_origin": signal.get("runtime_signal_origin"),
                         "signal_status": signal.get("runtime_signal_status"),
                         "reason": guard_results.get("hard_block_reasons", []) or sizing.get("sizing_reason_codes", []),
+                        "degraded_x_guard": guard_results.get("degraded_x_guard", {}),
                     },
                 )
                 continue
@@ -535,6 +659,9 @@ def main() -> int:
             if opened_delta > 0:
                 opened += opened_delta
                 total_opened += opened_delta
+                if signal.get("x_status") == "degraded":
+                    for _ in range(opened_delta):
+                        register_degraded_x_entry_opened(state)
                 for _ in range(opened_delta):
                     update_trade_counters(state, pnl_pct=0.0)
                 append_jsonl(
@@ -548,6 +675,7 @@ def main() -> int:
                         "decision_reason_codes": guard_results.get("soft_reasons", []),
                         "x_status": signal.get("x_status", "healthy"),
                         "guard_results": guard_results,
+                        "degraded_x_guard": guard_results.get("degraded_x_guard", {}),
                         "effective_position_scale": scale,
                         "signal_origin": signal.get("runtime_signal_origin"),
                         "signal_status": signal.get("runtime_signal_status"),
@@ -594,6 +722,9 @@ def main() -> int:
 
     positions_payload = {"positions": state.get("positions", []), "open_positions": _state_open_positions(state)}
     write_json(run_dir / "positions.json", positions_payload)
+    degraded_x_guard = resolve_degraded_x_guard(args.mode, state, cfg)
+    runtime_metrics = state.get("runtime_metrics", {})
+    degraded_x_runtime = state.get("degraded_x_runtime", {})
     summary = {
         "run_id": args.run_id,
         "mode": args.mode,
@@ -602,9 +733,17 @@ def main() -> int:
         "pnl_pct_today": state.get("counters", {}).get("pnl_pct_today", 0.0),
         "consecutive_losses": state.get("consecutive_losses", 0),
         "x_cooldown_active": is_x_cooldown_active(state),
+        "degraded_x_budget_active": degraded_x_guard.get("budget_exhausted", False),
         "total_opened": total_opened,
         "total_rejected": total_rejected,
         "total_invalid": total_invalid,
+        "runtime_current_state_live_count": runtime_metrics.get("runtime_current_state_live_count", 0),
+        "runtime_current_state_fallback_count": runtime_metrics.get("runtime_current_state_fallback_count", 0),
+        "runtime_current_state_stale_count": runtime_metrics.get("runtime_current_state_stale_count", 0),
+        "runtime_current_state_refresh_failed_count": runtime_metrics.get("runtime_current_state_refresh_failed_count", 0),
+        "degraded_x_entries_attempted": degraded_x_runtime.get("degraded_entries_attempted", 0),
+        "degraded_x_entries_opened": degraded_x_runtime.get("degraded_entries_opened", 0),
+        "degraded_x_entries_blocked": degraded_x_runtime.get("degraded_entries_blocked", 0),
         "runtime_signal_source": args.signal_source,
         "runtime_signal_origin": latest_signal_summary.get("selected_origin"),
         "runtime_signal_status": latest_signal_summary.get("batch_status"),

@@ -88,3 +88,44 @@ def test_daily_loss_guard_blocks_on_realized_drawdown_from_capital():
     }
     result = evaluate_entry_guards({"regime": "SCALP"}, state, BASE_CONFIG)
     assert "max_daily_loss_pct_breached" in result["hard_block_reasons"]
+
+from src.promotion.cooldowns import observe_x_signal, register_degraded_x_entry_opened
+
+
+EXPANDED_CONFIG = {
+    "modes": {
+        "expanded_paper": {
+            "open_positions": True,
+            "max_open_positions": 3,
+            "max_trades_per_day": 20,
+            "allow_regimes": ["SCALP", "TREND"],
+            "position_size_scale": 1.0,
+        }
+    },
+    "safety": {"max_daily_loss_pct": 8.0, "max_consecutive_losses": 4, "kill_switch_file": "runs/none.flag"},
+    "degraded_x": {
+        "expanded_policy": "reduced_size",
+        "max_entries_per_hour": 2,
+        "max_consecutive_signals_for_entry": 2,
+        "escalation_policy": "watchlist_only",
+    },
+}
+
+
+def test_degraded_x_budget_exhaustion_blocks_new_entries():
+    state = {"active_mode": "expanded_paper", "open_positions": [], "counters": {}, "consecutive_losses": 0}
+    register_degraded_x_entry_opened(state)
+    register_degraded_x_entry_opened(state)
+    observe_x_signal({"x_status": "degraded"}, state, EXPANDED_CONFIG)
+
+    result = evaluate_entry_guards({"regime": "SCALP", "x_status": "degraded"}, state, EXPANDED_CONFIG)
+    assert "degraded_x_budget_exhausted" in result["hard_block_reasons"]
+
+
+def test_degraded_x_escalation_blocks_after_prolonged_streak():
+    state = {"active_mode": "expanded_paper", "open_positions": [], "counters": {}, "consecutive_losses": 0}
+    for _ in range(3):
+        observe_x_signal({"x_status": "degraded"}, state, EXPANDED_CONFIG)
+
+    result = evaluate_entry_guards({"regime": "SCALP", "x_status": "degraded"}, state, EXPANDED_CONFIG)
+    assert "degraded_x_escalated_to_watchlist_only" in result["hard_block_reasons"]

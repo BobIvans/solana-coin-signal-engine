@@ -13,11 +13,17 @@ class SoftLimiter:
     interval_sec: float
     last_acquired: float = field(default=0.0)
 
-    def acquire(self) -> bool:
+    def remaining_wait(self) -> float:
         now = time.monotonic()
         elapsed = now - self.last_acquired
-        if elapsed < self.interval_sec:
-            time.sleep(self.interval_sec - elapsed)
+        return max(self.interval_sec - elapsed, 0.0)
+
+    def acquire(self, *, blocking: bool = True) -> bool:
+        wait_sec = self.remaining_wait()
+        if wait_sec > 0:
+            if not blocking:
+                return False
+            time.sleep(wait_sec)
         self.last_acquired = time.monotonic()
         return True
 
@@ -32,6 +38,6 @@ _LIMITERS = {
 }
 
 
-def acquire(provider_name: str) -> bool:
+def acquire(provider_name: str, *, blocking: bool = True) -> bool:
     limiter = _LIMITERS[provider_name]
-    return limiter.acquire()
+    return limiter.acquire(blocking=blocking)

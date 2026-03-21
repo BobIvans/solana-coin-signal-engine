@@ -62,6 +62,10 @@ def build_exit_snapshot(position_ctx: dict, current_ctx: dict) -> dict:
         "dev_buyer_link_score_now",
         "shared_funder_link_score_now",
         "cluster_dev_link_score_now",
+        "runtime_current_state_origin",
+        "runtime_current_state_status",
+        "runtime_current_state_warning",
+        "runtime_current_state_confidence",
     ):
         if optional_field in current_ctx and current_ctx.get(optional_field) is not None:
             snapshot[optional_field] = current_ctx.get(optional_field)
