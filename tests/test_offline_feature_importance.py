@@ -23,8 +23,8 @@ def test_feature_groups_map_expected_prefixes():
     assert feature_group_for_name("wallet_weighting") == "wallet_features"
     assert feature_group_for_name("x_author_velocity_5m") == "x_features"
     assert feature_group_for_name("regime_confidence") == "regime_features"
-    assert feature_group_for_name("hold_sec") == "exit_features"
-    assert feature_group_for_name("linkage_risk_score") == "risk_features"
+    assert feature_group_for_name("hold_sec") == "outcome_only_fields"
+    assert feature_group_for_name("linkage_risk_score") == "linkage_features"
     assert feature_group_for_name("liquidity_usd") == "friction_features"
     grouped = group_features(["bundle_count_first_60s", "cluster_concentration_ratio"])
     assert grouped["bundle_features"] == ["bundle_count_first_60s"]
@@ -80,3 +80,31 @@ def test_fast_failure_fixture_surfaces_risk_associated_features():
     top_features = [item["feature_name"] for item in fast_failure["per_feature_importance"][:5]]
     assert "cluster_concentration_ratio" in top_features
     assert any(group["feature_group"] == "cluster_features" for group in fast_failure["grouped_importance"])
+
+def test_outcome_fields_are_excluded_from_feature_space():
+    from analytics.offline_feature_importance import _infer_feature_names
+
+    matrix = load_feature_matrix(FIXTURES / "healthy_mixed_replay_matrix.jsonl")
+    feature_names = set(_infer_feature_names(matrix["rows"]))
+    banned = {
+        "net_pnl_pct",
+        "gross_pnl_pct",
+        "hold_sec",
+        "exit_reason_final",
+        "mfe_pct",
+        "mae_pct",
+        "mfe_pct_240s",
+        "mae_pct_240s",
+        "trend_survival_15m",
+        "trend_survival_60m",
+        "time_to_first_profit_sec",
+    }
+    assert feature_names.isdisjoint(banned)
+
+
+def test_payload_exposes_excluded_outcome_fields():
+    payload = compute_offline_feature_importance(load_feature_matrix(FIXTURES / "healthy_mixed_replay_matrix.jsonl"))
+    excluded = set(payload["excluded_feature_names"])
+    assert "hold_sec" in excluded
+    assert "net_pnl_pct" in excluded
+    assert "trend_survival_15m" in excluded

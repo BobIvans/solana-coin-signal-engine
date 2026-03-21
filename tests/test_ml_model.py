@@ -175,3 +175,9 @@ def test_preprocessing_handles_missing_categorical_and_numeric_values(tmp_path):
     assert result["feature_stats"]["final_score"]["missing_count"] >= 1
     assert result["feature_stats"]["bundle_composition_dominant"]["missing_count"] >= 1
     assert result["feature_stats"]["x_status"]["missing_count"] >= 1
+
+def test_ml_feature_lists_exclude_outcome_only_fields():
+    from analytics.ml_model import CATEGORICAL_FEATURES, NUMERIC_FEATURES, LEAKAGE_OUTCOME_FIELDS
+
+    feature_names = set(NUMERIC_FEATURES + CATEGORICAL_FEATURES)
+    assert feature_names.isdisjoint(LEAKAGE_OUTCOME_FIELDS)

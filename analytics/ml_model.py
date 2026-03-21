@@ -79,6 +79,28 @@ CATEGORICAL_FEATURES = [
     "x_status",
 ]
 
+LEAKAGE_OUTCOME_FIELDS = {
+    "net_pnl_pct",
+    "gross_pnl_pct",
+    "hold_sec",
+    "exit_reason_final",
+    "mfe_pct",
+    "mae_pct",
+    "mfe_pct_240s",
+    "mae_pct_240s",
+    "trend_survival_15m",
+    "trend_survival_60m",
+    "time_to_first_profit_sec",
+    "exit_decision",
+    "exit_flags",
+    "exit_warnings",
+}
+
+ML_FEATURE_NAMES = tuple(NUMERIC_FEATURES + CATEGORICAL_FEATURES)
+_invalid_feature_overlap = sorted(set(ML_FEATURE_NAMES) & LEAKAGE_OUTCOME_FIELDS)
+if _invalid_feature_overlap:
+    raise RuntimeError(f"ML feature leakage detected: {_invalid_feature_overlap}")
+
 
 @dataclass(frozen=True)
 class MLTrainingConfig:
