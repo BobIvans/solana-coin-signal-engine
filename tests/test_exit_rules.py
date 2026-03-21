@@ -33,6 +33,17 @@ class DummySettings:
     EXIT_RETRY_MANIPULATION_HARD = 5.0
     EXIT_CREATOR_CLUSTER_RISK_HARD = 0.75
     EXIT_LINKAGE_RISK_HARD = 0.78
+    PAPER_DEFAULT_SLIPPAGE_BPS = 150
+    PAPER_MAX_SLIPPAGE_BPS = 1200
+    PAPER_SLIPPAGE_LIQUIDITY_SENSITIVITY = 1.0
+    PAPER_PRIORITY_FEE_BASE_SOL = 0.00002
+    PAPER_FAILED_TX_BASE_PROB = 0.0
+    PAPER_FAILED_TX_LOW_LIQUIDITY_ADDON = 0.0
+    PAPER_FAILED_TX_HIGH_VOLATILITY_ADDON = 0.0
+    PAPER_PARTIAL_FILL_ALLOWED = True
+    PAPER_PARTIAL_FILL_MIN_RATIO = 0.5
+    PAPER_SOL_USD_FALLBACK = 100.0
+    EXIT_TREND_POST_PARTIAL1_STOP_PCT = 0.0
 
 
 def test_hard_exit_rug_takes_precedence():
@@ -312,3 +323,33 @@ def test_high_linkage_risk_triggers_scalp_exit_with_canonical_reason_and_flag():
     assert out["exit_decision"] == "FULL_EXIT"
     assert out["exit_reason"] == "linkage_risk_exit"
     assert "linkage_risk_detected" in out["exit_flags"]
+
+
+def test_trend_partial_1_moves_runner_stop_to_breakeven_zone():
+    position = {"partial_1_taken": True, "entry_snapshot": {"x_validation_score": 70}}
+    current = {
+        "pnl_pct": -0.2,
+        "buy_pressure_now": 0.8,
+        "liquidity_drop_pct": 1,
+        "x_validation_score_delta": 1,
+    }
+    out = evaluate_trend_exit(position, current, DummySettings())
+    assert out["exit_decision"] == "FULL_EXIT"
+    assert out["exit_reason"] == "trend_runner_breakeven_stop"
+
+
+def test_scalp_stop_is_friction_adjusted_before_fill_execution():
+    position = {"remaining_size_sol": 1.0, "entry_snapshot": {"liquidity_usd": 5000, "volume_velocity": 3.0}}
+    current = {
+        "hold_sec": 10,
+        "pnl_pct": -8.7,
+        "liquidity_drop_pct": 1,
+        "buy_pressure_now": 0.8,
+        "price_usd": 1.0,
+        "liquidity_usd": 5000,
+        "volume_velocity": 3.0,
+        "sol_usd": 100.0,
+    }
+    out = evaluate_scalp_exit(position, current, DummySettings())
+    assert out["exit_decision"] == "FULL_EXIT"
+    assert "friction_adjusted_stop" in out["exit_flags"]

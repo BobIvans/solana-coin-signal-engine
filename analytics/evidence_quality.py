@@ -103,7 +103,7 @@ def derive_evidence_quality(
     cluster_concentration = _safe_float(_first_present(signal, "cluster_concentration_ratio"))
     bundle_cluster_score = _safe_float(_first_present(signal, "bundle_wallet_clustering_score"))
     if bundle_cluster_score is not None:
-        cluster_quality = _clamp(bundle_cluster_score)
+        cluster_quality = _clamp(1.0 - bundle_cluster_score)
         if cluster_concentration is not None and cluster_concentration >= 0.65:
             cluster_quality *= 0.8
         evidence_scores["cluster"] = round(_clamp(cluster_quality), 4)

@@ -136,3 +136,13 @@ def test_unified_score_emits_explicit_evidence_contract_fields():
     assert "evidence_quality_score" in out
     assert "evidence_available" in out
     assert "evidence_scores" in out
+
+
+def test_high_bundle_wallet_clustering_reduces_cluster_quality_instead_of_boosting_it():
+    summary = derive_evidence_quality({
+        **_base_token(),
+        "bundle_wallet_clustering_score": 0.9,
+        "cluster_concentration_ratio": 0.2,
+        "x_status": "healthy",
+    })
+    assert summary["evidence_scores"]["cluster"] < 0.2

@@ -20,7 +20,7 @@ def test_hard_block_by_daily_loss_cap():
     state = {
         "active_mode": "constrained_paper",
         "open_positions": [],
-        "counters": {"trades_today": 0, "pnl_pct_today": -9.0},
+        "counters": {"trades_today": 0, "pnl_pct_today": -9.0, "realized_pnl_sol_today": -0.09, "starting_capital_sol": 1.0},
         "consecutive_losses": 0,
     }
     result = evaluate_entry_guards({"regime": "SCALP"}, state, BASE_CONFIG)
@@ -31,7 +31,7 @@ def test_hard_block_by_max_positions():
     state = {
         "active_mode": "constrained_paper",
         "open_positions": [{"id": "1"}],
-        "counters": {"trades_today": 0, "pnl_pct_today": 0.0},
+        "counters": {"trades_today": 0, "pnl_pct_today": 0.0, "realized_pnl_sol_today": 0.0, "starting_capital_sol": 1.0},
         "consecutive_losses": 0,
     }
     result = evaluate_entry_guards({"regime": "SCALP"}, state, BASE_CONFIG)
@@ -66,3 +66,25 @@ def test_position_sizing_adds_evidence_weighted_fields():
     assert sizing["effective_position_pct"] == 0.4
     assert sizing["sizing_multiplier"] == 1.0
     assert sizing["sizing_reason_codes"]
+
+
+def test_daily_loss_guard_uses_realized_capital_drawdown_not_sum_of_trade_percents():
+    state = {
+        "active_mode": "constrained_paper",
+        "open_positions": [],
+        "counters": {"trades_today": 2, "pnl_pct_today": -20.0, "realized_pnl_sol_today": -0.04, "starting_capital_sol": 1.0},
+        "consecutive_losses": 0,
+    }
+    result = evaluate_entry_guards({"regime": "SCALP"}, state, BASE_CONFIG)
+    assert "max_daily_loss_pct_breached" not in result["hard_block_reasons"]
+
+
+def test_daily_loss_guard_blocks_on_realized_drawdown_from_capital():
+    state = {
+        "active_mode": "constrained_paper",
+        "open_positions": [],
+        "counters": {"trades_today": 2, "pnl_pct_today": -4.0, "realized_pnl_sol_today": -0.09, "starting_capital_sol": 1.0},
+        "consecutive_losses": 0,
+    }
+    result = evaluate_entry_guards({"regime": "SCALP"}, state, BASE_CONFIG)
+    assert "max_daily_loss_pct_breached" in result["hard_block_reasons"]

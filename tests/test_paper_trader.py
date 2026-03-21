@@ -21,6 +21,9 @@ class S:
     PAPER_FAILED_TX_HIGH_VOLATILITY_ADDON = 0.0
     PAPER_PARTIAL_FILL_ALLOWED = True
     PAPER_PARTIAL_FILL_MIN_RATIO = 0.5
+    PAPER_SOL_USD_FALLBACK = 100.0
+    EXIT_SCALP_STOP_LOSS_PCT = -10
+    EXIT_TREND_HARD_STOP_PCT = -18
 
 
 def test_exit_then_entry_order(tmp_path: Path):
@@ -79,3 +82,49 @@ def test_entry_execution_and_position_follow_effective_position_pct(tmp_path: Pa
     trade_row = json.loads((tmp_path / "trades.jsonl").read_text(encoding="utf-8").splitlines()[0])
     assert trade_row["effective_position_pct"] == 0.2
     assert trade_row["requested_notional_sol"] <= 0.02 + 1e-9
+
+
+def test_partial_entry_fill_scales_effective_position_pct_and_exit_flags_reach_state(tmp_path: Path):
+    class PartialFillSettings(S):
+        PAPER_PARTIAL_FILL_MIN_RATIO = 0.5
+        PAPER_DEFAULT_SLIPPAGE_BPS = 150
+
+    state = {"paths": {"signals": tmp_path / "signals.jsonl", "trades": tmp_path / "trades.jsonl"}}
+    ensure_state(state, PartialFillSettings())
+
+    process_entry_signals(
+        [{
+            "token_address": "So3",
+            "symbol": "PF",
+            "entry_decision": "TREND",
+            "entry_confidence": 0.8,
+            "recommended_position_pct": 0.5,
+            "base_position_pct": 0.5,
+            "effective_position_pct": 0.4,
+            "sizing_multiplier": 0.8,
+            "sizing_origin": "evidence_weighted",
+            "sizing_reason_codes": ["evidence_support_preserved_base_size"],
+            "sizing_confidence": 0.8,
+            "evidence_quality_score": 0.8,
+            "evidence_conflict_flag": False,
+            "partial_evidence_flag": False,
+            "entry_reason": "ok",
+            "entry_snapshot": {},
+            "contract_version": "paper_trader_v1",
+        }],
+        [{"token_address": "So3", "price_usd": 1.0, "liquidity_usd": 3.0, "sol_usd": 100.0}],
+        state,
+        PartialFillSettings(),
+    )
+
+    position = state["positions"][0]
+    assert position["entry_fill_ratio"] < 1.0
+    assert position["effective_position_pct"] < 0.4
+
+    process_exit_signals(
+        [{"position_id": position["position_id"], "token_address": "So3", "exit_decision": "PARTIAL_EXIT", "exit_fraction": 0.33, "exit_reason": "trend_partial_take_profit_1", "exit_flags": ["partial_take_profit_1"]}],
+        [{"token_address": "So3", "price_usd": 1.5, "liquidity_usd": 1_000_000}],
+        state,
+        PartialFillSettings(),
+    )
+    assert state["positions"][0]["partial_1_taken"] is True

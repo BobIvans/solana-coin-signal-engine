@@ -82,6 +82,7 @@ def test_missing_price_still_failcloses():
     assert out["exit_decision"] == "FULL_EXIT"
     assert out["exit_reason"] == "missing_current_state_failclosed"
     assert out["exit_status"] == "partial"
+    assert out["execution_assumption"] == "failclosed_pessimistic_price"
     assert "missing_critical_price_usd_now" in out["exit_warnings"]
 
 

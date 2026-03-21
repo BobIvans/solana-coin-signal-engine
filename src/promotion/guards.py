@@ -6,6 +6,16 @@ from .cooldowns import is_x_cooldown_active, resolve_degraded_x_policy
 from .kill_switch import is_kill_switch_active
 
 
+def _daily_loss_pct(state: dict) -> float:
+    counters = state.get("counters", {})
+    realized_pnl_sol_today = float(counters.get("realized_pnl_sol_today", 0.0) or 0.0)
+    starting_capital_sol = float(counters.get("starting_capital_sol", state.get("starting_capital_sol", 0.0)) or 0.0)
+    if starting_capital_sol > 0:
+        return abs(min(realized_pnl_sol_today / starting_capital_sol * 100.0, 0.0))
+    pnl_pct_today = float(counters.get("pnl_pct_today", 0.0) or 0.0)
+    return abs(min(pnl_pct_today, 0.0))
+
+
 def evaluate_entry_guards(signal: dict, state: dict, config: dict) -> dict:
     mode = state.get("active_mode")
     mode_cfg = config.get("modes", {}).get(mode, {})
@@ -30,8 +40,8 @@ def evaluate_entry_guards(signal: dict, state: dict, config: dict) -> dict:
     if trades_today >= max_trades:
         hard_block_reasons.append("max_trades_per_day_reached")
 
-    pnl_pct_today = float(state.get("counters", {}).get("pnl_pct_today", 0.0))
-    if abs(min(pnl_pct_today, 0.0)) >= float(safety.get("max_daily_loss_pct", 999999.0)):
+    daily_loss_pct = _daily_loss_pct(state)
+    if daily_loss_pct >= float(safety.get("max_daily_loss_pct", 999999.0)):
         hard_block_reasons.append("max_daily_loss_pct_breached")
 
     if int(state.get("consecutive_losses", 0)) >= int(safety.get("max_consecutive_losses", 999999)):

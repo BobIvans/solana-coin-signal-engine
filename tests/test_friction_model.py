@@ -21,6 +21,7 @@ class S:
     PAPER_FAILED_TX_HIGH_VOLATILITY_ADDON = 0.04
     PAPER_PARTIAL_FILL_ALLOWED = True
     PAPER_PARTIAL_FILL_MIN_RATIO = 0.5
+    PAPER_SOL_USD_FALLBACK = 88.0
 
 
 def test_slippage_clamped():
@@ -41,3 +42,10 @@ def test_failed_tx_probability_bounds():
 def test_partial_fill_ratio_bounds():
     ratio = compute_partial_fill_ratio({"requested_notional_sol": 1}, {"liquidity_usd": 1000, "volatility": 3}, S())
     assert S.PAPER_PARTIAL_FILL_MIN_RATIO <= ratio <= 1.0
+
+
+def test_sol_usd_uses_settings_fallback_instead_of_hardcoded_100():
+    bps = compute_slippage_bps({"requested_notional_sol": 1.0}, {"liquidity_usd": 1000, "volatility": 0.0}, S())
+    ratio = compute_partial_fill_ratio({"requested_notional_sol": 1.0}, {"liquidity_usd": 1000, "volatility": 0.0}, S())
+    assert bps < S.PAPER_MAX_SLIPPAGE_BPS
+    assert ratio > S.PAPER_PARTIAL_FILL_MIN_RATIO

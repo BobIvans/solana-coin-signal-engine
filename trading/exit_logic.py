@@ -129,8 +129,9 @@ def decide_exit(position_ctx: dict, current_ctx: dict, settings: Any) -> dict:
                 "exit_fraction": 1.0,
                 "exit_reason": "missing_current_state_failclosed",
                 "exit_flags": ["failclosed_missing_fields"],
-                "exit_warnings": warnings,
+                "exit_warnings": [*warnings, "degraded_execution_path"],
                 "exit_status": "partial",
+                "execution_assumption": "failclosed_pessimistic_price",
             }
             return _finalize(position_ctx, current_eval_ctx, settings, decision, hold_sec, pnl_pct, now_ts)
 
@@ -180,6 +181,7 @@ def _finalize(position_ctx: dict, current_ctx: dict, settings: Any, decision: di
         "exit_warnings": _dedupe(list(decision.get("exit_warnings", []))),
         "exit_snapshot": build_exit_snapshot(position_ctx, current_ctx),
         "exit_status": decision.get("exit_status", "ok"),
+        "execution_assumption": decision.get("execution_assumption", "observed_market_price"),
         "decided_at": now_ts,
         "contract_version": settings.EXIT_CONTRACT_VERSION,
     }

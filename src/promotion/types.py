@@ -21,7 +21,7 @@ def utc_now_iso() -> str:
 class SessionState:
     active_mode: str
     open_positions: list[dict[str, Any]] = field(default_factory=list)
-    counters: dict[str, Any] = field(default_factory=lambda: {"trades_today": 0, "pnl_pct_today": 0.0})
+    counters: dict[str, Any] = field(default_factory=lambda: {"trades_today": 0, "pnl_pct_today": 0.0, "realized_pnl_sol_today": 0.0, "starting_capital_sol": 0.0})
     cooldowns: dict[str, Any] = field(default_factory=dict)
     consecutive_losses: int = 0
     current_day: str = field(default_factory=lambda: datetime.now(timezone.utc).date().isoformat())

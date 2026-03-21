@@ -206,6 +206,7 @@ class Settings:
     PAPER_FAILED_TX_HIGH_VOLATILITY_ADDON: float
     PAPER_PARTIAL_FILL_ALLOWED: bool
     PAPER_PARTIAL_FILL_MIN_RATIO: float
+    PAPER_SOL_USD_FALLBACK: float
     PAPER_CONTRACT_VERSION: str
 
     # Post-run analyzer (PR-10)
@@ -942,6 +943,10 @@ def load_settings() -> Settings:
         PAPER_PARTIAL_FILL_MIN_RATIO=_as_unit_float(
             _get_env(merged, "PAPER_PARTIAL_FILL_MIN_RATIO", "0.50"),
             key="PAPER_PARTIAL_FILL_MIN_RATIO",
+        ),
+        PAPER_SOL_USD_FALLBACK=_as_positive_float(
+            _get_env(merged, "PAPER_SOL_USD_FALLBACK", "100.0"),
+            key="PAPER_SOL_USD_FALLBACK",
         ),
         PAPER_CONTRACT_VERSION=str(
             _get_env(merged, "PAPER_CONTRACT_VERSION", "paper_trader_v1")

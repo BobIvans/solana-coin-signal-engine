@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from trading.friction_model import compute_slippage_bps
+
 
 _SELL_HEAVY_COMPOSITIONS = {"sell-heavy", "sell_only", "sell-only", "distribution", "dump", "mixed_sell_bias"}
 
@@ -87,6 +89,36 @@ def _setting(settings: Any, name: str, default: Any) -> Any:
 def _is_sell_heavy_composition(value: Any) -> bool:
     composition = _text(value).replace('_', '-')
     return composition in _SELL_HEAVY_COMPOSITIONS
+
+
+def _exit_market_ctx(position_ctx: dict[str, Any], current_ctx: dict[str, Any]) -> dict[str, Any]:
+    entry_snapshot = dict(position_ctx.get("entry_snapshot") or {})
+    return {
+        "price_usd": current_ctx.get("price_usd_now", current_ctx.get("price_usd")),
+        "liquidity_usd": current_ctx.get("liquidity_usd_now", current_ctx.get("liquidity_usd", entry_snapshot.get("liquidity_usd"))),
+        "volatility": current_ctx.get("volatility", current_ctx.get("volume_velocity_now", current_ctx.get("volume_velocity", entry_snapshot.get("volume_velocity")))),
+        "volume_velocity": current_ctx.get("volume_velocity_now", current_ctx.get("volume_velocity", entry_snapshot.get("volume_velocity"))),
+        "sol_usd": current_ctx.get("sol_usd", entry_snapshot.get("sol_usd")),
+    }
+
+
+def _expected_exit_slippage_pct(position_ctx: dict[str, Any], current_ctx: dict[str, Any], settings: Any) -> float:
+    order_ctx = {
+        "requested_notional_sol": max(_to_float(position_ctx.get("remaining_size_sol")), _to_float(position_ctx.get("position_size_sol"))),
+        "reference_price_usd": _to_float(current_ctx.get("price_usd_now", current_ctx.get("price_usd"))),
+        "exit_decision": "FULL_EXIT",
+    }
+    market_ctx = _exit_market_ctx(position_ctx, current_ctx)
+    slippage_bps = compute_slippage_bps(order_ctx, market_ctx, settings)
+    return max(slippage_bps, 0.0) / 100.0
+
+
+def _pessimistic_stop_threshold(stop_loss_pct: float, expected_slippage_pct: float) -> float:
+    return min(0.0, stop_loss_pct + max(expected_slippage_pct, 0.0))
+
+
+def _trend_post_partial_stop_pct(settings: Any) -> float:
+    return float(_setting(settings, "EXIT_TREND_POST_PARTIAL1_STOP_PCT", 0.0))
 
 
 def _continuation_warning_flags(position_ctx: dict[str, Any], current_ctx: dict[str, Any]) -> list[str]:
@@ -565,8 +597,10 @@ def evaluate_scalp_exit(position_ctx: dict, current_ctx: dict, settings: Any) ->
     if bundle_failure["severity"] == "exit" and (pnl_pct <= 0 or hold_sec >= int(settings.EXIT_SCALP_RECHECK_SEC)):
         return _full("bundle_failure_spike", bundle_failure["flags"], warnings=warnings)
 
-    if pnl_pct <= float(settings.EXIT_SCALP_STOP_LOSS_PCT):
-        return _full("scalp_stop_loss", ["stop_loss_triggered"], warnings=warnings)
+    expected_slippage_pct = _expected_exit_slippage_pct(position_ctx, current_ctx, settings)
+    scalp_stop_threshold = _pessimistic_stop_threshold(float(settings.EXIT_SCALP_STOP_LOSS_PCT), expected_slippage_pct)
+    if pnl_pct <= scalp_stop_threshold:
+        return _full("scalp_stop_loss", ["stop_loss_triggered", "friction_adjusted_stop"], warnings=warnings)
 
     if liquidity_drop_pct >= float(settings.EXIT_SCALP_LIQUIDITY_DROP_PCT):
         return _full("trend_liquidity_breakdown", ["liquidity_breakdown_triggered"], warnings=warnings)
@@ -686,8 +720,13 @@ def evaluate_trend_exit(position_ctx: dict, current_ctx: dict, settings: Any) ->
     if bundle_failure["severity"] == "exit" and (retry_manipulation["severity"] == "warn" or buy_pressure < float(settings.EXIT_TREND_BUY_PRESSURE_FLOOR) + 0.05):
         return _full("bundle_failure_spike", bundle_failure["flags"], warnings=warnings)
 
-    if pnl_pct <= float(settings.EXIT_TREND_HARD_STOP_PCT):
-        return _full("trend_hard_stop", ["stop_loss_triggered"], warnings=warnings)
+    partial_1_taken = _partial_taken(position_ctx, 1)
+    partial_2_taken = _partial_taken(position_ctx, 2)
+    trend_stop_pct = _trend_post_partial_stop_pct(settings) if partial_1_taken else float(settings.EXIT_TREND_HARD_STOP_PCT)
+    trend_stop_reason = "trend_runner_breakeven_stop" if partial_1_taken else "trend_hard_stop"
+    trend_stop_flags = ["stop_loss_triggered", "breakeven_stop_after_partial_1"] if partial_1_taken else ["stop_loss_triggered"]
+    if pnl_pct <= trend_stop_pct:
+        return _full(trend_stop_reason, trend_stop_flags, warnings=warnings)
 
     if buy_pressure < float(settings.EXIT_TREND_BUY_PRESSURE_FLOOR):
         return _full("scalp_buy_pressure_breakdown", ["buy_pressure_below_floor"], warnings=warnings)
@@ -704,9 +743,6 @@ def evaluate_trend_exit(position_ctx: dict, current_ctx: dict, settings: Any) ->
 
     if "holder_growth_now" in current_ctx and _to_float(current_ctx.get("holder_growth_now")) <= 0 and bool(current_ctx.get("holder_growth_negative_persistent")):
         return _full("trend_social_confirmation_collapse", ["holder_growth_collapse"], warnings=warnings)
-
-    partial_1_taken = _partial_taken(position_ctx, 1)
-    partial_2_taken = _partial_taken(position_ctx, 2)
 
     if not partial_1_taken and pnl_pct >= float(settings.EXIT_TREND_PARTIAL1_PCT):
         return {

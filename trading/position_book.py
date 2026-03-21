@@ -87,10 +87,12 @@ def open_position(fill_ctx: dict[str, Any], signal_ctx: dict[str, Any], state: d
         "entry_decision": signal_ctx.get("entry_decision"),
         "opened_at": now,
         "entry_price_usd": float(fill_ctx.get("executed_price_usd") or 0.0),
-        "position_size_sol": float(fill_ctx.get("filled_notional_sol") or 0.0),
-        "remaining_size_sol": float(fill_ctx.get("filled_notional_sol") or 0.0),
+        "position_size_sol": float(fill_ctx.get("filled_cost_basis_sol") or fill_ctx.get("filled_notional_sol") or 0.0),
+        "remaining_size_sol": float(fill_ctx.get("filled_cost_basis_sol") or fill_ctx.get("filled_notional_sol") or 0.0),
         "partial_1_taken": False,
         "partial_2_taken": False,
+        "partials_taken": [],
+        "entry_fill_ratio": float(fill_ctx.get("fill_ratio") or 0.0),
         "realized_pnl_sol": 0.0,
         "unrealized_pnl_sol": 0.0,
         "fees_paid_sol": float(fill_ctx.get("priority_fee_sol") or 0.0),
@@ -115,11 +117,20 @@ def open_position(fill_ctx: dict[str, Any], signal_ctx: dict[str, Any], state: d
 def apply_partial_exit(position_ctx: dict[str, Any], fill_ctx: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
     sold = float(fill_ctx.get("filled_notional_sol") or 0.0)
     remaining_before = float(position_ctx.get("remaining_size_sol") or 0.0)
-    closed_fraction = compute_closed_fraction_of_position(position_ctx, fill_ctx)
-    cost_portion = remaining_before * closed_fraction
     pnl = compute_exit_pnl(position_ctx, fill_ctx)
+    cost_portion = float(pnl.get("cost_basis_consumed_sol") or 0.0)
 
-    position_ctx["remaining_size_sol"] = max(remaining_before - sold, 0.0)
+    exit_flags = {str(item) for item in (fill_ctx.get("exit_flags") or [])}
+    partials_taken = list(position_ctx.get("partials_taken") or [])
+    if "partial_take_profit_1" in exit_flags and "partial_1" not in partials_taken:
+        partials_taken.append("partial_1")
+        position_ctx["partial_1_taken"] = True
+    if "partial_take_profit_2" in exit_flags and "partial_2" not in partials_taken:
+        partials_taken.append("partial_2")
+        position_ctx["partial_2_taken"] = True
+    position_ctx["partials_taken"] = partials_taken
+
+    position_ctx["remaining_size_sol"] = max(remaining_before - cost_portion, 0.0)
     position_ctx["realized_pnl_sol"] = float(position_ctx.get("realized_pnl_sol") or 0.0) + pnl["realized_pnl_sol"]
     position_ctx["fees_paid_sol"] = float(position_ctx.get("fees_paid_sol") or 0.0) + pnl["fees_paid_sol"]
     position_ctx["last_mark_price_usd"] = float(fill_ctx.get("executed_price_usd") or position_ctx.get("last_mark_price_usd") or 0.0)
