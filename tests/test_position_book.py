@@ -3,7 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from trading.position_book import apply_partial_exit, ensure_state, open_position
+from trading.position_book import apply_partial_exit, ensure_state, open_position, release_pending_settlements
 
 
 class S:
@@ -92,3 +92,51 @@ def test_repeated_partial_1_does_not_duplicate_state_marker():
     apply_partial_exit(pos, fill, state)
     apply_partial_exit(pos, fill, state)
     assert pos["partials_taken"].count("partial_1") == 1
+
+
+def test_partial_exit_creates_pending_settlement_instead_of_immediate_free_capital():
+    state = {}
+    ensure_state(state, S())
+    pos = open_position(
+        {"executed_price_usd": 1.0, "filled_notional_sol": 10.0, "filled_cost_basis_sol": 10.0, "priority_fee_sol": 0.0, "fill_ratio": 1.0},
+        {"token_address": "SoSettle1", "symbol": "ST1", "entry_decision": "SCALP", "entry_snapshot": {}, "contract_version": "paper_trader_v1"},
+        state,
+    )
+    free_capital_before_exit = state["portfolio"]["free_capital_sol"]
+
+    apply_partial_exit(
+        pos,
+        {"filled_notional_sol": 4.0, "requested_notional_sol": 4.0, "filled_cost_basis_sol": 4.0, "executed_price_usd": 1.2, "priority_fee_sol": 0.1, "exit_reason": "take_profit"},
+        state,
+    )
+
+    assert state["portfolio"]["free_capital_sol"] == free_capital_before_exit
+    assert state["portfolio"]["pending_settlement_count"] == 1
+    assert state["portfolio"]["pending_settlement_sol"] > 0.0
+
+
+def test_release_pending_settlements_is_idempotent():
+    state = {}
+    ensure_state(state, S())
+    pos = open_position(
+        {"executed_price_usd": 1.0, "filled_notional_sol": 10.0, "filled_cost_basis_sol": 10.0, "priority_fee_sol": 0.0, "fill_ratio": 1.0},
+        {"token_address": "SoSettle2", "symbol": "ST2", "entry_decision": "SCALP", "entry_snapshot": {}, "contract_version": "paper_trader_v1"},
+        state,
+    )
+    apply_partial_exit(
+        pos,
+        {"filled_notional_sol": 3.0, "requested_notional_sol": 3.0, "filled_cost_basis_sol": 3.0, "executed_price_usd": 1.1, "priority_fee_sol": 0.0, "exit_reason": "take_profit"},
+        state,
+    )
+
+    free_capital_before_release = state["portfolio"]["free_capital_sol"]
+    state["settlement_cycle_seq"] = 1
+    first_release = release_pending_settlements(state)
+    free_capital_after_first = state["portfolio"]["free_capital_sol"]
+    second_release = release_pending_settlements(state)
+
+    assert first_release["released_count"] == 1
+    assert free_capital_after_first > free_capital_before_release
+    assert second_release["released_count"] == 0
+    assert state["portfolio"]["free_capital_sol"] == free_capital_after_first
+    assert state["portfolio"]["pending_settlement_count"] == 0

@@ -3,7 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from trading.exit_rules import evaluate_hard_exit, evaluate_scalp_exit, evaluate_trend_exit
+from trading.exit_rules import _pessimistic_stop_threshold, evaluate_hard_exit, evaluate_scalp_exit, evaluate_trend_exit
 
 
 class DummySettings:
@@ -342,7 +342,7 @@ def test_scalp_stop_is_friction_adjusted_before_fill_execution():
     position = {"remaining_size_sol": 1.0, "entry_snapshot": {"liquidity_usd": 5000, "volume_velocity": 3.0}}
     current = {
         "hold_sec": 10,
-        "pnl_pct": -8.7,
+        "pnl_pct": -15.0,
         "liquidity_drop_pct": 1,
         "buy_pressure_now": 0.8,
         "price_usd": 1.0,
@@ -353,3 +353,14 @@ def test_scalp_stop_is_friction_adjusted_before_fill_execution():
     out = evaluate_scalp_exit(position, current, DummySettings())
     assert out["exit_decision"] == "FULL_EXIT"
     assert "friction_adjusted_stop" in out["exit_flags"]
+
+
+def test_pessimistic_stop_threshold_never_moves_above_base_stop():
+    assert _pessimistic_stop_threshold(-10.0, 0.0) == -10.0
+    assert _pessimistic_stop_threshold(-10.0, 3.0) <= -10.0
+
+
+def test_pessimistic_stop_threshold_with_large_slippage_stays_non_positive():
+    threshold = _pessimistic_stop_threshold(-10.0, 15.0)
+    assert threshold < -10.0
+    assert threshold <= 0.0

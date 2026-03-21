@@ -33,6 +33,12 @@ The replay path is now evidence-first. `src/replay/historical_replay_harness.py`
 
 Historical replay uses recorded local artifacts such as scored rows, entry candidates, historical signals/trades/positions, and recorded price paths to reconstruct candidate, entry, position, and exit lifecycles.
 
+### Truth-layer guardrails
+
+- replay exit evaluation now masks future-window continuation / X metrics until their observation window is actually complete
+- friction-adjusted stop math can only make the stop stricter, never softer or positive
+- paper-trading exit proceeds are released on the next entry-processing cycle through a settlement queue rather than becoming same-cycle reusable capital
+
 ### What makes replay historical
 
 A replay run is historical when it is driven by persisted local artifacts under an artifact directory, typically `data/processed/` or a fixture directory. The harness prefers:
@@ -319,8 +325,10 @@ PR-ML-1 adds an offline feature importance layer over replay-derived trade matri
 Highlights:
 
 - computes offline-only feature importance for explicit replay targets
+- defaults to `entry_time_safe_default` feature boundaries
+- excludes post-entry analysis-only features (`net_unique_buyers_60s`, `liquidity_refill_ratio_120s`, `cluster_sell_concentration_120s`, `seller_reentry_ratio`, `liquidity_shock_recovery_sec`, `x_author_velocity_5m`) from the default training path
 - emits grouped and per-feature rankings
-- reports sample size, missingness, malformed rows, and exclusions
+- reports sample size, missingness, malformed rows, exclusions, and boundary mode
 - writes machine-readable JSON plus markdown summaries
 - keeps outputs analysis-only and not for online decisioning
 

@@ -378,7 +378,10 @@ Operational flow must stay temporally honest across runtime, replay, and offline
 
 - offline ML / feature-importance inputs must exclude post-trade outcome fields
 - historical smart-wallet enrichment must not use current owner-balance RPC state as truth for past windows
-- launch-window continuation fields such as `cluster_sell_concentration_120s` and `liquidity_refill_ratio_120s` are not valid late-live exit inputs unless the hold window is still inside the launch boundary or a true `*_now` replacement exists
+- replay exit evaluation must apply point-in-time masking before consuming continuation/X metrics: `net_unique_buyers_60s` becomes visible only at `hold_sec >= 60`; `liquidity_refill_ratio_120s`, `cluster_sell_concentration_120s`, `seller_reentry_ratio`, and `liquidity_shock_recovery_sec` become visible only at `hold_sec >= 120`; `x_author_velocity_5m` becomes visible only at `hold_sec >= 300`; unavailable fields must be passed as `None` rather than leaking from `entry_snapshot`
+- friction-adjusted scalp stop math must never become less conservative than the configured base stop and must never cross above zero because of slippage
+- offline default ML training must remain `entry_time_safe_default` and exclude post-entry analysis-only features by default
+- paper-trading exit proceeds must settle into reusable `free_capital_sol` on the next entry cycle, not the same cycle
 - runtime paper trading state must use the canonical `positions` / `portfolio` ledger, with `open_positions` treated only as a compatibility view
 - replay `trades.jsonl` must remain analyzer-usable for closed lifecycle recovery
 

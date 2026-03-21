@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from analytics.ml_model import MLTrainingConfig, build_training_dataframe, load_trade_feature_matrix, train_model, write_ml_outputs
+from analytics.ml_model import MLTrainingConfig, POST_ENTRY_ANALYSIS_FEATURES, build_training_dataframe, load_trade_feature_matrix, train_model, write_ml_outputs
 
 
 REQUIRED_SUMMARY_KEYS = {
@@ -191,3 +191,42 @@ def test_build_training_dataframe_excludes_post_trade_leakage_fields():
         "mae_pct",
     }
     assert forbidden.isdisjoint(feature_rows[0].keys())
+
+
+def test_default_training_dataframe_excludes_post_entry_analysis_features():
+    rows = _make_matrix_rows(8)
+    rows[0].update({
+        "net_unique_buyers_60s": 14,
+        "liquidity_refill_ratio_120s": 1.1,
+        "cluster_sell_concentration_120s": 0.22,
+        "seller_reentry_ratio": 0.18,
+        "liquidity_shock_recovery_sec": 40,
+        "x_author_velocity_5m": 0.7,
+    })
+
+    feature_rows, labels, _ = build_training_dataframe(rows, "profitable_trade_flag")
+
+    assert labels
+    assert feature_rows
+    assert set(feature_rows[0]).isdisjoint(POST_ENTRY_ANALYSIS_FEATURES)
+
+
+def test_ml_summary_reports_entry_time_safe_boundary_mode(tmp_path):
+    matrix_path = tmp_path / "trade_feature_matrix.jsonl"
+    rows = _make_matrix_rows(14)
+    for row in rows:
+        row.update({
+            "net_unique_buyers_60s": 9,
+            "liquidity_refill_ratio_120s": 0.95,
+            "cluster_sell_concentration_120s": 0.31,
+            "seller_reentry_ratio": 0.22,
+            "liquidity_shock_recovery_sec": 55,
+            "x_author_velocity_5m": 0.45,
+        })
+    _write_jsonl(matrix_path, rows)
+
+    loaded = load_trade_feature_matrix([matrix_path])
+    result = train_model(loaded.rows, MLTrainingConfig(min_train_rows=10))
+
+    assert result["feature_boundary_mode"] == "entry_time_safe_default"
+    assert result["analysis_only_features_excluded"] == POST_ENTRY_ANALYSIS_FEATURES

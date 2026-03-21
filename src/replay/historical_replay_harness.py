@@ -100,6 +100,17 @@ _DEFAULT_WALLET_FEATURES = {
     "smart_wallet_early_entry_hits": 0,
     "smart_wallet_netflow_bias": 0.0,
 }
+_POINT_IN_TIME_REQUIRED_WINDOWS_SEC = {
+    "net_unique_buyers_60s": 60,
+    "liquidity_refill_ratio_120s": 120,
+    "liquidity_refill_ratio_now": 120,
+    "cluster_sell_concentration_120s": 120,
+    "cluster_sell_concentration_now": 120,
+    "seller_reentry_ratio": 120,
+    "liquidity_shock_recovery_sec": 120,
+    "x_author_velocity_5m": 300,
+}
+
 _TRADE_FEATURE_MATRIX_FIELDS = [
     "run_id", "ts", "token_address", "pair_address", "symbol", "config_hash", "decision", "entry_decision",
     "regime_decision", "regime_confidence", "regime_reason_flags", "regime_blockers", "expected_hold_class",
@@ -164,6 +175,32 @@ def _safe_wallet_features(*sources: dict[str, Any]) -> dict[str, Any]:
         if isinstance(candidate, dict):
             features.update(candidate)
     return features
+
+
+def _point_in_time_visible_fields(hold_sec: float) -> set[str]:
+    safe_hold_sec = max(float(hold_sec or 0.0), 0.0)
+    return {
+        field
+        for field, required_window_sec in _POINT_IN_TIME_REQUIRED_WINDOWS_SEC.items()
+        if safe_hold_sec >= required_window_sec
+    }
+
+
+def _mask_future_window_metrics(ctx: dict[str, Any], hold_sec: float) -> dict[str, Any]:
+    masked = dict(ctx or {})
+    visible_fields = _point_in_time_visible_fields(hold_sec)
+    for field in _POINT_IN_TIME_REQUIRED_WINDOWS_SEC:
+        if field not in visible_fields:
+            masked[field] = None
+    for nested_field in ("features", "entry_snapshot"):
+        nested = masked.get(nested_field)
+        if isinstance(nested, dict):
+            nested_masked = dict(nested)
+            for field in _POINT_IN_TIME_REQUIRED_WINDOWS_SEC:
+                if field not in visible_fields:
+                    nested_masked[field] = None
+            masked[nested_field] = nested_masked
+    return masked
 
 
 def _first_present(sources: list[dict[str, Any]], *fields: str) -> Any:
@@ -362,7 +399,7 @@ def _resolve_exit(base_context: dict[str, Any], entry: dict[str, Any], token_pay
         }
 
     position_ctx = {
-        "entry_snapshot": dict(base_context),
+        "entry_snapshot": _mask_future_window_metrics(base_context, 0.0),
         "entry_price": entry.get("entry_price"),
         "opened_at": entry.get("entry_time"),
         "partials_taken": [],
@@ -372,6 +409,7 @@ def _resolve_exit(base_context: dict[str, Any], entry: dict[str, Any], token_pay
 
     for observation in observations:
         current = _augment_current_context(base_context, observation, entry.get("entry_price"))
+        current = _mask_future_window_metrics(current, float(current.get("hold_sec") or 0.0))
         last_current = current
         hard = evaluate_hard_exit(position_ctx, current, _build_settings({}, "off"))
         if hard["exit_decision"] == "FULL_EXIT":

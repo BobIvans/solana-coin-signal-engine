@@ -40,7 +40,7 @@ _LEAKY_OUTCOME_FIELDS = {
     "exit_warnings",
 }
 
-NUMERIC_FEATURES = [
+ENTRY_TIME_NUMERIC_FEATURES = [
     "final_score",
     "regime_confidence",
     "onchain_core",
@@ -71,13 +71,7 @@ NUMERIC_FEATURES = [
     "volume_velocity_entry",
     "holder_growth_5m_entry",
     "smart_wallet_hits_entry",
-    "net_unique_buyers_60s",
-    "liquidity_refill_ratio_120s",
-    "cluster_sell_concentration_120s",
     "smart_wallet_dispersion_score",
-    "x_author_velocity_5m",
-    "seller_reentry_ratio",
-    "liquidity_shock_recovery_sec",
     "smart_wallet_score_sum",
     "smart_wallet_tier1_hits",
     "smart_wallet_early_entry_hits",
@@ -86,7 +80,7 @@ NUMERIC_FEATURES = [
     "x_validation_delta_entry",
 ]
 
-CATEGORICAL_FEATURES = [
+ENTRY_TIME_CATEGORICAL_FEATURES = [
     "regime_decision",
     "expected_hold_class",
     "bundle_composition_dominant",
@@ -94,6 +88,18 @@ CATEGORICAL_FEATURES = [
     "creator_in_cluster_flag",
     "x_status",
 ]
+
+POST_ENTRY_ANALYSIS_FEATURES = [
+    "net_unique_buyers_60s",
+    "liquidity_refill_ratio_120s",
+    "cluster_sell_concentration_120s",
+    "seller_reentry_ratio",
+    "liquidity_shock_recovery_sec",
+    "x_author_velocity_5m",
+]
+
+NUMERIC_FEATURES = ENTRY_TIME_NUMERIC_FEATURES
+CATEGORICAL_FEATURES = ENTRY_TIME_CATEGORICAL_FEATURES
 
 LEAKAGE_OUTCOME_FIELDS = {
     "net_pnl_pct",
@@ -112,7 +118,7 @@ LEAKAGE_OUTCOME_FIELDS = {
     "exit_warnings",
 }
 
-ML_FEATURE_NAMES = tuple(NUMERIC_FEATURES + CATEGORICAL_FEATURES)
+ML_FEATURE_NAMES = tuple(ENTRY_TIME_NUMERIC_FEATURES + ENTRY_TIME_CATEGORICAL_FEATURES)
 _invalid_feature_overlap = sorted(set(ML_FEATURE_NAMES) & LEAKAGE_OUTCOME_FIELDS)
 if _invalid_feature_overlap:
     raise RuntimeError(f"ML feature leakage detected: {_invalid_feature_overlap}")
@@ -219,11 +225,11 @@ def derive_targets(rows: list[dict[str, Any]], target_name: str) -> list[int | N
 
 def _build_feature_row(row: dict[str, Any]) -> dict[str, Any]:
     record: dict[str, Any] = {}
-    for feature in NUMERIC_FEATURES:
+    for feature in ENTRY_TIME_NUMERIC_FEATURES:
         if feature in _LEAKY_OUTCOME_FIELDS:
             continue
         record[feature] = _safe_float(row.get(feature))
-    for feature in CATEGORICAL_FEATURES:
+    for feature in ENTRY_TIME_CATEGORICAL_FEATURES:
         if feature in _LEAKY_OUTCOME_FIELDS:
             continue
         record[feature] = _normalize_categorical(row.get(feature))
@@ -312,20 +318,20 @@ def _fit_naive_bayes_histogram_model(train_rows: list[dict[str, Any]], train_lab
     feature_specs: dict[str, dict[str, Any]] = {}
     feature_token_counts: dict[str, dict[str, dict[str, int]]] = {}
 
-    for feature in NUMERIC_FEATURES:
+    for feature in ENTRY_TIME_NUMERIC_FEATURES:
         present_values = [float(row[feature]) for row in train_rows if row.get(feature) is not None]
         numeric_spec = _compute_numeric_spec(present_values) if present_values else {"median": 0.0, "boundaries": []}
         feature_specs[feature] = {"kind": "numeric", **numeric_spec}
-    for feature in CATEGORICAL_FEATURES:
+    for feature in ENTRY_TIME_CATEGORICAL_FEATURES:
         categories = sorted({str(row.get(feature)) for row in train_rows if row.get(feature) is not None})
         feature_specs[feature] = {"kind": "categorical", "categories": categories}
 
-    for feature in NUMERIC_FEATURES + CATEGORICAL_FEATURES:
+    for feature in ENTRY_TIME_NUMERIC_FEATURES + ENTRY_TIME_CATEGORICAL_FEATURES:
         feature_token_counts[feature] = {"positive": {}, "negative": {}}
 
     for row, label in zip(train_rows, train_labels):
         target_key = "positive" if label == 1 else "negative"
-        for feature in NUMERIC_FEATURES + CATEGORICAL_FEATURES:
+        for feature in ENTRY_TIME_NUMERIC_FEATURES + ENTRY_TIME_CATEGORICAL_FEATURES:
             token = _feature_token(feature, row.get(feature), {"feature_specs": feature_specs})
             current = feature_token_counts[feature][target_key].get(token, 0)
             feature_token_counts[feature][target_key][token] = current + 1
@@ -345,7 +351,7 @@ def _predict_probability(model_bundle: dict[str, Any], row: dict[str, Any]) -> t
     log_odds = math.log(prior_positive / max(1e-9, 1.0 - prior_positive))
     contributions: dict[str, float] = {}
 
-    for feature in NUMERIC_FEATURES + CATEGORICAL_FEATURES:
+    for feature in ENTRY_TIME_NUMERIC_FEATURES + ENTRY_TIME_CATEGORICAL_FEATURES:
         token = _feature_token(feature, row.get(feature), model_bundle)
         counts = model_bundle["feature_token_counts"][feature]
         positive_counts = counts["positive"]
@@ -434,8 +440,8 @@ def _compute_categorical_feature_importance(rows: list[dict[str, Any]], labels: 
 
 def compute_feature_importance(rows: list[dict[str, Any]], labels: list[int]) -> list[dict[str, Any]]:
     ranked = [
-        *[_compute_numeric_feature_importance(rows, labels, feature) for feature in NUMERIC_FEATURES],
-        *[_compute_categorical_feature_importance(rows, labels, feature) for feature in CATEGORICAL_FEATURES],
+        *[_compute_numeric_feature_importance(rows, labels, feature) for feature in ENTRY_TIME_NUMERIC_FEATURES],
+        *[_compute_categorical_feature_importance(rows, labels, feature) for feature in ENTRY_TIME_CATEGORICAL_FEATURES],
     ]
     ranked.sort(key=lambda item: (-float(item["importance"]), item["feature_name"]))
     return ranked
@@ -443,10 +449,10 @@ def compute_feature_importance(rows: list[dict[str, Any]], labels: list[int]) ->
 
 def _training_feature_stats(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     stats: dict[str, dict[str, Any]] = {}
-    for feature in NUMERIC_FEATURES:
+    for feature in ENTRY_TIME_NUMERIC_FEATURES:
         present_count = sum(1 for row in rows if row.get(feature) is not None)
         stats[feature] = {"kind": "numeric", "present_count": present_count, "missing_count": len(rows) - present_count}
-    for feature in CATEGORICAL_FEATURES:
+    for feature in ENTRY_TIME_CATEGORICAL_FEATURES:
         values = [row.get(feature) for row in rows if row.get(feature) is not None]
         stats[feature] = {
             "kind": "categorical",
@@ -478,6 +484,8 @@ def _build_skip_summary(
         "target_name": config.target_name,
         "train_row_count": train_row_count,
         "feature_names": feature_names or [],
+        "feature_boundary_mode": "entry_time_safe_default",
+        "analysis_only_features_excluded": list(POST_ENTRY_ANALYSIS_FEATURES),
         "source_paths": source_paths,
         "training_skipped": True,
         "skip_reason": skip_reason,
@@ -492,7 +500,7 @@ def _build_skip_summary(
 
 def train_model(rows: list[dict[str, Any]], config: MLTrainingConfig) -> dict[str, Any]:
     features, labels, source_rows = build_training_dataframe(rows, config.target_name)
-    base_feature_names = NUMERIC_FEATURES + CATEGORICAL_FEATURES
+    base_feature_names = list(ML_FEATURE_NAMES)
     source_paths = sorted({str(row.get("_source_path")) for row in source_rows if row.get("_source_path")})
 
     if config.model_type != DEFAULT_MODEL_TYPE:
@@ -600,6 +608,8 @@ def train_model(rows: list[dict[str, Any]], config: MLTrainingConfig) -> dict[st
         "target_name": config.target_name,
         "train_row_count": len(features),
         "feature_names": base_feature_names,
+        "feature_boundary_mode": "entry_time_safe_default",
+        "analysis_only_features_excluded": list(POST_ENTRY_ANALYSIS_FEATURES),
         "source_paths": source_paths,
         "training_skipped": False,
         "skip_reason": None,

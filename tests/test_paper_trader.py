@@ -128,3 +128,57 @@ def test_partial_entry_fill_scales_effective_position_pct_and_exit_flags_reach_s
         PartialFillSettings(),
     )
     assert state["positions"][0]["partial_1_taken"] is True
+
+
+def test_exit_proceeds_are_not_reusable_in_same_cycle(tmp_path: Path):
+    state = {"paths": {"signals": tmp_path / "signals.jsonl", "trades": tmp_path / "trades.jsonl"}}
+    ensure_state(state, S())
+
+    process_entry_signals(
+        [{"token_address": "SoCap1", "symbol": "CAP1", "entry_decision": "SCALP", "entry_confidence": 0.8, "recommended_position_pct": 1.0, "base_position_pct": 1.0, "effective_position_pct": 1.0, "sizing_multiplier": 1.0, "sizing_origin": "evidence_weighted", "sizing_reason_codes": ["base"], "sizing_confidence": 0.8, "evidence_quality_score": 0.8, "evidence_conflict_flag": False, "partial_evidence_flag": False, "entry_reason": "ok", "entry_snapshot": {}, "contract_version": "paper_trader_v1"}],
+        [{"token_address": "SoCap1", "price_usd": 1.0, "liquidity_usd": 1_000_000}],
+        state,
+        S(),
+    )
+    position = state["positions"][0]
+    process_exit_signals(
+        [{"position_id": position["position_id"], "token_address": "SoCap1", "exit_decision": "FULL_EXIT", "exit_fraction": 1.0, "exit_reason": "done"}],
+        [{"token_address": "SoCap1", "price_usd": 1.2, "liquidity_usd": 1_000_000}],
+        state,
+        S(),
+    )
+
+    assert state["portfolio"]["pending_settlement_count"] == 1
+    assert state["portfolio"]["pending_settlement_sol"] > 0.0
+    assert state["portfolio"]["free_capital_sol"] <= 0.0
+
+
+def test_pending_settlement_releases_on_next_entry_cycle(tmp_path: Path):
+    state = {"paths": {"signals": tmp_path / "signals.jsonl", "trades": tmp_path / "trades.jsonl"}}
+    ensure_state(state, S())
+
+    process_entry_signals(
+        [{"token_address": "SoCap2", "symbol": "CAP2", "entry_decision": "SCALP", "entry_confidence": 0.8, "recommended_position_pct": 1.0, "base_position_pct": 1.0, "effective_position_pct": 1.0, "sizing_multiplier": 1.0, "sizing_origin": "evidence_weighted", "sizing_reason_codes": ["base"], "sizing_confidence": 0.8, "evidence_quality_score": 0.8, "evidence_conflict_flag": False, "partial_evidence_flag": False, "entry_reason": "ok", "entry_snapshot": {}, "contract_version": "paper_trader_v1"}],
+        [{"token_address": "SoCap2", "price_usd": 1.0, "liquidity_usd": 1_000_000}],
+        state,
+        S(),
+    )
+    first_position = state["positions"][0]
+    process_exit_signals(
+        [{"position_id": first_position["position_id"], "token_address": "SoCap2", "exit_decision": "FULL_EXIT", "exit_fraction": 1.0, "exit_reason": "done"}],
+        [{"token_address": "SoCap2", "price_usd": 1.2, "liquidity_usd": 1_000_000}],
+        state,
+        S(),
+    )
+
+    assert state["portfolio"]["pending_settlement_count"] == 1
+
+    process_entry_signals(
+        [{"token_address": "SoCap3", "symbol": "CAP3", "entry_decision": "SCALP", "entry_confidence": 0.8, "recommended_position_pct": 0.5, "base_position_pct": 0.5, "effective_position_pct": 0.5, "sizing_multiplier": 1.0, "sizing_origin": "evidence_weighted", "sizing_reason_codes": ["base"], "sizing_confidence": 0.8, "evidence_quality_score": 0.8, "evidence_conflict_flag": False, "partial_evidence_flag": False, "entry_reason": "ok", "entry_snapshot": {}, "contract_version": "paper_trader_v1"}],
+        [{"token_address": "SoCap3", "price_usd": 1.0, "liquidity_usd": 1_000_000}],
+        state,
+        S(),
+    )
+
+    assert state["portfolio"]["pending_settlement_count"] == 0
+    assert any(pos.get("token_address") == "SoCap3" for pos in state["positions"])

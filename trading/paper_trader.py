@@ -13,6 +13,7 @@ from trading.position_book import (
     mark_to_market,
     next_trade_id,
     open_position,
+    release_pending_settlements,
 )
 from trading.trade_logger_v2 import log_signal, log_trade
 from utils.clock import utc_now_iso
@@ -128,6 +129,9 @@ def process_exit_signals(exit_signals: list[dict[str, Any]], market_states: list
 
 def process_entry_signals(entry_signals: list[dict[str, Any]], market_states: list[dict[str, Any]], state: dict[str, Any], settings: Any) -> dict[str, Any]:
     ensure_state(state, settings)
+    state["settlement_cycle_seq"] = int(state.get("settlement_cycle_seq") or 0) + 1
+    state["portfolio"]["settlement_cycle_seq"] = state["settlement_cycle_seq"]
+    release_pending_settlements(state)
     markets = _market_index(market_states)
     paths = state["paths"]
 

@@ -37,6 +37,14 @@ def _position_sizing_fields(signal_ctx: dict[str, Any]) -> dict[str, Any]:
     return {field: signal_ctx.get(field) for field in fields if field in signal_ctx}
 
 
+def _refresh_pending_settlement_metrics(state: dict[str, Any]) -> None:
+    pending = [record for record in state.get("pending_settlements", []) if isinstance(record, dict) and not record.get("released")]
+    portfolio = state["portfolio"]
+    portfolio["pending_settlement_sol"] = sum(float(record.get("amount_sol") or 0.0) for record in pending)
+    portfolio["pending_settlement_count"] = len(pending)
+    portfolio["settlement_cycle_seq"] = int(state.get("settlement_cycle_seq") or 0)
+
+
 def ensure_state(state: dict[str, Any], settings: Any) -> dict[str, Any]:
     if not isinstance(state.get("positions"), list):
         state["positions"] = []
@@ -55,11 +63,77 @@ def ensure_state(state: dict[str, Any], settings: Any) -> dict[str, Any]:
             "equity_sol": starting,
             "open_positions": len([position for position in state.get("positions", []) if position.get("is_open")]),
             "closed_positions": len([position for position in state.get("positions", []) if not position.get("is_open", True)]),
+            "pending_settlement_sol": 0.0,
+            "pending_settlement_count": 0,
+            "settlement_cycle_seq": 0,
             "contract_version": settings.PAPER_CONTRACT_VERSION,
         }
+    else:
+        portfolio.setdefault("starting_capital_sol", float(settings.PAPER_STARTING_CAPITAL_SOL))
+        portfolio.setdefault("capital_in_positions_sol", 0.0)
+        portfolio.setdefault("reserved_fees_sol", 0.0)
+        portfolio.setdefault("realized_pnl_sol", 0.0)
+        portfolio.setdefault("unrealized_pnl_sol", 0.0)
+        portfolio.setdefault("equity_sol", float(portfolio.get("starting_capital_sol") or 0.0))
+        portfolio.setdefault("open_positions", len([position for position in state.get("positions", []) if position.get("is_open")]))
+        portfolio.setdefault("closed_positions", len([position for position in state.get("positions", []) if not position.get("is_open", True)]))
+        portfolio.setdefault("pending_settlement_sol", 0.0)
+        portfolio.setdefault("pending_settlement_count", 0)
+        portfolio.setdefault("settlement_cycle_seq", int(state.get("settlement_cycle_seq") or 0))
+        portfolio.setdefault("contract_version", settings.PAPER_CONTRACT_VERSION)
+
+    if not isinstance(state.get("pending_settlements"), list):
+        state["pending_settlements"] = []
+    state.setdefault("settlement_cycle_seq", int(state["portfolio"].get("settlement_cycle_seq") or 0))
     state.setdefault("next_position_seq", 1)
     state.setdefault("next_trade_seq", 1)
+    _refresh_pending_settlement_metrics(state)
     return state
+
+
+def _queue_pending_settlement(position_ctx: dict[str, Any], amount_sol: float, reason: str, state: dict[str, Any]) -> None:
+    if amount_sol <= 0:
+        return
+    settlement_cycle_seq = int(state.get("settlement_cycle_seq") or 0)
+    record = {
+        "amount_sol": float(amount_sol),
+        "position_id": position_ctx.get("position_id"),
+        "available_after_cycle": settlement_cycle_seq + 1,
+        "reason": reason,
+        "released": False,
+    }
+    state.setdefault("pending_settlements", []).append(record)
+    _refresh_pending_settlement_metrics(state)
+
+
+def release_pending_settlements(state: dict[str, Any]) -> dict[str, Any]:
+    portfolio = state["portfolio"]
+    current_cycle = int(state.get("settlement_cycle_seq") or 0)
+    released_sol = 0.0
+    released_count = 0
+    for record in state.get("pending_settlements", []):
+        if not isinstance(record, dict) or record.get("released"):
+            continue
+        if int(record.get("available_after_cycle") or 0) > current_cycle:
+            continue
+        amount_sol = float(record.get("amount_sol") or 0.0)
+        if amount_sol <= 0:
+            record["released"] = True
+            continue
+        record["released"] = True
+        released_sol += amount_sol
+        released_count += 1
+
+    if released_sol > 0:
+        portfolio["free_capital_sol"] = float(portfolio.get("free_capital_sol") or 0.0) + released_sol
+        portfolio["as_of"] = utc_now_iso()
+
+    _refresh_pending_settlement_metrics(state)
+    return {
+        "released_sol": released_sol,
+        "released_count": released_count,
+        "current_cycle": current_cycle,
+    }
 
 
 def get_open_position_by_token(state: dict[str, Any], token_address: str) -> dict[str, Any] | None:
@@ -139,7 +213,12 @@ def apply_partial_exit(position_ctx: dict[str, Any], fill_ctx: dict[str, Any], s
     position_ctx["last_updated_at"] = utc_now_iso()
 
     portfolio = state["portfolio"]
-    portfolio["free_capital_sol"] += sold - pnl["fees_paid_sol"]
+    _queue_pending_settlement(
+        position_ctx,
+        max(sold - pnl["fees_paid_sol"], 0.0),
+        str(fill_ctx.get("exit_reason") or fill_ctx.get("exit_decision") or "exit_settlement"),
+        state,
+    )
     portfolio["capital_in_positions_sol"] = max(float(portfolio.get("capital_in_positions_sol") or 0.0) - cost_portion, 0.0)
     portfolio["realized_pnl_sol"] = float(portfolio.get("realized_pnl_sol") or 0.0) + pnl["realized_pnl_sol"]
     portfolio["reserved_fees_sol"] = max(float(portfolio.get("reserved_fees_sol") or 0.0) - pnl["fees_paid_sol"], 0.0)

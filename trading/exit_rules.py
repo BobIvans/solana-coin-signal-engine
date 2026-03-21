@@ -130,7 +130,8 @@ def _expected_exit_slippage_pct(position_ctx: dict[str, Any], current_ctx: dict[
 
 
 def _pessimistic_stop_threshold(stop_loss_pct: float, expected_slippage_pct: float) -> float:
-    return min(0.0, stop_loss_pct + max(expected_slippage_pct, 0.0))
+    slip = max(expected_slippage_pct, 0.0)
+    return min(stop_loss_pct, stop_loss_pct - slip)
 
 
 def _trend_post_partial_stop_pct(settings: Any) -> float:
