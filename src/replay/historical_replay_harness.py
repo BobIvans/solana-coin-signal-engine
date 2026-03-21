@@ -11,6 +11,7 @@ import yaml
 from src.replay.calibration_metrics import derive_outcome_metrics, extract_price_observations
 from src.replay.deterministic import hash_config, make_run_paths
 from src.replay.replay_input_loader import load_replay_inputs
+from src.replay.wallet_mode_rescore import rescore_replay_inputs
 from src.replay.replay_state_machine import ReplayStateMachine
 from trading.exit_rules import evaluate_hard_exit, evaluate_scalp_exit, evaluate_trend_exit
 from trading.regime_rules import decide_regime
@@ -30,6 +31,8 @@ from utils.wallet_family_contract_fields import (
 
 _CONTRACT_VERSION = "replay_harness.v1"
 _TRADE_FEATURE_MATRIX_SCHEMA_VERSION = "trade_feature_matrix.v1"
+_REPLAY_SCORE_SOURCE_VALUES = {"mode_specific_scored_artifact", "generic_scored_artifact_rescored", "no_scored_artifact_passthrough"}
+_WALLET_MODE_PARITY_STATUS_VALUES = {"comparable", "partial", "unavailable"}
 _DEFAULT_TS = "2026-03-16T00:00:00Z"
 _DEFAULT_OUTPUT_BASE = "runs"
 _DEFAULT_REPLAY_SETTINGS = {
@@ -95,7 +98,7 @@ _TRADE_FEATURE_MATRIX_FIELDS = [
     "regime_decision", "regime_confidence", "regime_reason_flags", "regime_blockers", "expected_hold_class",
     "entry_confidence", "recommended_position_pct", "base_position_pct", "effective_position_pct", "sizing_multiplier",
     "sizing_reason_codes", "sizing_confidence", "sizing_origin", "sizing_warning", "evidence_quality_score",
-    "evidence_conflict_flag", "partial_evidence_flag", "partial_evidence_penalty", "low_confidence_evidence_penalty", "final_score", "onchain_core", "early_signal_bonus",
+    "evidence_conflict_flag", "partial_evidence_flag", "final_score_pre_wallet", "final_score", "onchain_core", "early_signal_bonus",
     "x_validation_bonus", "rug_penalty", "spam_penalty", "confidence_adjustment", "wallet_adjustment",
     "bundle_aggression_bonus", "organic_multi_cluster_bonus", "single_cluster_penalty", "creator_cluster_penalty",
     "cluster_dev_link_penalty", "shared_funder_penalty", "bundle_sell_heavy_penalty", "retry_manipulation_penalty",
@@ -112,7 +115,10 @@ _TRADE_FEATURE_MATRIX_FIELDS = [
     "smart_wallet_score_sum", "smart_wallet_tier1_hits", "smart_wallet_tier2_hits", "smart_wallet_unique_count",
     "smart_wallet_early_entry_hits", "smart_wallet_netflow_bias", *SMART_WALLET_FAMILY_CONTRACT_FIELDS, "exit_decision", "exit_reason_final", "exit_flags",
     "exit_warnings", "hold_sec", "gross_pnl_pct", "net_pnl_pct", "mfe_pct", "mae_pct", "time_to_first_profit_sec",
-    "mfe_pct_240s", "mae_pct_240s", "trend_survival_15m", "trend_survival_60m", "wallet_weighting", "dry_run",
+    "mfe_pct_240s", "mae_pct_240s", "trend_survival_15m", "trend_survival_60m", "wallet_weighting",
+    "wallet_weighting_requested_mode", "wallet_weighting_effective_mode", "wallet_score_component_raw",
+    "wallet_score_component_applied", "wallet_score_component_applied_shadow", "replay_score_source",
+    "wallet_mode_parity_status", "score_contract_version", "historical_input_hash", "dry_run",
     "synthetic_trade_flag", "replay_input_origin", "replay_data_status", "replay_resolution_status", "synthetic_assist_flag",
     "schema_version",
 ]
@@ -193,6 +199,65 @@ def _build_settings(config: dict[str, Any], wallet_weighting: str) -> Any:
 def _compute_config_hash(config: dict[str, Any], wallet_weighting: str, run_id: str) -> str:
     payload = {"config": config, "wallet_weighting": wallet_weighting, "run_id": run_id}
     return hash_config(payload)
+
+
+def _scrub_for_hash(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _scrub_for_hash(item)
+            for key, item in sorted(value.items())
+            if key not in {"_source_file", "_source_line", "_source_index", "rescored_row"}
+        }
+    if isinstance(value, list):
+        return [_scrub_for_hash(item) for item in value]
+    return value
+
+
+def _compute_historical_input_hash(loaded_inputs: dict[str, Any]) -> str:
+    token_inputs: dict[str, Any] = {}
+    for token, payload in sorted((loaded_inputs.get("token_inputs") or {}).items()):
+        token_inputs[token] = {
+            "token_address": payload.get("token_address"),
+            "pair_address": payload.get("pair_address"),
+            "warnings": sorted(set(payload.get("warnings") or [])),
+            "malformed_rows": int(payload.get("malformed_rows") or 0),
+            "entry_candidates": _scrub_for_hash(payload.get("entry_candidates") or []),
+            "signals": _scrub_for_hash(payload.get("signals") or []),
+            "trades": _scrub_for_hash(payload.get("trades") or []),
+            "positions": _scrub_for_hash(payload.get("positions") or []),
+            "price_paths": _scrub_for_hash(payload.get("price_paths") or []),
+        }
+    payload = {
+        "artifact_dir": loaded_inputs.get("artifact_dir"),
+        "loaded_files": {
+            key: value
+            for key, value in sorted((loaded_inputs.get("loaded_files") or {}).items())
+            if key != "scored_rows"
+        },
+        "token_inputs": token_inputs,
+        "universe": _scrub_for_hash(loaded_inputs.get("universe") or []),
+    }
+    return hash_config(payload)
+
+
+def _coalesce_list(value: Any) -> list[Any]:
+    return list(value) if isinstance(value, list) else []
+
+
+def _replay_score_metadata(base_context: dict[str, Any], token_payload: dict[str, Any], historical_input_hash: str) -> dict[str, Any]:
+    rescored = token_payload.get("rescored_row") or {}
+    return {
+        "final_score_pre_wallet": rescored.get("final_score_pre_wallet", base_context.get("final_score_pre_wallet")),
+        "wallet_weighting_requested_mode": token_payload.get("wallet_weighting_requested_mode") or rescored.get("wallet_weighting_requested_mode"),
+        "wallet_weighting_effective_mode": token_payload.get("wallet_weighting_effective_mode") or rescored.get("wallet_weighting_effective_mode"),
+        "wallet_score_component_raw": rescored.get("wallet_score_component_raw", 0.0),
+        "wallet_score_component_applied": rescored.get("wallet_score_component_applied", 0.0),
+        "wallet_score_component_applied_shadow": rescored.get("wallet_score_component_applied_shadow", 0.0),
+        "replay_score_source": token_payload.get("replay_score_source", "no_scored_artifact_passthrough"),
+        "wallet_mode_parity_status": token_payload.get("wallet_mode_parity_status", "unavailable"),
+        "score_contract_version": token_payload.get("score_contract_version") or rescored.get("score_contract_version") or base_context.get("contract_version"),
+        "historical_input_hash": historical_input_hash,
+    }
 
 
 def _jsonl_write(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -427,7 +492,7 @@ def _build_trade_feature_row(
         "ts": _first_present(sources, "ts", "entry_time", "entry_ts") or _DEFAULT_TS,
         "token_address": _first_present(sources, "token_address"),
         "pair_address": _first_present(sources, "pair_address"),
-        "symbol": _first_present(sources, "symbol"),
+        "symbol": (_first_present(sources, "symbol") or None),
         "config_hash": config_hash,
         "decision": _first_present(sources, "decision", "entry_decision"),
         "entry_decision": _first_present(sources, "entry_decision", "decision"),
@@ -448,8 +513,7 @@ def _build_trade_feature_row(
         "evidence_quality_score": _first_present(sources, "evidence_quality_score"),
         "evidence_conflict_flag": _first_present(sources, "evidence_conflict_flag"),
         "partial_evidence_flag": _first_present(sources, "partial_evidence_flag"),
-        "partial_evidence_penalty": _first_present(sources, "partial_evidence_penalty"),
-        "low_confidence_evidence_penalty": _first_present(sources, "low_confidence_evidence_penalty"),
+        "final_score_pre_wallet": _first_present(sources, "final_score_pre_wallet"),
         "final_score": _first_present(sources, "final_score"),
         "onchain_core": _first_present(sources, "onchain_core"),
         "early_signal_bonus": _first_present(sources, "early_signal_bonus"),
@@ -514,6 +578,15 @@ def _build_trade_feature_row(
         **contract_fields,
         **calibration_metrics,
         "wallet_weighting": wallet_weighting,
+        "wallet_weighting_requested_mode": _first_present(sources, "wallet_weighting_requested_mode") or wallet_weighting,
+        "wallet_weighting_effective_mode": _first_present(sources, "wallet_weighting_effective_mode") or wallet_weighting,
+        "wallet_score_component_raw": _first_present(sources, "wallet_score_component_raw") or 0.0,
+        "wallet_score_component_applied": _first_present(sources, "wallet_score_component_applied") or 0.0,
+        "wallet_score_component_applied_shadow": _first_present(sources, "wallet_score_component_applied_shadow") or 0.0,
+        "replay_score_source": _first_present(sources, "replay_score_source") or "no_scored_artifact_passthrough",
+        "wallet_mode_parity_status": _first_present(sources, "wallet_mode_parity_status") or "unavailable",
+        "score_contract_version": _first_present(sources, "score_contract_version"),
+        "historical_input_hash": _first_present(sources, "historical_input_hash"),
         "dry_run": dry_run,
         "synthetic_trade_flag": synthetic_assist_flag,
         "replay_input_origin": replay_input_origin,
@@ -532,16 +605,20 @@ def replay_token_lifecycle(
     wallet_weighting: str,
     dry_run: bool,
     config_hash: str,
+    historical_input_hash: str,
     settings: Any,
     replay_input_origin: str = "historical",
     synthetic_assist_flag: bool = False,
 ) -> dict[str, Any]:
-    scored = (token_payload.get("scored_rows") or [None])[0] or {}
+    raw_scored = (token_payload.get("scored_rows") or [None])[0] or {}
+    rescored = token_payload.get("rescored_row") or {}
+    scored = {**raw_scored, **rescored}
     candidate = (token_payload.get("entry_candidates") or [None])[0] or {}
     signal_artifact = (token_payload.get("signals") or [None])[0] or {}
     trade_artifact = (token_payload.get("trades") or [None])[0] or {}
     position_artifact = (token_payload.get("positions") or [None])[0] or {}
-    base_context = _merge_context(scored, candidate, signal_artifact, trade_artifact, position_artifact)
+    replay_score_metadata = _replay_score_metadata(scored, token_payload, historical_input_hash)
+    base_context = _merge_context(scored, candidate, signal_artifact, trade_artifact, position_artifact, replay_score_metadata)
     token_address = token_payload.get("token_address") or base_context.get("token_address") or "unknown_token"
     pair_address = token_payload.get("pair_address") or base_context.get("pair_address")
     historical_decision = _first_present([base_context, candidate, signal_artifact, trade_artifact, position_artifact], "decision", "entry_decision")
@@ -566,6 +643,9 @@ def replay_token_lifecycle(
     if historical_expected_hold_class is not None:
         scored["expected_hold_class"] = historical_expected_hold_class
         base_context["expected_hold_class"] = historical_expected_hold_class
+
+    scored.update(replay_score_metadata)
+    base_context.update(replay_score_metadata)
 
     missing_evidence = []
     if not token_payload.get("price_paths"):
@@ -600,10 +680,12 @@ def replay_token_lifecycle(
         "expected_hold_class": historical_expected_hold_class if historical_expected_hold_class is not None else regime.get("expected_hold_class"),
         "entry_confidence": base_context.get("entry_confidence"),
         "recommended_position_pct": base_context.get("recommended_position_pct"),
+        "final_score_pre_wallet": base_context.get("final_score_pre_wallet"),
         "final_score": base_context.get("final_score"),
         "x_status": base_context.get("x_status"),
         "x_validation_score": base_context.get("x_validation_score"),
         "x_validation_delta": base_context.get("x_validation_delta"),
+        **replay_score_metadata,
         **signal_contract_fields,
         "features": _safe_dict(base_context.get("features")) or {k: v for k, v in base_context.items() if k not in {"wallet_features", "entry_snapshot", "price_path"}},
         "wallet_features": _safe_wallet_features(base_context, signal_artifact, trade_artifact),
@@ -623,6 +705,7 @@ def replay_token_lifecycle(
         "closed_at": None,
         "warnings": [],
         "replay_data_status": signal["replay_data_status"],
+        **replay_score_metadata,
     }
 
     if entry_decision != "ENTER":
@@ -637,8 +720,8 @@ def replay_token_lifecycle(
             "trade": None,
             "position": position,
             "trade_feature_row": None,
-            "universe_row": {"run_id": run_id, "token_address": token_address, "pair_address": pair_address},
-            "backfill_row": {"run_id": run_id, "token_address": token_address, "status": signal["replay_data_status"]},
+            "universe_row": {"run_id": run_id, "token_address": token_address, "pair_address": pair_address, "historical_input_hash": historical_input_hash},
+            "backfill_row": {"run_id": run_id, "token_address": token_address, "status": signal["replay_data_status"], "historical_input_hash": historical_input_hash},
             "events": state.snapshot()["events"],
             "resolution_status": state.resolution_status,
             "replay_data_status": signal["replay_data_status"],
@@ -695,6 +778,7 @@ def replay_token_lifecycle(
         "regime_reason_flags": historical_regime_reason_flags if historical_regime_reason_flags is not None else regime.get("regime_reason_flags"),
         "regime_blockers": historical_regime_blockers if historical_regime_blockers is not None else regime.get("regime_blockers"),
         "expected_hold_class": historical_expected_hold_class if historical_expected_hold_class is not None else regime.get("expected_hold_class"),
+        **replay_score_metadata,
         **trade_contract_fields,
         "replay_input_origin": replay_input_origin,
         "replay_data_status": replay_data_status,
@@ -741,8 +825,8 @@ def replay_token_lifecycle(
         "trade": trade,
         "position": position,
         "trade_feature_row": trade_feature_row,
-        "universe_row": {"run_id": run_id, "token_address": token_address, "pair_address": pair_address},
-        "backfill_row": {"run_id": run_id, "token_address": token_address, "status": replay_data_status},
+        "universe_row": {"run_id": run_id, "token_address": token_address, "pair_address": pair_address, "historical_input_hash": historical_input_hash},
+        "backfill_row": {"run_id": run_id, "token_address": token_address, "status": replay_data_status, "historical_input_hash": historical_input_hash},
         "events": state.snapshot()["events"],
         "resolution_status": replay_resolution_status,
         "replay_data_status": replay_data_status,
@@ -861,10 +945,17 @@ def run_historical_replay(
     config_hash = _compute_config_hash(config, wallet_weighting, run_id)
 
     log_info("historical_replay_started", run_id=run_id, artifact_dir=str(artifact_dir), wallet_weighting=wallet_weighting)
-    loaded_inputs = load_replay_inputs(artifact_dir=artifact_dir)
+    loaded_inputs = load_replay_inputs(artifact_dir=artifact_dir, wallet_weighting=wallet_weighting)
     synthetic_assist_flag = False
     replay_mode = "historical"
     input_origin = "historical"
+    historical_input_hash = _compute_historical_input_hash(loaded_inputs) if loaded_inputs.get("token_inputs") else hash_config({"artifact_dir": str(artifact_dir)})
+    rescore_metadata = {
+        "rescored_rows": 0,
+        "replay_score_source": "no_scored_artifact_passthrough",
+        "wallet_mode_parity_status": "unavailable",
+        "score_contract_version": None,
+    }
 
     if not loaded_inputs.get("token_inputs"):
         if not allow_synthetic_smoke:
@@ -873,12 +964,21 @@ def run_historical_replay(
         loaded_inputs = _synthetic_smoke_payload(run_id) if allow_synthetic_smoke else loaded_inputs
         replay_mode = "synthetic_smoke" if allow_synthetic_smoke else "historical"
         input_origin = "synthetic_smoke" if allow_synthetic_smoke else "historical"
+        historical_input_hash = _compute_historical_input_hash(loaded_inputs) if loaded_inputs.get("token_inputs") else historical_input_hash
+
+    rescore_metadata = rescore_replay_inputs(
+        loaded_inputs.get("token_inputs", {}),
+        wallet_weighting=wallet_weighting,
+        scored_input_kind=str(loaded_inputs.get("scored_input_kind") or "missing"),
+    )
 
     log_info(
         "replay_inputs_loaded",
         run_id=run_id,
         token_count=len(loaded_inputs.get("token_inputs", {})),
         warnings=loaded_inputs.get("validation", {}).get("warnings", []),
+        replay_score_source=rescore_metadata.get("replay_score_source"),
+        wallet_mode_parity_status=rescore_metadata.get("wallet_mode_parity_status"),
     )
 
     results = [
@@ -888,6 +988,7 @@ def run_historical_replay(
             wallet_weighting=wallet_weighting,
             dry_run=dry_run,
             config_hash=config_hash,
+            historical_input_hash=historical_input_hash,
             settings=settings,
             replay_input_origin=input_origin,
             synthetic_assist_flag=synthetic_assist_flag,
@@ -913,13 +1014,25 @@ def run_historical_replay(
         replay_mode = "historical_partial"
 
     warnings = list(dict.fromkeys([*(loaded_inputs.get("warnings") or []), *(loaded_inputs.get("validation", {}).get("warnings") or [])]))
+    effective_modes = sorted({
+        str(payload.get("wallet_weighting_effective_mode") or wallet_weighting)
+        for payload in (loaded_inputs.get("token_inputs", {}) or {}).values()
+        if payload.get("token_address")
+    } or {wallet_weighting})
     summary_markdown = "\n".join([
         f"# Historical Replay Summary: {run_id}",
         "",
         f"- replay_mode: {replay_mode}",
         f"- input_origin: {input_origin}",
-        f"- wallet_weighting: {wallet_weighting}",
+        f"- wallet_weighting_requested_mode: {wallet_weighting}",
+        f"- wallet_weighting_effective_modes: {', '.join(effective_modes)}",
+        f"- replay_score_source: {rescore_metadata.get('replay_score_source')}",
+        f"- wallet_mode_parity_status: {rescore_metadata.get('wallet_mode_parity_status')}",
+        f"- rescored_rows: {rescore_metadata.get('rescored_rows')}",
+        f"- score_contract_version: {rescore_metadata.get('score_contract_version')}",
         f"- config_hash: {config_hash}",
+        f"- historical_input_hash: {historical_input_hash}",
+        f"- scored_input_file: {loaded_inputs.get('scored_input_file')}",
         f"- historical_rows_used: {historical_rows}",
         f"- partial_rows: {partial_rows}",
         f"- unresolved_rows: {unresolved_rows}",
@@ -937,6 +1050,14 @@ def run_historical_replay(
         "replay_mode": replay_mode,
         "input_origin": input_origin,
         "wallet_weighting": wallet_weighting,
+        "wallet_weighting_requested_mode": wallet_weighting,
+        "wallet_weighting_effective_modes": effective_modes,
+        "replay_score_source": rescore_metadata.get("replay_score_source"),
+        "wallet_mode_parity_status": rescore_metadata.get("wallet_mode_parity_status"),
+        "rescored_rows": rescore_metadata.get("rescored_rows"),
+        "historical_input_hash": historical_input_hash,
+        "score_contract_version": rescore_metadata.get("score_contract_version"),
+        "scored_input_file": loaded_inputs.get("scored_input_file"),
         "config_hash": config_hash,
         "historical_rows_used": historical_rows,
         "partial_rows": partial_rows,
@@ -955,6 +1076,14 @@ def run_historical_replay(
         "replay_mode": replay_mode,
         "input_origin": input_origin,
         "wallet_weighting": wallet_weighting,
+        "wallet_weighting_requested_mode": wallet_weighting,
+        "wallet_weighting_effective_modes": effective_modes,
+        "replay_score_source": rescore_metadata.get("replay_score_source"),
+        "wallet_mode_parity_status": rescore_metadata.get("wallet_mode_parity_status"),
+        "rescored_rows": rescore_metadata.get("rescored_rows"),
+        "historical_input_hash": historical_input_hash,
+        "score_contract_version": rescore_metadata.get("score_contract_version"),
+        "scored_input_file": loaded_inputs.get("scored_input_file"),
         "config_hash": config_hash,
         "artifact_dir": str(artifact_dir),
         "synthetic_fallback_used": synthetic_used,

@@ -36,7 +36,7 @@ def main() -> int:
         artifact_dir=args.artifact_dir,
         run_id=args.run_id,
         config_path=args.config,
-        wallet_weighting="on" if args.wallet_weighting == "shadow" else args.wallet_weighting,
+        wallet_weighting=args.wallet_weighting,
         dry_run=args.dry_run,
         output_base_dir=args.output_base_dir,
         allow_synthetic_smoke=args.allow_synthetic_smoke,
@@ -50,6 +50,11 @@ def main() -> int:
         "unresolved_rows": summary["unresolved_rows"],
         "synthetic_fallback_used": summary["synthetic_fallback_used"],
         "wallet_weighting": args.wallet_weighting,
+        "wallet_weighting_requested_mode": summary.get("wallet_weighting_requested_mode"),
+        "wallet_weighting_effective_modes": summary.get("wallet_weighting_effective_modes"),
+        "replay_score_source": summary.get("replay_score_source"),
+        "wallet_mode_parity_status": summary.get("wallet_mode_parity_status"),
+        "historical_input_hash": summary.get("historical_input_hash"),
     }, sort_keys=True))
     print(f"[replay] done run_id={args.run_id} replay_mode={summary['replay_mode']} dry_run={args.dry_run}")
     return 0

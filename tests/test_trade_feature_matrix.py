@@ -35,8 +35,7 @@ REQUIRED_MATRIX_KEYS = [
     "evidence_quality_score",
     "evidence_conflict_flag",
     "partial_evidence_flag",
-    "partial_evidence_penalty",
-    "low_confidence_evidence_penalty",
+    "final_score_pre_wallet",
     "final_score",
     "onchain_core",
     "early_signal_bonus",
@@ -139,6 +138,15 @@ REQUIRED_MATRIX_KEYS = [
     "trend_survival_15m",
     "trend_survival_60m",
     "wallet_weighting",
+    "wallet_weighting_requested_mode",
+    "wallet_weighting_effective_mode",
+    "wallet_score_component_raw",
+    "wallet_score_component_applied",
+    "wallet_score_component_applied_shadow",
+    "replay_score_source",
+    "wallet_mode_parity_status",
+    "score_contract_version",
+    "historical_input_hash",
     "dry_run",
     "synthetic_trade_flag",
     "schema_version",
@@ -150,10 +158,18 @@ def _run_replay(run_id: str, payload: list[dict[str, object]]) -> tuple[list[dic
     processed_dir.mkdir(parents=True, exist_ok=True)
     entry_candidates_path = processed_dir / "entry_candidates.json"
     registry_path = ROOT / "data" / "smart_wallets.registry.json"
+    scored_paths = [
+        processed_dir / "scored_tokens.json",
+        processed_dir / "scored_tokens.jsonl",
+        processed_dir / "scored_tokens.off.json",
+        processed_dir / "scored_tokens.shadow.json",
+        processed_dir / "scored_tokens.on.json",
+    ]
     run_dir = ROOT / "runs" / run_id
 
     original_candidates = entry_candidates_path.read_text(encoding="utf-8") if entry_candidates_path.exists() else None
     original_registry = registry_path.read_text(encoding="utf-8") if registry_path.exists() else None
+    original_scored = {path: path.read_text(encoding="utf-8") for path in scored_paths if path.exists()}
     if run_dir.exists():
         for child in run_dir.iterdir():
             child.unlink()
@@ -161,6 +177,8 @@ def _run_replay(run_id: str, payload: list[dict[str, object]]) -> tuple[list[dic
 
     try:
         entry_candidates_path.write_text(json.dumps(payload), encoding="utf-8")
+        for scored_path in scored_paths:
+            scored_path.unlink(missing_ok=True)
         registry_path.parent.mkdir(parents=True, exist_ok=True)
         registry_path.write_text(json.dumps({"wallets": []}), encoding="utf-8")
 
@@ -186,6 +204,11 @@ def _run_replay(run_id: str, payload: list[dict[str, object]]) -> tuple[list[dic
             registry_path.unlink(missing_ok=True)
         else:
             registry_path.write_text(original_registry, encoding="utf-8")
+        for scored_path in scored_paths:
+            if scored_path in original_scored:
+                scored_path.write_text(original_scored[scored_path], encoding="utf-8")
+            else:
+                scored_path.unlink(missing_ok=True)
 
 
 def test_trade_feature_matrix_row_count_matches_trades_count():
@@ -227,6 +250,7 @@ def test_trade_feature_matrix_handles_legacy_payloads_with_null_safe_placeholder
     assert row["liquidity_usd"] == 1250.0
     assert row["entry_confidence"] is None
     assert row["recommended_position_pct"] is None
+    assert row["final_score_pre_wallet"] == 0.0
     assert row["bundle_count_first_60s"] is None
     assert row["net_unique_buyers_60s"] is None
     assert row["x_author_velocity_5m"] is None
@@ -234,6 +258,14 @@ def test_trade_feature_matrix_handles_legacy_payloads_with_null_safe_placeholder
     assert row["smart_wallet_family_ids"] == []
     assert row["smart_wallet_family_confidence_max"] == 0.0
     assert row["smart_wallet_family_shared_funder_flag"] is False
+    assert row["wallet_weighting_requested_mode"] == "off"
+    assert row["wallet_weighting_effective_mode"] == "off"
+    assert row["wallet_score_component_raw"] == 0.0
+    assert row["wallet_score_component_applied"] == 0.0
+    assert row["wallet_score_component_applied_shadow"] == 0.0
+    assert row["replay_score_source"] == "no_scored_artifact_passthrough"
+    assert row["wallet_mode_parity_status"] == "partial"
+    assert row["historical_input_hash"]
     assert row["exit_decision"] is None
     assert row["gross_pnl_pct"] is None
     assert row["schema_version"] == "trade_feature_matrix.v1"

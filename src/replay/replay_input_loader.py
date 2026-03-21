@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+_GENERIC_SCORED_FILE_NAMES = ["scored_tokens.jsonl", "scored_tokens.json"]
 _JSONL_FILE_NAMES = {
-    "scored_rows": ["scored_tokens.jsonl", "scored_tokens.json"],
     "entry_candidates": ["entry_candidates.json", "entry_candidates.jsonl"],
     "signals": ["signals.jsonl", "signal_events.jsonl", "entry_events.jsonl"],
     "trades": ["trades.jsonl", "trade_events.jsonl"],
@@ -68,6 +68,31 @@ def _resolve_artifact_path(artifact_dir: Path, explicit_path: str | Path | None,
         if path.exists():
             return path
     return None
+
+
+def _scored_mode_candidates(wallet_weighting: str | None) -> list[str]:
+    mode = str(wallet_weighting or "").strip().lower()
+    if mode in {"off", "shadow", "on"}:
+        return [f"scored_tokens.{mode}.jsonl", f"scored_tokens.{mode}.json", *_GENERIC_SCORED_FILE_NAMES]
+    return list(_GENERIC_SCORED_FILE_NAMES)
+
+
+def _resolve_scored_artifact_path(
+    artifact_dir: Path,
+    explicit_path: str | Path | None,
+    wallet_weighting: str | None,
+) -> tuple[Path | None, str]:
+    if explicit_path:
+        path = Path(explicit_path)
+        return (path if path.exists() else None, "explicit")
+    candidates = _scored_mode_candidates(wallet_weighting)
+    for idx, name in enumerate(candidates):
+        path = artifact_dir / name
+        if path.exists():
+            if idx < 2 and str(wallet_weighting or "").lower() in {"off", "shadow", "on"}:
+                return path, "mode_specific"
+            return path, "generic"
+    return None, "missing"
 
 
 def _canonical_token(row: dict[str, Any]) -> str | None:
@@ -169,6 +194,7 @@ def load_replay_price_paths(*, artifact_dir: str | Path, loaded_files: dict[str,
 def load_replay_inputs(
     *,
     artifact_dir: str | Path,
+    wallet_weighting: str | None = None,
     scored_path: str | Path | None = None,
     entry_candidates_path: str | Path | None = None,
     signals_path: str | Path | None = None,
@@ -178,8 +204,9 @@ def load_replay_inputs(
     universe_path: str | Path | None = None,
 ) -> dict[str, Any]:
     artifact_dir = Path(artifact_dir)
+    scored_rows_path, scored_path_kind = _resolve_scored_artifact_path(artifact_dir, scored_path, wallet_weighting)
     loaded_files = {
-        "scored_rows": _resolve_artifact_path(artifact_dir, scored_path, _JSONL_FILE_NAMES["scored_rows"]),
+        "scored_rows": scored_rows_path,
         "entry_candidates": _resolve_artifact_path(artifact_dir, entry_candidates_path, _JSONL_FILE_NAMES["entry_candidates"]),
         "signals": _resolve_artifact_path(artifact_dir, signals_path, _JSONL_FILE_NAMES["signals"]),
         "trades": _resolve_artifact_path(artifact_dir, trades_path, _JSONL_FILE_NAMES["trades"]),
@@ -275,6 +302,9 @@ def load_replay_inputs(
         "token_inputs": dict(sorted(token_inputs.items(), key=lambda item: item[0])),
         "universe": universe,
         "warnings": list(dict.fromkeys(warnings)),
+        "wallet_weighting_requested_mode": str(wallet_weighting or "off"),
+        "scored_input_file": str(scored_rows_path) if scored_rows_path else None,
+        "scored_input_kind": scored_path_kind,
     }
     payload["validation"] = validate_replay_inputs(payload)
     return payload
