@@ -192,6 +192,20 @@ def _load_config(path: str | Path | None) -> dict[str, Any]:
 
 def _build_settings(config: dict[str, Any], wallet_weighting: str) -> Any:
     settings = dict(_DEFAULT_REPLAY_SETTINGS)
+    baseline_overrides = config.get("baseline") if isinstance(config.get("baseline"), dict) else {}
+    candidate_overrides = (
+        config.get("candidate")
+        if isinstance(config.get("candidate"), dict)
+        else config.get("candidate_overrides") if isinstance(config.get("candidate_overrides"), dict) else {}
+    )
+    root_overrides = {
+        key: value
+        for key, value in config.items()
+        if key not in {"baseline", "grid", "candidate", "candidate_overrides", "input", "selection", "splits", "seed"}
+    }
+    settings.update(baseline_overrides)
+    settings.update(root_overrides)
+    settings.update(candidate_overrides)
     settings["WALLET_WEIGHTING_MODE"] = wallet_weighting
     return SimpleNamespace(**settings)
 

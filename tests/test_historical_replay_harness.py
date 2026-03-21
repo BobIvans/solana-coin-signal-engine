@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.replay.historical_replay_harness import run_historical_replay
+from src.replay.historical_replay_harness import _build_settings, run_historical_replay
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "historical_replay"
@@ -52,3 +52,18 @@ def test_historical_replay_reconstructs_resolved_losing_trade(tmp_path):
     assert trade["replay_resolution_status"] == "resolved"
     assert trade["net_pnl_pct"] < 0
     assert trade["exit_reason_final"] in {"trend_hard_stop", "scalp_stop_loss"}
+
+
+def test_build_settings_applies_candidate_overrides_for_replay_runs():
+    settings = _build_settings(
+        {
+            "EXIT_SCALP_STOP_LOSS_PCT": -10,
+            "baseline": {"EXIT_TREND_HARD_STOP_PCT": -18},
+            "candidate": {"EXIT_SCALP_STOP_LOSS_PCT": -7, "EXIT_TREND_HARD_STOP_PCT": -14},
+        },
+        wallet_weighting="shadow",
+    )
+
+    assert settings.EXIT_SCALP_STOP_LOSS_PCT == -7
+    assert settings.EXIT_TREND_HARD_STOP_PCT == -14
+    assert settings.WALLET_WEIGHTING_MODE == "shadow"

@@ -23,6 +23,22 @@ DEFAULT_IMPORTANCE_FILENAME = "ml_feature_importance.json"
 DEFAULT_PREDICTIONS_FILENAME = "ml_predictions.jsonl"
 _MISSING_TOKEN = "__missing__"
 _NUMERIC_BIN_LABELS = ["q0", "q1", "q2", "q3"]
+_LEAKY_OUTCOME_FIELDS = {
+    "net_pnl_pct",
+    "gross_pnl_pct",
+    "hold_sec",
+    "exit_reason_final",
+    "mfe_pct",
+    "mae_pct",
+    "mfe_pct_240s",
+    "mae_pct_240s",
+    "trend_survival_15m",
+    "trend_survival_60m",
+    "time_to_first_profit_sec",
+    "exit_decision",
+    "exit_flags",
+    "exit_warnings",
+}
 
 NUMERIC_FEATURES = [
     "final_score",
@@ -181,8 +197,12 @@ def derive_targets(rows: list[dict[str, Any]], target_name: str) -> list[int | N
 def _build_feature_row(row: dict[str, Any]) -> dict[str, Any]:
     record: dict[str, Any] = {}
     for feature in NUMERIC_FEATURES:
+        if feature in _LEAKY_OUTCOME_FIELDS:
+            continue
         record[feature] = _safe_float(row.get(feature))
     for feature in CATEGORICAL_FEATURES:
+        if feature in _LEAKY_OUTCOME_FIELDS:
+            continue
         record[feature] = _normalize_categorical(row.get(feature))
     return record
 

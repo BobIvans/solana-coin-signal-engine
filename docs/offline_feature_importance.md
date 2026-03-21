@@ -117,3 +117,19 @@ python scripts/offline_feature_importance_smoke.py
 ```
 
 The smoke path uses fixture-backed replay matrix data, writes offline artifacts, and prints a compact JSON summary.
+
+## Online-vs-calibration separation
+
+Entry-time / sanctioned decision-support features may feed runtime or offline entry-support analysis. Post-trade outcome fields must stay calibration-only and must not be used as model inputs. Excluded leakage / outcome fields include at least:
+
+- `net_pnl_pct`
+- `gross_pnl_pct`
+- `hold_sec`
+- `exit_reason_final`
+- `mfe_pct` / `mae_pct`
+- `mfe_pct_240s` / `mae_pct_240s`
+- `trend_survival_15m` / `trend_survival_60m`
+- `time_to_first_profit_sec`
+- `exit_decision`, `exit_flags`, `exit_warnings`
+
+These remain valid offline targets / diagnostics but not legal training features for entry-support models.

@@ -61,10 +61,13 @@ def _parse_ts(value: Any) -> datetime | None:
 
 def _derive_lifecycle_from_trades(trades: list[dict[str, Any]]) -> list[dict[str, Any]]:
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    flat_rows: list[dict[str, Any]] = []
     for trade in trades:
         pid = str(trade.get("position_id", ""))
         if pid:
             grouped[pid].append(trade)
+        if trade.get("entry_time") and trade.get("exit_time") and trade.get("net_pnl_pct") is not None:
+            flat_rows.append(trade)
 
     positions: list[dict[str, Any]] = []
     for pid, rows in grouped.items():
@@ -132,7 +135,42 @@ def _derive_lifecycle_from_trades(trades: list[dict[str, Any]]) -> list[dict[str
             }
         )
 
-    return sorted(positions, key=lambda x: x["position_id"])
+    if positions:
+        return sorted(positions, key=lambda x: x["position_id"])
+
+    flat_positions: list[dict[str, Any]] = []
+    for row in flat_rows:
+        snapshot = row.get("entry_snapshot", {}) if isinstance(row.get("entry_snapshot"), dict) else {}
+        calibration_metrics = derive_outcome_metrics(row, snapshot)
+        flat_positions.append(
+            {
+                "position_id": row.get("position_id", row.get("trade_id", "unknown")),
+                "token_address": row.get("token_address", ""),
+                "regime": row.get("regime_decision", row.get("regime", "unknown")),
+                "opened_at": row.get("entry_time", ""),
+                "closed_at": row.get("exit_time", ""),
+                "hold_sec": int(row.get("hold_sec", 0) or 0),
+                "gross_pnl_sol": float(row.get("gross_pnl_sol", 0.0) or 0.0),
+                "net_pnl_sol": float(row.get("net_pnl_sol", 0.0) or 0.0),
+                "net_pnl_pct": float(row.get("net_pnl_pct", 0.0) or 0.0),
+                "fees_paid_sol": float(row.get("fees_paid_sol", 0.0) or 0.0),
+                "slippage_cost_sol_est": float(row.get("slippage_cost_sol_est", 0.0) or 0.0),
+                "exit_reason_final": row.get("exit_reason_final", row.get("exit_reason", "unknown")),
+                "exit_reason": row.get("exit_reason_final", row.get("exit_reason", "unknown")),
+                "partial_exit_count": int(row.get("partial_exit_count", 0) or 0),
+                "had_failed_fill": bool(row.get("had_failed_fill", False)),
+                "entry_reason": row.get("entry_reason", "unknown"),
+                "x_status": row.get("x_status", snapshot.get("x_status", "unknown")),
+                "rug_score": row.get("rug_score", snapshot.get("rug_score")),
+                "liquidity_usd": row.get("liquidity_usd", snapshot.get("liquidity_usd")),
+                "final_score": row.get("final_score", snapshot.get("final_score")),
+                "entry_confidence": row.get("entry_confidence", snapshot.get("entry_confidence")),
+                "entry_snapshot": snapshot,
+                **{metric: row.get(metric, snapshot.get(metric)) for metric in _REQUIRED_METRICS},
+                **{metric: row.get(metric, snapshot.get(metric, calibration_metrics.get(metric))) for metric in calibration_metrics},
+            }
+        )
+    return sorted(flat_positions, key=lambda x: x["position_id"])
 
 
 def _reconstruct_closed_positions(trades: list[dict[str, Any]], positions_state: list[dict[str, Any]]) -> list[dict[str, Any]]:

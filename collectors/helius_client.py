@@ -121,9 +121,24 @@ class HeliusClient:
             "tx_batch_normalized_at": batch.get("tx_batch_normalized_at") or batch.get("normalized_at"),
             "tx_batch_lookup_key": batch.get("tx_batch_lookup_key") or lookup_key,
             "tx_batch_record_count": int(batch.get("tx_batch_record_count") or batch.get("record_count") or len(records)),
+            "tx_batch_pages_loaded": int(batch.get("tx_batch_pages_loaded") or 1),
             "tx_fetch_mode": tx_fetch_mode,
             "tx_lake_events": events,
         }
+
+    @staticmethod
+    def _last_signature(records: list[dict[str, Any]]) -> str | None:
+        for record in reversed(records):
+            signature = str(record.get("signature") or record.get("txHash") or record.get("id") or "").strip()
+            if signature:
+                return signature
+        return None
+
+    @staticmethod
+    def _min_record_ts(records: list[dict[str, Any]]) -> int | None:
+        values = [int(record.get("timestamp") or record.get("blockTime") or 0) for record in records]
+        values = [value for value in values if value > 0]
+        return min(values) if values else None
 
     def get_transactions_by_address_with_status(
         self,
@@ -132,6 +147,9 @@ class HeliusClient:
         *,
         allow_stale: bool | None = None,
         max_age_sec: int | None = None,
+        fetch_all: bool = False,
+        stop_ts: int | None = None,
+        max_pages: int = 8,
     ) -> dict[str, Any]:
         allow_stale = self.allow_stale_tx_cache if allow_stale is None else bool(allow_stale)
         ttl = self.tx_cache_ttl_sec if max_age_sec is None else max(int(max_age_sec), 0)
@@ -157,10 +175,24 @@ class HeliusClient:
             return self._finalize_tx_response(cached_batch, lookup_key=lookup_key, lookup_type="address", tx_fetch_mode=fetch_mode, events=events, batch_warning=warning)
 
         events.append(make_tx_lake_event("tx_lake_refresh_started", lookup_key=lookup_key, provider="helius"))
-        raw_result = self._get(f"addresses/{lookup_key}/transactions", {"limit": limit})
+        query = {"limit": limit}
+        raw_result = self._get(f"addresses/{lookup_key}/transactions", query)
         if isinstance(raw_result, list):
+            combined_records = list(raw_result)
+            next_before = self._last_signature(raw_result)
+            pages_loaded = 1
+            while fetch_all and next_before and len(raw_result) >= limit and pages_loaded < max(max_pages, 1):
+                oldest_ts = self._min_record_ts(raw_result)
+                if stop_ts and oldest_ts and oldest_ts <= stop_ts:
+                    break
+                raw_result = self._get(f"addresses/{lookup_key}/transactions", {"limit": limit, "before": next_before})
+                if not isinstance(raw_result, list) or not raw_result:
+                    break
+                combined_records.extend(raw_result)
+                next_before = self._last_signature(raw_result)
+                pages_loaded += 1
             tx_batch = normalize_tx_batch(
-                raw_result,
+                combined_records,
                 source_provider="helius",
                 lookup_key=lookup_key,
                 lookup_type="address",
@@ -169,9 +201,10 @@ class HeliusClient:
             )
             path = write_tx_batch(tx_batch, root_dir=self.tx_lake_dir)
             tx_batch["tx_batch_path"] = str(path)
+            tx_batch["tx_batch_pages_loaded"] = pages_loaded
             events.append(make_tx_lake_event("tx_batch_normalized", lookup_key=lookup_key, provider="helius", record_count=tx_batch.get("record_count"), batch_status=tx_batch.get("tx_batch_status")))
             events.append(make_tx_lake_event("tx_batch_written", lookup_key=lookup_key, provider="helius", path=str(path), record_count=tx_batch.get("record_count")))
-            events.append(make_tx_lake_event("tx_lake_refresh_completed", lookup_key=lookup_key, provider="helius", record_count=tx_batch.get("record_count")))
+            events.append(make_tx_lake_event("tx_lake_refresh_completed", lookup_key=lookup_key, provider="helius", record_count=tx_batch.get("record_count"), pages_loaded=pages_loaded))
             return self._finalize_tx_response(tx_batch, lookup_key=lookup_key, lookup_type="address", tx_fetch_mode="refresh_required", events=events)
 
         fallback_mode = resolve_tx_fetch_mode(

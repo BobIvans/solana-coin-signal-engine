@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from analytics.ml_model import MLTrainingConfig, load_trade_feature_matrix, train_model, write_ml_outputs
+from analytics.ml_model import MLTrainingConfig, build_training_dataframe, load_trade_feature_matrix, train_model, write_ml_outputs
 
 
 REQUIRED_SUMMARY_KEYS = {
@@ -175,3 +175,19 @@ def test_preprocessing_handles_missing_categorical_and_numeric_values(tmp_path):
     assert result["feature_stats"]["final_score"]["missing_count"] >= 1
     assert result["feature_stats"]["bundle_composition_dominant"]["missing_count"] >= 1
     assert result["feature_stats"]["x_status"]["missing_count"] >= 1
+
+
+def test_build_training_dataframe_excludes_post_trade_leakage_fields():
+    feature_rows, labels, _ = build_training_dataframe(_make_matrix_rows(8), "profitable_trade_flag")
+
+    assert labels
+    assert feature_rows
+    forbidden = {
+        "net_pnl_pct",
+        "gross_pnl_pct",
+        "hold_sec",
+        "exit_reason_final",
+        "mfe_pct",
+        "mae_pct",
+    }
+    assert forbidden.isdisjoint(feature_rows[0].keys())

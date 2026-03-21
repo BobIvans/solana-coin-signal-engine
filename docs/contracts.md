@@ -371,3 +371,13 @@ Fresh replay summary / manifest payloads and replay-emitted signal, trade, and `
 - `wallet_mode_parity_status`
 - `score_contract_version`
 - `historical_input_hash`
+
+### runtime_replay_temporal_flow
+
+Operational flow must stay temporally honest across runtime, replay, and offline analysis:
+
+- offline ML / feature-importance inputs must exclude post-trade outcome fields
+- historical smart-wallet enrichment must not use current owner-balance RPC state as truth for past windows
+- launch-window continuation fields such as `cluster_sell_concentration_120s` and `liquidity_refill_ratio_120s` are not valid late-live exit inputs unless the hold window is still inside the launch boundary or a true `*_now` replacement exists
+- runtime paper trading state must use the canonical `positions` / `portfolio` ledger, with `open_positions` treated only as a compatibility view
+- replay `trades.jsonl` must remain analyzer-usable for closed lifecycle recovery

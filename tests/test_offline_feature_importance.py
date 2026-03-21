@@ -80,3 +80,19 @@ def test_fast_failure_fixture_surfaces_risk_associated_features():
     top_features = [item["feature_name"] for item in fast_failure["per_feature_importance"][:5]]
     assert "cluster_concentration_ratio" in top_features
     assert any(group["feature_group"] == "cluster_features" for group in fast_failure["grouped_importance"])
+
+
+def test_offline_feature_importance_excludes_future_outcome_features_from_rankings():
+    payload = compute_offline_feature_importance(load_feature_matrix(FIXTURES / "healthy_mixed_replay_matrix.jsonl"))
+
+    forbidden = {
+        "net_pnl_pct",
+        "gross_pnl_pct",
+        "hold_sec",
+        "exit_reason_final",
+        "mfe_pct_240s",
+        "trend_survival_15m",
+    }
+    for target in payload["targets"]:
+        ranked = {item["feature_name"] for item in target["per_feature_importance"]}
+        assert forbidden.isdisjoint(ranked)

@@ -6,6 +6,13 @@ from .cooldowns import is_x_cooldown_active, resolve_degraded_x_policy
 from .kill_switch import is_kill_switch_active
 
 
+def _open_position_count(state: dict) -> int:
+    positions = state.get("positions")
+    if isinstance(positions, list):
+        return len([position for position in positions if position.get("is_open", True)])
+    return len(state.get("open_positions", []))
+
+
 def _daily_loss_pct(state: dict) -> float:
     counters = state.get("counters", {})
     realized_pnl_sol_today = float(counters.get("realized_pnl_sol_today", 0.0) or 0.0)
@@ -32,7 +39,7 @@ def evaluate_entry_guards(signal: dict, state: dict, config: dict) -> dict:
         hard_block_reasons.append("mode_no_open_positions")
 
     max_open = int(mode_cfg.get("max_open_positions", 999999))
-    if len(state.get("open_positions", [])) >= max_open:
+    if _open_position_count(state) >= max_open:
         hard_block_reasons.append("max_open_positions_reached")
 
     trades_today = int(state.get("counters", {}).get("trades_today", 0))
