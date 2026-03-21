@@ -122,3 +122,11 @@ Runtime entry and fill artifacts may now include:
 - `execution_warning`
 
 These fields are intended to distinguish late discovery, thin-depth degradation, and catastrophic-liquidity execution from normal healthy paper-flow assumptions.
+
+
+## Runtime hardening additions
+
+- Active X cooldown now short-circuits `fetch_x_snapshots()` before worker threads start. Cooldown batches emit degraded snapshots with `error_code=cooldown_active` instead of continuing to hit X/OpenClaw.
+- Runtime market-state cache is pruned with TTL and max-entry limits, while open-position tokens stay pinned so fallback pricing remains usable on resume.
+- Runtime summaries expose `x_cooldown_skip_count`, `runtime_market_cache_pruned_count`, `runtime_market_cache_size`, `runtime_market_cache_pinned_count`, and `http_session_enabled=true`.
+- `config/promotion.default.yaml` now includes `runtime_market_cache_ttl_sec` and `runtime_market_cache_max_entries` to bound session-state growth.

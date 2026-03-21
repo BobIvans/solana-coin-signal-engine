@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 from typing import Any, Iterable
 
 _SEGMENTS_DIRNAME = "_segments"
+_JSONL_LOCKS: dict[str, threading.Lock] = {}
+_JSONL_LOCKS_GUARD = threading.Lock()
 
 
 def ensure_dir(path: Path | str) -> Path:
@@ -21,6 +24,17 @@ def _write_text_atomic(path: Path, text: str) -> Path:
     tmp.write_text(text, encoding="utf-8")
     tmp.replace(path)
     return path
+
+
+def _jsonl_lock_for_path(path: Path | str) -> threading.Lock:
+    resolved = Path(path).expanduser().resolve()
+    key = str(resolved)
+    with _JSONL_LOCKS_GUARD:
+        lock = _JSONL_LOCKS.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _JSONL_LOCKS[key] = lock
+        return lock
 
 
 def write_json(path: Path | str, payload: dict[str, Any]) -> Path:
@@ -73,9 +87,12 @@ def append_jsonl(
     target = Path(path).expanduser().resolve()
     if segment_key is not None:
         target = segmented_jsonl_path(target, segment_key=_segment_key_from_payload(payload, segment_key))
-    ensure_dir(target.parent)
-    with target.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(payload, sort_keys=True, ensure_ascii=False) + "\n")
+    line = json.dumps(payload, sort_keys=True, ensure_ascii=False) + "\n"
+    lock = _jsonl_lock_for_path(target)
+    with lock:
+        ensure_dir(target.parent)
+        with target.open("a", encoding="utf-8") as handle:
+            handle.write(line)
     return target
 
 

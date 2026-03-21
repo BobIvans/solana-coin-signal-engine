@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from utils.io import read_json, write_json
+import scripts.run_promotion_loop as loop
 
 
 def _config(tmp_path) -> Path:
@@ -191,3 +192,35 @@ def test_monitoring_refresh_happens_before_entry_processing_in_event_log(tmp_pat
     refresh_index = next(i for i, row in enumerate(events) if row.get("event") == "runtime_current_state_refresh_completed")
     sizing_index = next(i for i, row in enumerate(events) if row.get("event") == "evidence_weighted_sizing_completed")
     assert refresh_index < sizing_index
+
+
+
+def test_runtime_market_state_cache_prunes_stale_unpinned_entries(tmp_path):
+    state = {
+        "positions": [],
+        "runtime_market_state_cache": {
+            "fresh_live": {"token_address": "fresh_live", "cached_at": "2026-03-21T00:00:00+00:00"},
+            "stale_drop": {"token_address": "stale_drop", "cached_at": "2020-01-01T00:00:00+00:00"},
+        },
+    }
+    summary = loop._prune_runtime_market_state_cache(state, [{"token_address": "fresh_live"}], max_cache_age_sec=60, max_cache_entries=10)
+
+    assert "stale_drop" not in state["runtime_market_state_cache"]
+    assert "fresh_live" in state["runtime_market_state_cache"]
+    assert summary["runtime_market_cache_pruned_count"] == 1
+
+
+
+def test_runtime_market_state_cache_keeps_open_position_entries_pinned(tmp_path):
+    state = {
+        "positions": [{"token_address": "pinned_tok", "is_open": True}],
+        "runtime_market_state_cache": {
+            "pinned_tok": {"token_address": "pinned_tok", "cached_at": "2020-01-01T00:00:00+00:00"},
+            "stale_drop": {"token_address": "stale_drop", "cached_at": "2020-01-01T00:00:00+00:00"},
+        },
+    }
+    summary = loop._prune_runtime_market_state_cache(state, [], max_cache_age_sec=60, max_cache_entries=1)
+
+    assert "pinned_tok" in state["runtime_market_state_cache"]
+    assert "stale_drop" not in state["runtime_market_state_cache"]
+    assert summary["runtime_market_cache_pinned_count"] == 1

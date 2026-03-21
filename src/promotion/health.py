@@ -38,6 +38,10 @@ def build_runtime_health_summary(
     partial_evidence = int(summary.get("partial_evidence_entry_count", runtime_metrics.get("partial_evidence_entry_count", 0)) or 0)
     unresolved_replay = int(summary.get("unresolved_replay_row_count", runtime_metrics.get("unresolved_replay_row_count", 0)) or 0)
     fallback_refresh_failure = int(summary.get("fallback_refresh_failure_count", refresh_failed) or 0)
+    x_cooldown_skip_count = int(summary.get("x_cooldown_skip_count", runtime_metrics.get("x_cooldown_skip_count", 0)) or 0)
+    runtime_market_cache_pruned_count = int(summary.get("runtime_market_cache_pruned_count", runtime_metrics.get("runtime_market_cache_pruned_count", 0)) or 0)
+    runtime_market_cache_size = int(summary.get("runtime_market_cache_size", runtime_metrics.get("runtime_market_cache_size", 0)) or 0)
+    runtime_market_cache_pinned_count = int(summary.get("runtime_market_cache_pinned_count", runtime_metrics.get("runtime_market_cache_pinned_count", 0)) or 0)
 
     warnings: list[str] = []
     if stale > 0:
@@ -71,6 +75,11 @@ def build_runtime_health_summary(
         "partial_evidence_entry_count": partial_evidence,
         "unresolved_replay_row_count": unresolved_replay,
         "fallback_refresh_failure_count": fallback_refresh_failure,
+        "x_cooldown_skip_count": x_cooldown_skip_count,
+        "runtime_market_cache_pruned_count": runtime_market_cache_pruned_count,
+        "runtime_market_cache_size": runtime_market_cache_size,
+        "runtime_market_cache_pinned_count": runtime_market_cache_pinned_count,
+        "http_session_enabled": bool(summary.get("http_session_enabled", True)),
         "artifact_manifest_path": artifact_manifest_path or summary.get("artifact_manifest_path", ""),
         "warnings": warnings,
     }

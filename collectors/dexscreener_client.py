@@ -2,13 +2,59 @@
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from typing import Any
-from urllib.error import URLError
-from urllib.request import Request, urlopen
+import requests
 
 DEXSCREENER_SEARCH_URL = "https://api.dexscreener.com/latest/dex/search/?q=solana"
+
+_DEFAULT_HEADERS = {"Accept": "application/json", "User-Agent": "scse/0.1"}
+
+
+def _build_session(session: Any | None = None) -> Any:
+    if session is not None:
+        return session
+    created = requests.Session()
+    created.headers.update(_DEFAULT_HEADERS)
+    return created
+
+
+def _session_request(session: Any, method: str, url: str, **kwargs: Any) -> Any:
+    request_fn = getattr(session, "request", None)
+    if callable(request_fn):
+        return request_fn(method, url, **kwargs)
+    method_fn = getattr(session, method.lower(), None)
+    if callable(method_fn):
+        return method_fn(url, **kwargs)
+    raise AttributeError(f"session object does not support {method} requests")
+
+
+def _response_json(response: Any) -> Any:
+    if int(getattr(response, "status_code", 0) or 0) != 200:
+        return None
+    try:
+        json_method = getattr(response, "json", None)
+        if callable(json_method):
+            return json_method()
+    except (TypeError, ValueError):
+        return None
+    return None
+
+
+def _request_json(
+    session: Any,
+    method: str,
+    url: str,
+    *,
+    params: dict[str, Any] | None = None,
+    json_payload: dict[str, Any] | None = None,
+    timeout: tuple[int, int] = (3, 10),
+) -> Any:
+    try:
+        response = _session_request(session, method, url, params=params, json=json_payload, timeout=timeout)
+    except Exception:  # noqa: BLE001
+        return None
+    return _response_json(response)
 _DISCOVERY_SOURCE = "dexscreener_search"
 _DISCOVERY_SOURCE_MODE = "fallback_search"
 _DISCOVERY_SOURCE_CONFIDENCE = 0.35
@@ -117,12 +163,9 @@ def _annotate_search_pairs(pairs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return annotated
 
 
-def fetch_latest_solana_pairs() -> list[dict[str, Any]]:
-    request = Request(DEXSCREENER_SEARCH_URL, headers={"Accept": "application/json", "User-Agent": "scse/0.1"})
-    try:
-        with urlopen(request, timeout=10) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except (URLError, TimeoutError, json.JSONDecodeError):
+def fetch_latest_solana_pairs(*, session: Any | None = None) -> list[dict[str, Any]]:
+    payload = _request_json(_build_session(session), "GET", DEXSCREENER_SEARCH_URL, timeout=(3, 10))
+    if not isinstance(payload, dict):
         return []
 
     pairs = payload.get("pairs", [])
@@ -132,8 +175,12 @@ def fetch_latest_solana_pairs() -> list[dict[str, Any]]:
     return [pair for pair in pairs if isinstance(pair, dict)]
 
 
-def fetch_search_discovery_pairs() -> list[dict[str, Any]]:
-    return _annotate_search_pairs(fetch_latest_solana_pairs())
+def fetch_search_discovery_pairs(*, session: Any | None = None) -> list[dict[str, Any]]:
+    if session is None:
+        pairs = fetch_latest_solana_pairs()
+    else:
+        pairs = fetch_latest_solana_pairs(session=session)
+    return _annotate_search_pairs(pairs)
 
 
 def fetch_discovery_pairs(settings: Any) -> list[dict[str, Any]]:

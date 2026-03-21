@@ -57,3 +57,36 @@ def test_get_transactions_by_address_without_fetch_all_stops_after_first_page(tm
     assert len(result["records"]) == 2
     assert result["tx_batch_pages_loaded"] == 1
     assert len(client.queries) == 1
+
+
+def test_helius_client_uses_session_for_rpc_get_and_post():
+    class _Response:
+        def __init__(self, payload, status_code=200):
+            self._payload = payload
+            self.status_code = status_code
+
+        def json(self):
+            return self._payload
+
+    class _SessionRecorder:
+        def __init__(self):
+            self.calls = []
+
+        def post(self, url, json=None, timeout=None):
+            self.calls.append(("post", url, json, timeout))
+            if isinstance(json, dict) and json.get("method"):
+                return _Response({"result": {"ok": True}})
+            return _Response({"ok": True})
+
+        def get(self, url, params=None, timeout=None):
+            self.calls.append(("get", url, params, timeout))
+            return _Response({"ok": True})
+
+    session = _SessionRecorder()
+    client = HeliusClient(api_key="test", session=session)
+
+    assert client.session is session
+    assert client._rpc("getAsset", ["mint"]) == {"ok": True}
+    assert client._get("addresses/wallet/transactions", {"limit": 1}) == {"ok": True}
+    assert client._post("transactions", {"transactions": ["sig"]}) == {"ok": True}
+    assert [call[0] for call in session.calls] == ["post", "get", "post"]

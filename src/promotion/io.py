@@ -5,11 +5,16 @@ from typing import Any
 
 from utils.io import append_jsonl as _append_jsonl
 from utils.io import materialize_jsonl as _materialize_jsonl
+from utils.io import read_jsonl as _read_jsonl
 from utils.io import write_json as _write_json
 
 
 def append_jsonl(path: str | Path, payload: dict[str, Any], *, segment_key: str | None = None) -> Path:
     return _append_jsonl(path, payload, segment_key=segment_key)
+
+
+def read_jsonl(path: str | Path, *, include_segments: bool = True) -> list[dict[str, Any]]:
+    return _read_jsonl(path, include_segments=include_segments)
 
 
 def materialize_jsonl(path: str | Path) -> Path:

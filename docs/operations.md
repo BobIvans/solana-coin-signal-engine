@@ -53,3 +53,16 @@ The SQLite store is operationally useful for restart, inspection, and report loo
 ## Acceptance readiness
 
 The acceptance gate should fail if required smoke outputs are missing, empty, or malformed. A green pytest run is not enough if the operational outputs were not produced.
+
+
+## Runtime hardening counters
+
+Long-running runtime summaries now also surface:
+
+- `x_cooldown_skip_count`
+- `runtime_market_cache_pruned_count`
+- `runtime_market_cache_size`
+- `runtime_market_cache_pinned_count`
+- `http_session_enabled`
+
+The event log also emits `x_snapshot_batch_skipped_cooldown`, `runtime_market_cache_pruned`, and `runtime_market_cache_prune_summary` so operators can distinguish real upstream fetches from intentional cooldown short-circuits and cache hygiene work.
