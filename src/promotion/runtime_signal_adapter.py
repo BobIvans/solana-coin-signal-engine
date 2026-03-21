@@ -174,6 +174,10 @@ def normalize_runtime_signal(
     *,
     runtime_signal_origin: str,
     source_artifact: str | None = None,
+    runtime_origin_tier: str | None = None,
+    runtime_pipeline_origin: str | None = None,
+    runtime_pipeline_status: str | None = None,
+    runtime_pipeline_manifest: str | None = None,
 ) -> dict[str, Any]:
     token_address = str(row.get("token_address") or row.get("mint") or row.get("token_key") or "").strip()
     decision = _normalized_decision(row)
@@ -245,6 +249,10 @@ def normalize_runtime_signal(
         "runtime_signal_status": status,
         "runtime_signal_warning": warning_text,
         "runtime_signal_confidence": round(runtime_confidence, 4),
+        "runtime_origin_tier": runtime_origin_tier,
+        "runtime_pipeline_origin": runtime_pipeline_origin,
+        "runtime_pipeline_status": runtime_pipeline_status,
+        "runtime_pipeline_manifest": runtime_pipeline_manifest,
         "runtime_signal_partial_flag": partial_flag,
         "entry_confidence": None if entry_confidence is None else round(entry_confidence, 4),
         "entry_reason": row.get("entry_reason") or row.get("reason"),
@@ -256,8 +264,25 @@ def normalize_runtime_signal(
     return normalized
 
 
-def adapt_runtime_signal(row: dict[str, Any], *, runtime_signal_origin: str, source_artifact: str | None = None) -> dict[str, Any]:
-    return normalize_runtime_signal(row, runtime_signal_origin=runtime_signal_origin, source_artifact=source_artifact)
+def adapt_runtime_signal(
+    row: dict[str, Any],
+    *,
+    runtime_signal_origin: str,
+    source_artifact: str | None = None,
+    runtime_origin_tier: str | None = None,
+    runtime_pipeline_origin: str | None = None,
+    runtime_pipeline_status: str | None = None,
+    runtime_pipeline_manifest: str | None = None,
+) -> dict[str, Any]:
+    return normalize_runtime_signal(
+        row,
+        runtime_signal_origin=runtime_signal_origin,
+        source_artifact=source_artifact,
+        runtime_origin_tier=runtime_origin_tier,
+        runtime_pipeline_origin=runtime_pipeline_origin,
+        runtime_pipeline_status=runtime_pipeline_status,
+        runtime_pipeline_manifest=runtime_pipeline_manifest,
+    )
 
 
 def adapt_runtime_signal_batch(
@@ -265,9 +290,21 @@ def adapt_runtime_signal_batch(
     *,
     runtime_signal_origin: str,
     source_artifact: str | None = None,
+    runtime_origin_tier: str | None = None,
+    runtime_pipeline_origin: str | None = None,
+    runtime_pipeline_status: str | None = None,
+    runtime_pipeline_manifest: str | None = None,
 ) -> list[dict[str, Any]]:
     return [
-        adapt_runtime_signal(row, runtime_signal_origin=runtime_signal_origin, source_artifact=source_artifact)
+        adapt_runtime_signal(
+            row,
+            runtime_signal_origin=runtime_signal_origin,
+            source_artifact=source_artifact,
+            runtime_origin_tier=runtime_origin_tier,
+            runtime_pipeline_origin=runtime_pipeline_origin,
+            runtime_pipeline_status=runtime_pipeline_status,
+            runtime_pipeline_manifest=runtime_pipeline_manifest,
+        )
         for row in rows
         if isinstance(row, dict)
     ]

@@ -113,6 +113,10 @@ def _summarize_runtime_signal_batch(batch: dict, normalized_signals: list[dict])
         "signal_count": len(normalized_signals),
         "selected_origin": batch.get("selected_origin"),
         "selected_artifact": batch.get("selected_artifact"),
+        "origin_tier": batch.get("origin_tier"),
+        "runtime_pipeline_origin": batch.get("runtime_pipeline_origin"),
+        "runtime_pipeline_status": batch.get("runtime_pipeline_status"),
+        "runtime_pipeline_manifest": batch.get("runtime_pipeline_manifest"),
         "status_counts": status_counts,
         "origin_counts": origin_counts,
         "warnings": batch.get("warnings", []),
@@ -127,6 +131,10 @@ def _load_normalized_signals(args: argparse.Namespace, loop_idx: int) -> tuple[l
             "signal_count": len(signals),
             "selected_origin": "synthetic_dev",
             "selected_artifact": None,
+            "origin_tier": "fallback",
+            "runtime_pipeline_origin": "synthetic_dev",
+            "runtime_pipeline_status": None,
+            "runtime_pipeline_manifest": None,
             "status_counts": {"ok": len(signals)},
             "origin_counts": {"synthetic_dev": len(signals)},
             "warnings": ["synthetic_dev_mode_enabled"],
@@ -138,6 +146,10 @@ def _load_normalized_signals(args: argparse.Namespace, loop_idx: int) -> tuple[l
         batch["signals"],
         runtime_signal_origin=batch.get("selected_origin") or "unknown",
         source_artifact=batch.get("selected_artifact"),
+        runtime_origin_tier=batch.get("origin_tier"),
+        runtime_pipeline_origin=batch.get("runtime_pipeline_origin"),
+        runtime_pipeline_status=batch.get("runtime_pipeline_status"),
+        runtime_pipeline_manifest=batch.get("runtime_pipeline_manifest"),
     )
     return normalized, _summarize_runtime_signal_batch(batch, normalized)
 
@@ -154,6 +166,10 @@ def _emit_signal_batch_events(event_log: Path, run_id: str, summary: dict) -> No
             "signal_count": summary.get("signal_count", 0),
             "warnings": summary.get("warnings", []),
             "selected_artifact": summary.get("selected_artifact"),
+            "origin_tier": summary.get("origin_tier"),
+            "runtime_pipeline_origin": summary.get("runtime_pipeline_origin"),
+            "runtime_pipeline_status": summary.get("runtime_pipeline_status"),
+            "runtime_pipeline_manifest": summary.get("runtime_pipeline_manifest"),
         },
     )
 
@@ -231,7 +247,7 @@ def main() -> int:
     total_opened = 0
     total_rejected = 0
     total_invalid = 0
-    latest_signal_summary: dict[str, object] = {"batch_status": "missing", "origin_counts": {}, "status_counts": {}, "warnings": []}
+    latest_signal_summary: dict[str, object] = {"batch_status": "missing", "origin_counts": {}, "status_counts": {}, "warnings": [], "origin_tier": None, "runtime_pipeline_origin": None, "runtime_pipeline_status": None, "runtime_pipeline_manifest": None}
 
     for loop_idx in range(args.max_loops):
         roll_daily_state_if_needed(state)
@@ -569,6 +585,10 @@ def main() -> int:
         "runtime_signal_status_counts": latest_signal_summary.get("status_counts", {}),
         "runtime_signal_origin_counts": latest_signal_summary.get("origin_counts", {}),
         "runtime_signal_warnings": latest_signal_summary.get("warnings", []),
+        "runtime_origin_tier": latest_signal_summary.get("origin_tier"),
+        "runtime_pipeline_origin": latest_signal_summary.get("runtime_pipeline_origin"),
+        "runtime_pipeline_status": latest_signal_summary.get("runtime_pipeline_status"),
+        "runtime_pipeline_manifest": latest_signal_summary.get("runtime_pipeline_manifest"),
         "signals_dir": args.signals_dir,
     }
     summary_json_path = write_daily_summary_json(run_dir / "daily_summary.json", summary)
