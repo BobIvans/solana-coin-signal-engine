@@ -492,7 +492,7 @@ def _build_trade_feature_row(
         "ts": _first_present(sources, "ts", "entry_time", "entry_ts") or _DEFAULT_TS,
         "token_address": _first_present(sources, "token_address"),
         "pair_address": _first_present(sources, "pair_address"),
-        "symbol": _first_present(sources, "symbol"),
+        "symbol": (_first_present(sources, "symbol") or None),
         "config_hash": config_hash,
         "decision": _first_present(sources, "decision", "entry_decision"),
         "entry_decision": _first_present(sources, "entry_decision", "decision"),
@@ -610,7 +610,9 @@ def replay_token_lifecycle(
     replay_input_origin: str = "historical",
     synthetic_assist_flag: bool = False,
 ) -> dict[str, Any]:
-    scored = token_payload.get("rescored_row") or (token_payload.get("scored_rows") or [None])[0] or {}
+    raw_scored = (token_payload.get("scored_rows") or [None])[0] or {}
+    rescored = token_payload.get("rescored_row") or {}
+    scored = {**raw_scored, **rescored}
     candidate = (token_payload.get("entry_candidates") or [None])[0] or {}
     signal_artifact = (token_payload.get("signals") or [None])[0] or {}
     trade_artifact = (token_payload.get("trades") or [None])[0] or {}
