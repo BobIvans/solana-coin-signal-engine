@@ -222,6 +222,8 @@ These fields are aggregated token-facing summaries of matched smart-wallet famil
 
 High-level continuation semantics:
 - tx-derived continuation metrics are success-gated (`success is True`)
+- raw tx evidence presence (`continuation_available_evidence`) is distinct from usable tx-lane readiness (`continuation_inputs_status["tx"]`)
+- if all txs are failed / reverted / unknown-success, `continuation_available_evidence` should still include `"tx"`, but `continuation_inputs_status["tx"]` must be `"partial"`, not `"ready"`
 - LP/pool/router/vault/system-like actors must not silently count as organic buyers or sellers
 - ambiguous same-tx role attribution should degrade continuation honesty rather than inflate strength
 

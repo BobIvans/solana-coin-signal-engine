@@ -31,6 +31,8 @@ These are still calculated by helper logic in `analytics/short_horizon_signals.p
 
 Transfer-derived continuation metrics use **only explicitly successful transactions** (`success is True`). Failed, reverted, or unknown-success transactions are intentionally ignored so the layer does not fabricate organic buyer flow, cluster distribution, or seller re-entry from unconfirmed execution attempts.
 
+When raw transaction batches are present but contain no successful flow evidence, the enricher keeps `"tx"` inside `continuation_available_evidence` while marking `continuation_inputs_status["tx"] = "partial"`. That distinction is intentional: raw tx evidence exists, but the usable continuation lane is incomplete.
+
 Transaction-side participant roles are also filtered through continuation participant hygiene. LP/pool/router/vault/system-like actors do not count as organic buyers or sellers by default, and wallets that appear on both sides of the same transaction are treated conservatively as ambiguous for that transaction instead of silently boosting continuation strength.
 
 ### X-derived
@@ -66,7 +68,7 @@ The continuation layer adds these fields additively:
 Typical semantics:
 
 - `complete`: all continuation metrics were produced with ready inputs.
-- `partial`: some metrics were produced, but at least one evidence lane is missing or degraded.
+- `partial`: some metrics were produced, or a raw evidence lane is present but only partially usable (for example, tx batches exist without successful flow evidence).
 - `missing`: no continuation metrics could be honestly produced.
 
 `continuation_metric_origin` stays conservative:
