@@ -85,6 +85,7 @@ def test_runtime_loop_opens_paper_position_from_real_signal(tmp_path):
     assert positions["open_positions"][0]["base_position_pct"] == 0.4
     assert positions["open_positions"][0]["effective_position_pct"] == 0.4
     assert positions["open_positions"][0]["sizing_multiplier"] == 1.0
+    assert positions["open_positions"][0]["sizing_origin"] == "evidence_weighted"
 
     decision_row = json.loads((run_dir / "decisions.jsonl").read_text(encoding="utf-8").splitlines()[0])
     assert decision_row["sizing_origin"] == "evidence_weighted"

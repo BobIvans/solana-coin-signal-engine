@@ -17,6 +17,26 @@ def _next_id(prefix: str, counter: int) -> str:
     return f"{prefix}_{counter:04d}"
 
 
+def _position_sizing_fields(signal_ctx: dict[str, Any]) -> dict[str, Any]:
+    fields = (
+        "recommended_position_pct",
+        "base_position_pct",
+        "effective_position_pct",
+        "sizing_multiplier",
+        "sizing_origin",
+        "sizing_reason_codes",
+        "sizing_confidence",
+        "sizing_warning",
+        "evidence_quality_score",
+        "evidence_conflict_flag",
+        "partial_evidence_flag",
+        "evidence_coverage_ratio",
+        "evidence_available",
+        "evidence_scores",
+    )
+    return {field: signal_ctx.get(field) for field in fields if field in signal_ctx}
+
+
 def ensure_state(state: dict[str, Any], settings: Any) -> dict[str, Any]:
     if "positions" not in state:
         state["positions"] = []
@@ -75,6 +95,7 @@ def open_position(fill_ctx: dict[str, Any], signal_ctx: dict[str, Any], state: d
         "unrealized_pnl_sol": 0.0,
         "fees_paid_sol": float(fill_ctx.get("priority_fee_sol") or 0.0),
         "entry_snapshot": signal_ctx.get("entry_snapshot") or {},
+        **_position_sizing_fields(signal_ctx),
         **copy_wallet_family_contract_fields(signal_ctx),
         "last_mark_price_usd": float(fill_ctx.get("executed_price_usd") or 0.0),
         "last_updated_at": now,

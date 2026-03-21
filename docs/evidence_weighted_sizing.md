@@ -34,8 +34,9 @@ Missing evidence is treated honestly: the layer reduces confidence and can reduc
 
 The layer starts from the already-allowed base size:
 
-- `recommended_position_pct * mode_position_scale`
+- runtime path: `recommended_position_pct * mode_position_scale`
 - plus degraded-X reduction when the active mode policy already requires it
+- entry path: `base_position_pct == recommended_position_pct` before evidence reductions
 
 From there, evidence weighting may reduce size further for conditions such as:
 
@@ -52,7 +53,7 @@ Strong evidence can preserve the base size, but it does **not** increase size ab
 
 ## Output fields
 
-Runtime decisions, positions, and replay-compatible rows can now carry additive sizing fields such as:
+Entry decisions, runtime decisions, paper-trading artifacts, and replay-compatible rows can now carry additive sizing fields such as:
 
 - `base_position_pct`
 - `effective_position_pct`
@@ -86,7 +87,9 @@ Common reason codes include:
 - `partial_evidence_reduced`
 - `risk_reduced`
 
-## Runtime interaction
+## Entry + runtime interaction
+
+On the entry path, `trading/entry_sizing.py` now uses the same canonical sizing engine with `base_position_pct=recommended_position_pct`, so entry artifacts already carry `effective_position_pct` and the supporting sizing provenance fields.
 
 In `run_promotion_loop.py`, the sizing layer runs only after a signal has been normalized and before a paper position is opened.
 Hard blocks still reject the signal. The sizing layer cannot convert a blocked signal into an entry.

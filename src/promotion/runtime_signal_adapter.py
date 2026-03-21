@@ -92,6 +92,39 @@ def _build_signal_id(row: dict[str, Any], origin: str, ts: str, token_address: s
     digest = hashlib.sha1(f"{origin}:{token_address}:{ts}".encode("utf-8")).hexdigest()[:12]
     return f"runtime_{digest}"
 
+def _optional_sizing_fields(row: dict[str, Any]) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for field in (
+        "base_position_pct",
+        "effective_position_pct",
+        "sizing_multiplier",
+        "sizing_confidence",
+        "evidence_quality_score",
+        "evidence_coverage_ratio",
+    ):
+        value = _as_float(row.get(field), default=None)
+        if value is not None:
+            payload[field] = round(value, 4)
+
+    for field in ("sizing_origin", "sizing_warning"):
+        value = row.get(field)
+        if value not in (None, ""):
+            payload[field] = str(value)
+
+    for field in ("sizing_reason_codes", "evidence_available"):
+        if field in row and row.get(field) not in (None, ""):
+            payload[field] = _as_list(row.get(field))
+
+    for field in ("evidence_conflict_flag", "partial_evidence_flag"):
+        value = _as_bool(row.get(field))
+        if value is not None:
+            payload[field] = value
+
+    evidence_scores = row.get("evidence_scores")
+    if isinstance(evidence_scores, dict):
+        payload["evidence_scores"] = evidence_scores
+    return payload
+
 
 def _normalized_wallet_family_fields(row: dict[str, Any]) -> dict[str, Any]:
     defaults = default_wallet_family_contract_fields()
@@ -219,6 +252,7 @@ def normalize_runtime_signal(
         **_normalized_wallet_family_fields(row),
         "raw_signal": row,
     }
+    normalized.update(_optional_sizing_fields(row))
     return normalized
 
 
