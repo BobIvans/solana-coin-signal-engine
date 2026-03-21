@@ -9,6 +9,9 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 DEXSCREENER_SEARCH_URL = "https://api.dexscreener.com/latest/dex/search/?q=solana"
+_DISCOVERY_SOURCE = "dexscreener_search"
+_DISCOVERY_SOURCE_MODE = "fallback_search"
+_DISCOVERY_SOURCE_CONFIDENCE = 0.35
 
 
 def _to_float(value: Any) -> float:
@@ -54,7 +57,6 @@ def _to_iso_and_ts(raw_created_at: Any) -> tuple[str | None, int]:
     if ts <= 0:
         return None, 0
 
-    # DexScreener often sends milliseconds.
     if ts > 10_000_000_000:
         ts = int(ts / 1000)
 
@@ -102,6 +104,19 @@ def classify_discovery_honesty(
     }
 
 
+def _annotate_search_pairs(pairs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    annotated: list[dict[str, Any]] = []
+    for pair in pairs:
+        if not isinstance(pair, dict):
+            continue
+        enriched = dict(pair)
+        enriched.setdefault("_discovery_source", _DISCOVERY_SOURCE)
+        enriched.setdefault("_discovery_source_mode", _DISCOVERY_SOURCE_MODE)
+        enriched.setdefault("_discovery_source_confidence", _DISCOVERY_SOURCE_CONFIDENCE)
+        annotated.append(enriched)
+    return annotated
+
+
 def fetch_latest_solana_pairs() -> list[dict[str, Any]]:
     request = Request(DEXSCREENER_SEARCH_URL, headers={"Accept": "application/json", "User-Agent": "scse/0.1"})
     try:
@@ -115,6 +130,23 @@ def fetch_latest_solana_pairs() -> list[dict[str, Any]]:
         return []
 
     return [pair for pair in pairs if isinstance(pair, dict)]
+
+
+def fetch_search_discovery_pairs() -> list[dict[str, Any]]:
+    return _annotate_search_pairs(fetch_latest_solana_pairs())
+
+
+def fetch_discovery_pairs(settings: Any) -> list[dict[str, Any]]:
+    mode = str(getattr(settings, "DISCOVERY_PROVIDER_MODE", _DISCOVERY_SOURCE_MODE) or _DISCOVERY_SOURCE_MODE).strip().lower()
+    allow_fallback = bool(getattr(settings, "DISCOVERY_ALLOW_DEX_SEARCH_FALLBACK", True))
+
+    if mode in {"fallback_search", "search", "dex_search", "compatibility_search"}:
+        return fetch_search_discovery_pairs()
+
+    if not allow_fallback:
+        return []
+
+    return fetch_search_discovery_pairs()
 
 
 def extract_pair_metrics(pair: dict[str, Any]) -> dict[str, Any]:
@@ -132,6 +164,17 @@ def extract_pair_metrics(pair: dict[str, Any]) -> dict[str, Any]:
         "txns_m5_buys": _to_int(txns_m5.get("buys")),
         "txns_m5_sells": _to_int(txns_m5.get("sells")),
     }
+
+
+def _normalize_discovery_source_confidence(raw_pair: dict[str, Any], default: float) -> float:
+    value = raw_pair.get("_discovery_source_confidence")
+    try:
+        if value in (None, ""):
+            return default
+        normalized = float(value)
+    except (TypeError, ValueError):
+        normalized = default
+    return max(0.0, min(normalized, 1.0))
 
 
 def normalize_pair(
@@ -155,6 +198,9 @@ def normalize_pair(
 
     boost = raw_pair.get("boosts", {}) if isinstance(raw_pair.get("boosts"), dict) else {}
     info = raw_pair.get("info", {}) if isinstance(raw_pair.get("info"), dict) else {}
+    discovery_source = str(raw_pair.get("_discovery_source") or _DISCOVERY_SOURCE)
+    discovery_source_mode = str(raw_pair.get("_discovery_source_mode") or _DISCOVERY_SOURCE_MODE)
+    discovery_source_confidence = _normalize_discovery_source_confidence(raw_pair, _DISCOVERY_SOURCE_CONFIDENCE)
 
     return {
         "token_address": token_address,
@@ -170,4 +216,7 @@ def normalize_pair(
         "boost_flag": _to_bool(boost.get("active")) or _to_bool(raw_pair.get("boosted")),
         "paid_order_flag": _to_bool(info.get("paid")) or _to_bool(raw_pair.get("paidOrder")),
         "source": "dexscreener",
+        "discovery_source": discovery_source,
+        "discovery_source_mode": discovery_source_mode,
+        "discovery_source_confidence": discovery_source_confidence,
     }

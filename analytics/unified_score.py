@@ -88,6 +88,7 @@ def score_token(
     conf = compute_confidence_adjustment(token_ctx, settings)
     evidence_quality = derive_evidence_quality(token_ctx)
     evidence_penalties = compute_evidence_quality_penalties(token_ctx, settings, evidence_quality)
+    discovery_lag = _discovery_lag_penalty(token_ctx, settings)
 
     confidence_adjustment = float(conf.get("confidence_adjustment") or 0.0) + float(
         x_bonus.get("confidence_adjustment") or 0.0
@@ -116,6 +117,7 @@ def score_token(
         - float(spam["spam_penalty"])
         - float(evidence_penalties["partial_evidence_penalty"])
         - float(evidence_penalties["low_confidence_evidence_penalty"])
+        - float(discovery_lag["penalty"])
         + confidence_adjustment
     )
     final_score_pre_wallet = _clamp(base_score)
@@ -123,6 +125,7 @@ def score_token(
         final_score_pre_wallet
         + float(evidence_penalties.get("partial_evidence_penalty") or 0.0)
         + float(evidence_penalties.get("low_confidence_evidence_penalty") or 0.0)
+        + float(discovery_lag.get("penalty") or 0.0)
     )
 
     score_ctx = {
@@ -160,6 +163,7 @@ def score_token(
         spam,
         conf,
         evidence_penalties,
+        discovery_lag,
     ):
         flags.update(part.get("flags", []))
         warnings.update(part.get("warnings", []))
@@ -207,6 +211,7 @@ def score_token(
         "evidence_scores": dict(evidence_quality["evidence_scores"]),
         "partial_evidence_penalty": round(float(evidence_penalties["partial_evidence_penalty"]), 4),
         "low_confidence_evidence_penalty": round(float(evidence_penalties["low_confidence_evidence_penalty"]), 4),
+        "discovery_lag_score_penalty": round(float(discovery_lag["penalty"]), 4),
         "wallet_adjustment": wallet_adjustment,
         "wallet_weighting_mode": wallet_weighting["wallet_weighting_mode"],
         "wallet_weighting_effective_mode": wallet_weighting["wallet_weighting_effective_mode"],

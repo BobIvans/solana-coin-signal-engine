@@ -298,3 +298,30 @@ def test_filter_pair_respects_stricter_settings(monkeypatch):
 
     assert accepted is False
     assert reason == "low_liquidity"
+
+
+def test_discovery_engine_routes_through_provider_not_direct_search_only(monkeypatch, discovery_tmp):
+    monkeypatch.setenv("DISCOVERY_PROVIDER_MODE", "artifact")
+    raw_pair = _raw_pair()
+    raw_pair["_discovery_source"] = "artifact_fixture"
+    raw_pair["_discovery_source_mode"] = "artifact"
+    raw_pair["_discovery_source_confidence"] = 0.9
+    monkeypatch.setattr("collectors.discovery_engine._fetch_discovery_pairs", lambda settings: [raw_pair])
+
+    result = run_discovery_once()
+
+    candidate = result["candidates"]["candidates"][0]
+    assert candidate["discovery_source"] == "artifact_fixture"
+    assert candidate["discovery_source_mode"] == "artifact"
+    assert candidate["discovery_source_confidence"] == 0.9
+
+
+def test_post_first_window_discovery_is_visible_to_engine_as_lagged_candidate(monkeypatch, discovery_tmp):
+    raw_pair = _raw_pair(pairCreatedAt=850)
+    monkeypatch.setattr("collectors.discovery_engine.fetch_latest_solana_pairs", lambda: [raw_pair])
+
+    result = run_discovery_once()
+
+    candidate = result["candidates"]["candidates"][0]
+    assert candidate["discovery_freshness_status"] == "post_first_window"
+    assert candidate["delayed_launch_window_flag"] is True

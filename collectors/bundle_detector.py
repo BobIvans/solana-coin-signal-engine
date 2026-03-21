@@ -52,6 +52,7 @@ def safe_null_bundle_metrics(
         "bundle_evidence_warning": warning,
         "bundle_evidence_confidence": evidence_confidence,
         "bundle_metric_origin": metric_origin,
+        "bundle_value_origin": "missing",
     }
     for field in BUNDLE_CONTRACT_FIELDS:
         payload.setdefault(field, None)
@@ -125,15 +126,93 @@ def _extract_wallets(tx: dict[str, Any]) -> list[str]:
     return sorted(wallets)
 
 
-def _extract_value(tx: dict[str, Any]) -> float | None:
+def _quote_token_symbols(settings: Any | None = None) -> set[str]:
+    raw = getattr(settings, "BUNDLE_QUOTE_SYMBOL_ALLOWLIST", None)
+    if isinstance(raw, str) and raw.strip():
+        return {item.strip().upper() for item in raw.split(",") if item.strip()}
+    return {"USDC", "USDT", "WSOL"}
+
+
+def _quote_token_mints(settings: Any | None = None) -> set[str]:
+    raw = getattr(settings, "BUNDLE_QUOTE_MINT_ALLOWLIST", None)
+    if isinstance(raw, str) and raw.strip():
+        return {item.strip() for item in raw.split(",") if item.strip()}
+    return {
+        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        "Es9vMFrzaCERmJfrF4H2FYD1mA4P5uQWGWpZJYG1qhZY",
+        "So11111111111111111111111111111111111111112",
+    }
+
+
+def _extract_token_transfer_amount(transfer: dict[str, Any]) -> float | None:
+    for key in ("tokenAmount", "uiAmount", "amount", "token_amount"):
+        value = transfer.get(key)
+        if isinstance(value, dict):
+            nested = _coerce_float(value.get("uiAmount"))
+            if nested is not None:
+                return nested
+            amount = _coerce_float(value.get("amount"))
+            decimals = _coerce_int(value.get("decimals"))
+            if amount is not None and decimals is not None and decimals >= 0:
+                return amount / (10 ** decimals)
+            continue
+        numeric = _coerce_float(value)
+        if numeric is not None:
+            return numeric
+    return None
+
+
+def _extract_quote_transfer_value(tx: dict[str, Any], settings: Any | None = None) -> float | None:
+    token_transfers = tx.get("tokenTransfers")
+    if not isinstance(token_transfers, list) or not token_transfers:
+        return None
+
+    known_symbols = _quote_token_symbols(settings)
+    known_mints = _quote_token_mints(settings)
+    values: list[float] = []
+
+    for transfer in token_transfers:
+        if not isinstance(transfer, dict):
+            continue
+        symbol = str(
+            transfer.get("symbol")
+            or transfer.get("tokenSymbol")
+            or transfer.get("mintSymbol")
+            or transfer.get("currency")
+            or ""
+        ).strip().upper()
+        mint = str(
+            transfer.get("mint")
+            or transfer.get("tokenMint")
+            or transfer.get("mintAddress")
+            or transfer.get("tokenAddress")
+            or ""
+        ).strip()
+        if symbol not in known_symbols and mint not in known_mints:
+            continue
+        amount = _extract_token_transfer_amount(transfer)
+        if amount is None or amount <= 0:
+            continue
+        values.append(abs(amount))
+
+    if not values:
+        return None
+    return sum(values)
+
+
+def _extract_value(tx: dict[str, Any], settings: Any | None = None) -> tuple[float | None, str]:
     for key in ("bundle_value", "bundleValue", "swap_usd_value", "usd_value", "value_usd", "value"):
         value = _coerce_float(tx.get(key))
         if value is not None:
-            return value
+            return value, "explicit_usd"
+
+    quote_value = _extract_quote_transfer_value(tx, settings)
+    if quote_value is not None:
+        return quote_value, "quote_transfer"
 
     native_transfers = tx.get("nativeTransfers")
     if not isinstance(native_transfers, list) or not native_transfers:
-        return None
+        return None, "missing"
 
     lamports = 0
     for transfer in native_transfers:
@@ -143,8 +222,8 @@ def _extract_value(tx: dict[str, Any]) -> float | None:
         if amount:
             lamports += abs(amount)
     if lamports <= 0:
-        return None
-    return lamports / 1_000_000_000
+        return None, "missing"
+    return lamports / 1_000_000_000, "native_transfer"
 
 
 def _extract_success(tx: dict[str, Any]) -> bool | None:
@@ -313,6 +392,7 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
         evidence_metrics = compute_bundle_metrics_from_evidence(normalized_evidence, pair=pair)
 
         if normalize_provenance_origin(evidence_metrics.get("bundle_metric_origin")) == DIRECT_EVIDENCE_ORIGIN:
+            evidence_metrics.setdefault("bundle_value_origin", "explicit_usd")
             return evidence_metrics
 
         tx_payload = _load_bundle_transactions(pair, settings)
@@ -323,6 +403,7 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
             return {
                 **evidence_metrics,
                 "bundle_metric_origin": MISSING_BUNDLE_ORIGIN,
+                "bundle_value_origin": "missing",
                 "bundle_enrichment_status": evidence_metrics.get("bundle_enrichment_status") or "unavailable",
                 "bundle_enrichment_warning": _merge_bundle_warning(evidence_metrics.get("bundle_enrichment_warning"), source_warning),
                 "bundle_evidence_warning": _merge_bundle_warning(evidence_metrics.get("bundle_evidence_warning"), source_warning),
@@ -336,12 +417,14 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
             timestamp = _extract_timestamp(tx)
             if timestamp is None or timestamp < anchor_ts or timestamp > window_end:
                 continue
+            tx_value, tx_value_origin = _extract_value(tx, settings)
             first_window.append(
                 {
                     "timestamp": timestamp,
                     "group_key": _extract_group_key(tx, timestamp),
                     "wallets": _extract_wallets(tx),
-                    "value": _extract_value(tx),
+                    "value": tx_value,
+                    "value_origin": tx_value_origin,
                     "success": _extract_success(tx),
                     "funder": str(tx.get("funder") or tx.get("funding_source") or tx.get("funded_by") or "").strip()
                     or None,
@@ -352,6 +435,7 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
             return {
                 **evidence_metrics,
                 "bundle_metric_origin": MISSING_BUNDLE_ORIGIN,
+                "bundle_value_origin": "missing",
                 "bundle_enrichment_warning": _merge_bundle_warning(
                     evidence_metrics.get("bundle_enrichment_warning"),
                     source_warning,
@@ -396,6 +480,7 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
                 **clustering_metrics,
                 "bundle_count_first_60s": 0,
                 "bundle_metric_origin": HEURISTIC_EVIDENCE_ORIGIN,
+                "bundle_value_origin": "missing",
                 "bundle_enrichment_status": "partial" if _bundle_tx_is_degraded(tx_payload) else "ok",
                 "bundle_enrichment_warning": bundle_warning,
                 "bundle_evidence_warning": evidence_warning,
@@ -406,6 +491,7 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
         bundle_values: list[float] = []
         bundle_offsets_min: list[float] = []
         success_values: list[float] = []
+        value_origins: list[str] = []
 
         for bundle in inferred_bundles:
             wallets = {wallet for tx in bundle for wallet in tx["wallets"]}
@@ -414,6 +500,9 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
             values = [value for value in (tx["value"] for tx in bundle) if value is not None]
             if values:
                 bundle_values.append(sum(values))
+            value_origins.extend(
+                origin for origin in (str(tx.get("value_origin") or "missing") for tx in bundle) if origin and origin != "missing"
+            )
 
             timestamps = [int(tx["timestamp"]) for tx in bundle]
             bundle_offsets_min.append((min(timestamps) - anchor_ts) / 60.0)
@@ -423,6 +512,13 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
                 success_values.extend(1.0 if flag else 0.0 for flag in successes)
 
         bundle_status = "partial" if _bundle_tx_is_degraded(tx_payload) else "ok"
+        bundle_value_origin = "missing"
+        if "explicit_usd" in value_origins:
+            bundle_value_origin = "explicit_usd"
+        elif "quote_transfer" in value_origins:
+            bundle_value_origin = "quote_transfer"
+        elif "native_transfer" in value_origins:
+            bundle_value_origin = "native_transfer"
         return {
             **evidence_metrics,
             **clustering_metrics,
@@ -432,6 +528,7 @@ def detect_bundle_metrics_for_pair(pair: dict[str, Any], now_ts: int, settings: 
             "bundle_timing_from_liquidity_add_min": round(min(bundle_offsets_min), 6) if bundle_offsets_min else None,
             "bundle_success_rate": round(sum(success_values) / len(success_values), 6) if success_values else None,
             "bundle_metric_origin": HEURISTIC_EVIDENCE_ORIGIN,
+            "bundle_value_origin": bundle_value_origin,
             "bundle_enrichment_status": bundle_status,
             "bundle_enrichment_warning": _merge_bundle_warning(evidence_metrics.get("bundle_enrichment_warning"), source_warning),
             "bundle_evidence_warning": _merge_bundle_warning(evidence_metrics.get("bundle_evidence_warning"), tx_warning),

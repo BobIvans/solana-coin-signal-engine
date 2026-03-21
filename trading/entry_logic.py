@@ -25,6 +25,59 @@ def _dedupe(items: list[str]) -> list[str]:
     return out
 
 
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def _apply_discovery_lag_entry_policy(result: dict[str, Any], token_ctx: dict[str, Any], settings: Any) -> None:
+    discovery_status = str(token_ctx.get("discovery_freshness_status") or "").strip().lower()
+    discovery_lag_sec = _safe_int(token_ctx.get("discovery_lag_sec"), 0)
+    delayed_launch_window_flag = bool(token_ctx.get("delayed_launch_window_flag"))
+    trend_block_sec = _safe_int(getattr(settings, "DISCOVERY_LAG_TREND_BLOCK_SEC", getattr(settings, "DISCOVERY_FIRST_WINDOW_SEC", 60)), 60)
+    hard_block_enabled = bool(getattr(settings, "DISCOVERY_POST_FIRST_WINDOW_HARD_BLOCK_ENABLED", True))
+    hard_block_lag_sec = _safe_int(getattr(settings, "DISCOVERY_POST_FIRST_WINDOW_SCALP_MAX_LAG_SEC", trend_block_sec), trend_block_sec)
+
+    result["discovery_lag_penalty_applied"] = False
+    result["discovery_lag_blocked_trend"] = False
+    result["discovery_lag_size_multiplier"] = 1.0
+
+    if delayed_launch_window_flag and "discovery_delayed_launch_window" not in result["regime_blockers"]:
+        result["regime_blockers"].append("discovery_delayed_launch_window")
+
+    if discovery_status == "post_first_window" and result["entry_decision"] == "TREND":
+        result["entry_decision"] = "SCALP"
+        result["entry_reason"] = "discovery_lag_blocked_trend"
+        result["expected_hold_class"] = "short"
+        result["discovery_lag_penalty_applied"] = True
+        result["discovery_lag_blocked_trend"] = True
+        if "discovery_post_first_window" not in result["regime_blockers"]:
+            result["regime_blockers"].append("discovery_post_first_window")
+        if "discovery_lag_blocked_trend" not in result["regime_reason_flags"]:
+            result["regime_reason_flags"].append("discovery_lag_blocked_trend")
+
+    if discovery_lag_sec > 0 and discovery_lag_sec >= trend_block_sec:
+        result["discovery_lag_penalty_applied"] = True
+        if "discovery_lag_high" not in result["regime_reason_flags"]:
+            result["regime_reason_flags"].append("discovery_lag_high")
+
+    if hard_block_enabled and discovery_status == "post_first_window" and discovery_lag_sec >= hard_block_lag_sec:
+        result["entry_decision"] = "IGNORE"
+        result["entry_reason"] = "discovery_lag_hard_block"
+        result["expected_hold_class"] = "none"
+        if "discovery_lag_hard_block" not in result["regime_blockers"]:
+            result["regime_blockers"].append("discovery_lag_hard_block")
+        if "discovery_lag_hard_block" not in result["entry_warnings"]:
+            result["entry_warnings"].append("discovery_lag_hard_block")
+
+    result["regime_reason_flags"] = _dedupe(result["regime_reason_flags"])
+    result["regime_blockers"] = _dedupe(result["regime_blockers"])
+    result["entry_flags"] = _dedupe([*result["regime_reason_flags"], *result["regime_blockers"]])
+    result["entry_warnings"] = _dedupe(result["entry_warnings"])
+
+
 def decide_entry(token_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
     regime = decide_regime(token_ctx, settings)
     regime_reason_flags = _dedupe(regime.get("regime_reason_flags", []))
@@ -50,6 +103,8 @@ def decide_entry(token_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
         "decided_at": utc_now_iso(),
         "contract_version": settings.ENTRY_CONTRACT_VERSION,
     }
+
+    _apply_discovery_lag_entry_policy(result, token_ctx, settings)
 
     if result["entry_decision"] not in _ALLOWED_DECISIONS:
         raise ValueError(f"Unhandled entry decision: {result['entry_decision']}")

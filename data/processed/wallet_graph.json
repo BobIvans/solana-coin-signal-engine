@@ -1,0 +1,113 @@
+{
+  "edges": [
+    {
+      "evidence_count": 2,
+      "evidence_types": [
+        "co_bundle_window",
+        "shared_funder"
+      ],
+      "provenance": [
+        {
+          "evidence_type": "shared_funder",
+          "funder": "funder_alpha",
+          "weight": 0.85
+        },
+        {
+          "evidence_type": "co_bundle_window",
+          "group": "slot:10",
+          "weight": 0.45
+        }
+      ],
+      "source": "wallet_a",
+      "target": "wallet_b",
+      "weight": 0.65
+    },
+    {
+      "evidence_count": 2,
+      "evidence_types": [
+        "co_bundle_window",
+        "shared_funder"
+      ],
+      "provenance": [
+        {
+          "evidence_type": "shared_funder",
+          "funder": "funder_beta",
+          "weight": 0.85
+        },
+        {
+          "evidence_type": "co_bundle_window",
+          "group": "slot:20",
+          "weight": 0.45
+        }
+      ],
+      "source": "wallet_c",
+      "target": "wallet_d",
+      "weight": 0.65
+    }
+  ],
+  "metadata": {
+    "contract_version": "wallet_graph.v1",
+    "generated_at": "2026-03-21T21:17:48Z"
+  },
+  "nodes": [
+    {
+      "creator_linked": false,
+      "funders": [
+        "funder_alpha"
+      ],
+      "groups": [
+        "slot:10"
+      ],
+      "launches": [],
+      "timestamps": [],
+      "wallet": "wallet_a"
+    },
+    {
+      "creator_linked": false,
+      "funders": [
+        "funder_alpha"
+      ],
+      "groups": [
+        "slot:10"
+      ],
+      "launches": [],
+      "timestamps": [],
+      "wallet": "wallet_b"
+    },
+    {
+      "creator_linked": false,
+      "funders": [
+        "funder_beta"
+      ],
+      "groups": [
+        "slot:20"
+      ],
+      "launches": [],
+      "timestamps": [],
+      "wallet": "wallet_c"
+    },
+    {
+      "creator_linked": false,
+      "funders": [
+        "funder_beta"
+      ],
+      "groups": [
+        "slot:20"
+      ],
+      "launches": [],
+      "timestamps": [],
+      "wallet": "wallet_d"
+    }
+  ],
+  "summary": {
+    "density": 0.333333,
+    "edge_count": 2,
+    "evidence_types": [
+      "co_bundle_window",
+      "shared_funder"
+    ],
+    "node_count": 4,
+    "warning_count": 0
+  },
+  "warnings": []
+}

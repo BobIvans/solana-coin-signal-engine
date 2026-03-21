@@ -16,6 +16,12 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _csv_set(raw: Any, default: set[str]) -> set[str]:
+    if isinstance(raw, str) and raw.strip():
+        return {item.strip().lower() for item in raw.split(",") if item.strip()}
+    return default
+
+
 def _resolve_sol_usd(market_ctx: dict[str, Any], settings: Any) -> float:
     raw = market_ctx.get("sol_usd")
     if raw not in (None, ""):
@@ -71,12 +77,62 @@ def _congestion_stress_multiplier(order_ctx: dict[str, Any], market_ctx: dict[st
     return round(max(multiplier, 1.0), 6)
 
 
+def _thin_depth_liquidity_multiplier(order_ctx: dict[str, Any], market_ctx: dict[str, Any], settings: Any) -> float:
+    multiplier = 1.0
+    dex_id = str(market_ctx.get("dex_id") or market_ctx.get("dexId") or "").strip().lower()
+    pair_type = str(market_ctx.get("pair_type") or market_ctx.get("pairType") or "").strip().lower()
+    thin_dex_ids = _csv_set(getattr(settings, "FRICTION_THIN_DEPTH_DEX_IDS", "meteora,orca_whirlpool,raydium_clmm"), {"meteora", "orca_whirlpool", "raydium_clmm"})
+    thin_pair_types = _csv_set(getattr(settings, "FRICTION_THIN_DEPTH_PAIR_TYPES", "clmm,dlmm,concentrated"), {"clmm", "dlmm", "concentrated"})
+    base_penalty = _safe_float(getattr(settings, "FRICTION_THIN_DEPTH_LIQUIDITY_MULTIPLIER", 0.65), 0.65)
+    stress_penalty = _safe_float(getattr(settings, "FRICTION_THIN_DEPTH_STRESS_SELL_MULTIPLIER", 0.7), 0.7)
+    sell_pressure = max(
+        _safe_float(market_ctx.get("sell_pressure") or market_ctx.get("sell_pressure_ratio"), 0.0),
+        _safe_float(market_ctx.get("cluster_sell_concentration_120s"), 0.0),
+    )
+    flags = _exit_flags(order_ctx, market_ctx)
+
+    if dex_id in thin_dex_ids or pair_type in thin_pair_types:
+        multiplier *= max(min(base_penalty, 1.0), 0.1)
+    if sell_pressure >= 0.7:
+        multiplier *= max(min(stress_penalty, 1.0), 0.1)
+    if {"cluster_dump_detected", "kill_switch_triggered", "linkage_risk_exit", "shock_not_recovered_exit"} & flags:
+        multiplier *= max(min(stress_penalty, 1.0), 0.1)
+    return round(_clamp(multiplier, 0.05, 1.0), 6)
+
+
+def _catastrophic_liquidity_failure(order_ctx: dict[str, Any], market_ctx: dict[str, Any], settings: Any) -> bool:
+    effective_liquidity = max(_safe_float(market_ctx.get("effective_liquidity_usd") or market_ctx.get("liquidity_usd") or market_ctx.get("liquidity"), 0.0), 0.0)
+    requested_sol = max(_safe_float(order_ctx.get("requested_notional_sol"), 0.0), 0.0)
+    requested_usd = requested_sol * _resolve_sol_usd(market_ctx, settings)
+    sell_pressure = max(
+        _safe_float(market_ctx.get("sell_pressure") or market_ctx.get("sell_pressure_ratio"), 0.0),
+        _safe_float(market_ctx.get("cluster_sell_concentration_120s"), 0.0),
+    )
+    severe_flags = {"cluster_dump_detected", "kill_switch_triggered", "linkage_risk_exit", "shock_not_recovered_exit"}
+    flags = _exit_flags(order_ctx, market_ctx)
+    forced_full_exit = str(order_ctx.get("exit_decision") or "").upper() == "FULL_EXIT" or _safe_float(order_ctx.get("exit_fraction"), 0.0) >= 0.95
+    liquidity_ratio = 0.0 if effective_liquidity <= 0 else requested_usd / effective_liquidity
+    catastrophic_ratio = _safe_float(getattr(settings, "FRICTION_CATASTROPHIC_LIQUIDITY_RATIO", 1.15), 1.15)
+
+    if effective_liquidity <= 0:
+        return True
+    if liquidity_ratio >= catastrophic_ratio and (forced_full_exit or bool(flags & severe_flags) or sell_pressure >= 0.9):
+        return True
+    if effective_liquidity < 7_500 and sell_pressure >= 0.95:
+        return True
+    return False
+
+
 def compute_fill_realism(order_ctx: dict[str, Any], market_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
     liquidity = max(_safe_float(market_ctx.get("liquidity_usd") or market_ctx.get("liquidity"), 1.0), 1.0)
+    thin_depth_penalty_multiplier = _thin_depth_liquidity_multiplier(order_ctx, market_ctx, settings)
+    effective_liquidity_usd = max(liquidity * thin_depth_penalty_multiplier, 1.0)
+    enriched_market_ctx = {**market_ctx, "effective_liquidity_usd": effective_liquidity_usd}
+
     volatility = max(_safe_float(market_ctx.get("volatility") or market_ctx.get("volume_velocity"), 0.0), 0.0)
     requested_sol = max(_safe_float(order_ctx.get("requested_notional_sol"), 0.0), 0.0)
     requested_usd = requested_sol * _resolve_sol_usd(market_ctx, settings)
-    participation = max(requested_usd / liquidity, 0.0)
+    participation = max(requested_usd / effective_liquidity_usd, 0.0)
 
     liquidity_sensitivity = _safe_float(getattr(settings, "PAPER_SLIPPAGE_LIQUIDITY_SENSITIVITY", 1.0), 1.0)
     default_slippage_bps = _safe_float(getattr(settings, "PAPER_DEFAULT_SLIPPAGE_BPS", 150.0), 150.0)
@@ -110,18 +166,49 @@ def compute_fill_realism(order_ctx: dict[str, Any], market_ctx: dict[str, Any], 
     effective_slippage_bps = default_slippage_bps + (estimated_price_impact_bps + volatility_component + urgency_component) * congestion_stress_multiplier + transfer_fee_bps
     effective_slippage_bps = _clamp(effective_slippage_bps, 1.0, max_slippage_bps)
 
+    catastrophic = _catastrophic_liquidity_failure(order_ctx, enriched_market_ctx, settings)
+    if catastrophic:
+        catastrophic_slippage_bps = max(_safe_float(getattr(settings, "FRICTION_CATASTROPHIC_SLIPPAGE_BPS", max_slippage_bps), max_slippage_bps), effective_slippage_bps)
+        filled_fraction = _clamp(_safe_float(getattr(settings, "FRICTION_CATASTROPHIC_FILLED_FRACTION", 0.15), 0.15), 0.0, 1.0)
+        return {
+            "estimated_price_impact_bps": round(max(estimated_price_impact_bps, 0.0), 6),
+            "congestion_stress_multiplier": congestion_stress_multiplier,
+            "effective_slippage_bps": round(_clamp(catastrophic_slippage_bps, 1.0, catastrophic_slippage_bps), 6),
+            "fill_realism_status": "catastrophic_liquidity_failure",
+            "effective_liquidity_usd": round(effective_liquidity_usd, 6),
+            "thin_depth_penalty_multiplier": thin_depth_penalty_multiplier,
+            "fill_status": "catastrophic_liquidity_failure",
+            "filled_fraction": round(filled_fraction, 6),
+            "execution_warning": "market depth structurally insufficient for requested exit",
+        }
+
     if mode == "linear":
         realism_status = "linear_model"
-    elif congestion_stress_multiplier > 1.0 or transfer_fee_bps > 0:
+    elif congestion_stress_multiplier > 1.0 or transfer_fee_bps > 0 or thin_depth_penalty_multiplier < 1.0:
         realism_status = "amm_approx_stressed"
     else:
         realism_status = "amm_approx"
+
+    if participation >= 1.0:
+        fill_status = "partial_fill"
+        execution_warning = "requested size exceeds near-price effective liquidity"
+    elif thin_depth_penalty_multiplier < 1.0:
+        fill_status = "thin_depth_stressed"
+        execution_warning = "thin-depth liquidity penalty applied"
+    else:
+        fill_status = "filled"
+        execution_warning = None
 
     return {
         "estimated_price_impact_bps": round(max(estimated_price_impact_bps, 0.0), 6),
         "congestion_stress_multiplier": congestion_stress_multiplier,
         "effective_slippage_bps": round(effective_slippage_bps, 6),
         "fill_realism_status": realism_status,
+        "effective_liquidity_usd": round(effective_liquidity_usd, 6),
+        "thin_depth_penalty_multiplier": thin_depth_penalty_multiplier,
+        "fill_status": fill_status,
+        "filled_fraction": round(compute_partial_fill_ratio(order_ctx, enriched_market_ctx, settings), 6),
+        "execution_warning": execution_warning,
     }
 
 
@@ -138,7 +225,7 @@ def compute_priority_fee_sol(order_ctx: dict[str, Any], market_ctx: dict[str, An
 
 
 def compute_failed_tx_probability(order_ctx: dict[str, Any], market_ctx: dict[str, Any], settings: Any) -> float:
-    liquidity = float(market_ctx.get("liquidity_usd") or market_ctx.get("liquidity") or 0.0)
+    liquidity = float(market_ctx.get("effective_liquidity_usd") or market_ctx.get("liquidity_usd") or market_ctx.get("liquidity") or 0.0)
     volatility = float(market_ctx.get("volatility") or market_ctx.get("volume_velocity") or 0.0)
     confidence = float(order_ctx.get("entry_confidence") or order_ctx.get("signal_quality") or 1.0)
 
@@ -157,7 +244,7 @@ def compute_partial_fill_ratio(order_ctx: dict[str, Any], market_ctx: dict[str, 
     if not bool(getattr(settings, "PAPER_PARTIAL_FILL_ALLOWED", True)):
         return 1.0
 
-    liquidity = max(float(market_ctx.get("liquidity_usd") or 1.0), 1.0)
+    liquidity = max(float(market_ctx.get("effective_liquidity_usd") or market_ctx.get("liquidity_usd") or 1.0), 1.0)
     requested_sol = max(float(order_ctx.get("requested_notional_sol") or 0.0), 0.0)
     requested_usd = requested_sol * _resolve_sol_usd(market_ctx, settings)
     pressure = requested_usd / liquidity

@@ -21,12 +21,22 @@ _ENTRY_SIZING_FIELDS = (
     "evidence_coverage_ratio",
     "evidence_available",
     "evidence_scores",
+    "discovery_lag_penalty_applied",
+    "discovery_lag_blocked_trend",
+    "discovery_lag_size_multiplier",
 )
 
 
 def _to_float(value: Any, default: float = 0.0) -> float:
     try:
         return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _to_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(float(value))
     except (TypeError, ValueError):
         return default
 
@@ -103,6 +113,20 @@ def _data_quality_strength(token_ctx: dict[str, Any]) -> float:
     return _clamp(quality)
 
 
+def _discovery_lag_sizing_details(token_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
+    status = str(token_ctx.get("discovery_freshness_status") or "").strip().lower()
+    lag_sec = _to_int(token_ctx.get("discovery_lag_sec"), 0)
+    reduction_sec = _to_int(getattr(settings, "DISCOVERY_LAG_SCALP_SIZE_REDUCTION_SEC", getattr(settings, "DISCOVERY_FIRST_WINDOW_SEC", 60)), 60)
+    multiplier = _clamp(_to_float(getattr(settings, "DISCOVERY_LAG_SIZE_MULTIPLIER", 0.6), 0.6), 0.0, 1.0)
+    apply_penalty = status == "post_first_window" or (lag_sec > 0 and lag_sec >= reduction_sec)
+    return {
+        "status": status,
+        "lag_sec": lag_sec,
+        "penalty_applied": apply_penalty,
+        "size_multiplier": multiplier if apply_penalty else 1.0,
+    }
+
+
 def compute_entry_confidence(token_ctx: dict[str, Any], decision_ctx: dict[str, Any], settings: Any) -> float:
     if decision_ctx.get("entry_decision") == "IGNORE":
         return 0.0
@@ -134,6 +158,8 @@ def compute_recommended_position_pct(token_ctx: dict[str, Any], decision_ctx: di
     missing = [field for field in mandatory if token_ctx.get(field) is None]
 
     if decision_ctx.get("entry_decision") == "IGNORE":
+        decision_ctx["discovery_lag_penalty_applied"] = bool(decision_ctx.get("discovery_lag_penalty_applied", False))
+        decision_ctx["discovery_lag_size_multiplier"] = 0.0 if decision_ctx.get("discovery_lag_penalty_applied") else 1.0
         return 0.0
     if str(token_ctx.get("rug_verdict") or "").upper() == "IGNORE":
         return 0.0
@@ -154,6 +180,15 @@ def compute_recommended_position_pct(token_ctx: dict[str, Any], decision_ctx: di
         if "partial_data_size_reduced" not in flags:
             flags.append("partial_data_size_reduced")
 
+    lag_details = _discovery_lag_sizing_details(token_ctx, settings)
+    decision_ctx["discovery_lag_penalty_applied"] = bool(decision_ctx.get("discovery_lag_penalty_applied") or lag_details["penalty_applied"])
+    decision_ctx["discovery_lag_size_multiplier"] = float(lag_details["size_multiplier"])
+    decision_ctx["discovery_lag_blocked_trend"] = bool(decision_ctx.get("discovery_lag_blocked_trend", False))
+    if lag_details["penalty_applied"]:
+        size *= float(lag_details["size_multiplier"])
+        if "discovery_lag_penalty" not in flags:
+            flags.append("discovery_lag_penalty")
+
     decision = str(decision_ctx.get("entry_decision") or "IGNORE")
     if decision == "SCALP":
         size = min(size, 0.75)
@@ -163,7 +198,8 @@ def compute_recommended_position_pct(token_ctx: dict[str, Any], decision_ctx: di
     return round(_clamp(size), 4)
 
 
-def _zero_entry_position_contract(entry_confidence: float) -> dict[str, Any]:
+def _zero_entry_position_contract(entry_confidence: float, *, decision_ctx: dict[str, Any] | None = None) -> dict[str, Any]:
+    ctx = decision_ctx or {}
     return {
         "entry_confidence": round(_clamp(entry_confidence), 4),
         "recommended_position_pct": 0.0,
@@ -180,6 +216,9 @@ def _zero_entry_position_contract(entry_confidence: float) -> dict[str, Any]:
         "evidence_coverage_ratio": 0.0,
         "evidence_available": [],
         "evidence_scores": {},
+        "discovery_lag_penalty_applied": bool(ctx.get("discovery_lag_penalty_applied", False)),
+        "discovery_lag_blocked_trend": bool(ctx.get("discovery_lag_blocked_trend", False)),
+        "discovery_lag_size_multiplier": float(ctx.get("discovery_lag_size_multiplier", 1.0)),
     }
 
 
@@ -189,7 +228,7 @@ def compute_entry_position_contract(token_ctx: dict[str, Any], decision_ctx: dic
     recommended_position_pct = compute_recommended_position_pct(token_ctx, decision_ctx, settings)
 
     if recommended_position_pct <= 0:
-        return _zero_entry_position_contract(entry_confidence)
+        return _zero_entry_position_contract(entry_confidence, decision_ctx=decision_ctx)
 
     sizing_input = {
         **token_ctx,
