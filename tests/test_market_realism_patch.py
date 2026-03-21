@@ -26,6 +26,13 @@ class S:
     FRICTION_MODEL_MODE = "amm_approx"
     PAPER_AMM_IMPACT_EXPONENT = 1.35
     CONGESTION_STRESS_ENABLED = True
+    FRICTION_THIN_DEPTH_DEX_IDS = "meteora"
+    FRICTION_THIN_DEPTH_PAIR_TYPES = "clmm,dlmm"
+    FRICTION_THIN_DEPTH_LIQUIDITY_MULTIPLIER = 0.6
+    FRICTION_THIN_DEPTH_STRESS_SELL_MULTIPLIER = 0.7
+    FRICTION_CATASTROPHIC_LIQUIDITY_RATIO = 1.1
+    FRICTION_CATASTROPHIC_FILLED_FRACTION = 0.15
+    FRICTION_CATASTROPHIC_SLIPPAGE_BPS = 2500
 
 
 PAIR_CREATED_TS = 1_000
@@ -176,3 +183,31 @@ def test_token_2022_detection_and_transfer_fee_risk():
     assert out["transfer_fee_detected"] is True
     assert out["transfer_fee_bps"] == 450.0
     assert out["sellability_risk_flag"] is True
+
+
+
+def test_post_first_window_candidate_cannot_promote_to_trend():
+    late = classify_discovery_honesty(pair_created_at_ts=1_000, discovery_seen_ts=1_100)
+    assert late["discovery_freshness_status"] == "post_first_window"
+    assert late["delayed_launch_window_flag"] is True
+
+
+def test_quote_token_bundle_value_is_not_underestimated_as_native_only():
+    from collectors import bundle_detector
+
+    value, origin = bundle_detector._extract_value(
+        {"tokenTransfers": [{"tokenSymbol": "USDC", "tokenAmount": 250.0}]},
+        None,
+    )
+    assert value == 250.0
+    assert origin == "quote_transfer"
+
+
+def test_catastrophic_liquidity_path_is_not_benign_fill():
+    result = compute_fill_realism(
+        {"requested_notional_sol": 25.0, "side": "sell", "exit_decision": "FULL_EXIT", "exit_flags": ["cluster_dump_detected"]},
+        {"liquidity_usd": 2_500, "volatility": 0.4, "sell_pressure": 0.98, "cluster_sell_concentration_120s": 0.98},
+        S(),
+    )
+    assert result["fill_status"] == "catastrophic_liquidity_failure"
+    assert result["execution_warning"]

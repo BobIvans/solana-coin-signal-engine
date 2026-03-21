@@ -20,6 +20,8 @@ DEFAULT_SIZING_POLICY: dict[str, float | bool] = {
     "low_runtime_confidence_multiplier": 0.85,
     "missing_evidence_multiplier": 0.65,
     "low_quality_multiplier": 0.8,
+    "discovery_lag_multiplier": 0.6,
+    "discovery_lag_reduction_sec": 60.0,
 }
 
 
@@ -76,6 +78,8 @@ def _policy_overrides(config: Mapping[str, Any] | None) -> dict[str, float | boo
         "evidence_conflict_multiplier": "SIZING_EVIDENCE_CONFLICT_MULTIPLIER",
         "creator_link_risk_multiplier": "SIZING_CREATOR_LINK_RISK_MULTIPLIER",
         "low_continuation_multiplier": "SIZING_LOW_CONTINUATION_MULTIPLIER",
+        "discovery_lag_multiplier": "DISCOVERY_LAG_SIZE_MULTIPLIER",
+        "discovery_lag_reduction_sec": "DISCOVERY_LAG_SCALP_SIZE_REDUCTION_SEC",
     }
     for key, alias in mapping.items():
         for candidate in (key, alias):
@@ -89,6 +93,30 @@ def _policy_overrides(config: Mapping[str, Any] | None) -> dict[str, float | boo
             numeric = _safe_float(policy[key])
             policy[key] = DEFAULT_SIZING_POLICY[key] if numeric is None else numeric
     return policy
+
+
+def _discovery_lag_details(signal: Mapping[str, Any], policy: Mapping[str, float | bool]) -> dict[str, Any]:
+    if bool(_first_present(signal, "discovery_lag_penalty_applied")):
+        multiplier = _safe_float(_first_present(signal, "discovery_lag_size_multiplier"))
+        return {
+            "status": _safe_str(_first_present(signal, "discovery_freshness_status")).lower(),
+            "lag_sec": _safe_float(_first_present(signal, "discovery_lag_sec")) or 0.0,
+            "apply_penalty": True,
+            "multiplier": _clamp(multiplier if multiplier is not None else float(policy["discovery_lag_multiplier"]), 0.0, 1.0),
+            "already_applied": True,
+        }
+
+    status = _safe_str(_first_present(signal, "discovery_freshness_status")).lower()
+    lag_sec = _safe_float(_first_present(signal, "discovery_lag_sec")) or 0.0
+    threshold = max(float(policy["discovery_lag_reduction_sec"]), 0.0)
+    apply_penalty = status == "post_first_window" or (lag_sec > 0 and lag_sec >= threshold)
+    return {
+        "status": status,
+        "lag_sec": lag_sec,
+        "apply_penalty": apply_penalty,
+        "multiplier": _clamp(float(policy["discovery_lag_multiplier"]), 0.0, 1.0) if apply_penalty else 1.0,
+        "already_applied": False,
+    }
 
 
 def derive_sizing_confidence(signal: Mapping[str, Any], *, config: Mapping[str, Any] | None = None) -> dict[str, Any]:
@@ -156,6 +184,7 @@ def compute_evidence_weighted_size(
     confidence = derive_sizing_confidence(signal, config=config)
     warnings = list(confidence["warnings"])
     multiplier = 1.0
+    lag_details = _discovery_lag_details(signal, policy)
 
     if not bool(policy["enabled"]):
         effective_position = base_position
@@ -203,6 +232,16 @@ def compute_evidence_weighted_size(
             multiplier *= float(policy["low_quality_multiplier"])
             reason_codes.append("evidence_quality_low_size_reduced")
 
+        if lag_details["apply_penalty"] and not lag_details["already_applied"]:
+            multiplier *= float(lag_details["multiplier"])
+            reason_codes.append("discovery_lag_penalty")
+            if lag_details["status"] == "post_first_window":
+                warnings.append("discovery_detected_post_first_window")
+        elif lag_details["apply_penalty"]:
+            reason_codes.append("discovery_lag_penalty")
+            if lag_details["status"] == "post_first_window":
+                warnings.append("discovery_detected_post_first_window")
+
         multiplier = round(
             _clamp(
                 multiplier,
@@ -212,11 +251,13 @@ def compute_evidence_weighted_size(
             4,
         )
         effective_position = round(_clamp(base_position * multiplier), 4)
-        if multiplier >= 0.9999 and not any(code.endswith("size_reduced") for code in reason_codes):
+        if multiplier >= 0.9999 and not any(code.endswith("size_reduced") for code in reason_codes) and "discovery_lag_penalty" not in reason_codes:
             reason_codes.append("evidence_support_preserved_base_size")
 
         if multiplier < 1.0:
-            if confidence["partial_evidence_flag"]:
+            if lag_details["apply_penalty"]:
+                origin = "discovery_lag_reduced" if not lag_details["already_applied"] else "discovery_lag_policy"
+            elif confidence["partial_evidence_flag"]:
                 origin = "partial_evidence_reduced"
             elif any(code.startswith("creator_link_risk") or code.startswith("evidence_conflict") for code in reason_codes):
                 origin = "risk_reduced"
@@ -247,6 +288,9 @@ def compute_evidence_weighted_size(
         "evidence_available": confidence["available_evidence"],
         "evidence_scores": confidence["evidence_scores"],
         "policy_origin": policy_origin,
+        "discovery_lag_penalty_applied": bool(lag_details["apply_penalty"]),
+        "discovery_lag_blocked_trend": bool(_first_present(signal, "discovery_lag_blocked_trend")),
+        "discovery_lag_size_multiplier": round(float(lag_details["multiplier"]), 4),
     }
     return result
 

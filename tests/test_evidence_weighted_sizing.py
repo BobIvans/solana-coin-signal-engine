@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from analytics.evidence_quality import derive_evidence_quality
-from analytics.evidence_weighted_sizing import derive_sizing_confidence
+from analytics.evidence_weighted_sizing import compute_evidence_weighted_size, derive_sizing_confidence
 from src.promotion.guards import compute_position_sizing
 
 
@@ -192,3 +192,28 @@ def test_shared_evidence_quality_helper_stays_in_sync_with_sizing_summary():
     assert sizing["evidence_conflict_flag"] == summary["evidence_conflict_flag"]
     assert sizing["partial_evidence_flag"] == summary["partial_evidence_flag"]
     assert sizing["evidence_available"] == summary["evidence_available"]
+
+
+
+def test_post_first_window_candidate_gets_discovery_lag_penalty_multiplier():
+    signal = {
+        "signal_id": "lagged",
+        "token_address": "SoLag111",
+        "discovery_freshness_status": "post_first_window",
+        "discovery_lag_sec": 90,
+        "runtime_signal_confidence": 0.8,
+        "continuation_confidence": 0.7,
+        "continuation_status": "confirmed",
+        "linkage_confidence": 0.7,
+        "linkage_risk_score": 0.1,
+        "bundle_wallet_clustering_score": 0.7,
+        "cluster_concentration_ratio": 0.2,
+        "x_status": "healthy",
+        "x_validation_score": 80,
+    }
+
+    sizing = compute_evidence_weighted_size(signal, base_position_pct=0.5, config=BASE_CONFIG)
+
+    assert sizing["effective_position_pct"] < 0.5
+    assert "discovery_lag_penalty" in sizing["sizing_reason_codes"]
+    assert sizing["discovery_lag_size_multiplier"] == 0.6

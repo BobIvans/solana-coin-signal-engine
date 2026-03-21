@@ -32,6 +32,11 @@ class DummySettings:
     ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER = 0.6
     ENTRY_CONTRACT_VERSION = "entry_selector_v1"
     RUG_DEV_SELL_PRESSURE_HARD = 0.25
+    DISCOVERY_LAG_TREND_BLOCK_SEC = 60
+    DISCOVERY_POST_FIRST_WINDOW_HARD_BLOCK_ENABLED = True
+    DISCOVERY_POST_FIRST_WINDOW_SCALP_MAX_LAG_SEC = 120
+    DISCOVERY_LAG_SCALP_SIZE_REDUCTION_SEC = 45
+    DISCOVERY_LAG_SIZE_MULTIPLIER = 0.6
 
 
 def _token():
@@ -146,3 +151,28 @@ def test_entry_result_propagates_wallet_family_summary_fields():
     assert result["smart_wallet_family_ids"] == ["fam_a"]
     assert result["smart_wallet_family_confidence_max"] == 0.74
     assert result["smart_wallet_family_shared_funder_flag"] is True
+
+
+def test_trend_is_blocked_when_discovery_is_post_first_window():
+    token = _token()
+    token["discovery_freshness_status"] = "post_first_window"
+    token["discovery_lag_sec"] = 90
+    token["delayed_launch_window_flag"] = True
+
+    result = decide_entry(token, DummySettings())
+
+    assert result["entry_decision"] == "SCALP"
+    assert result["discovery_lag_blocked_trend"] is True
+    assert "discovery_lag_blocked_trend" in result["regime_reason_flags"]
+
+
+def test_large_discovery_lag_adds_reason_flag_or_blocker():
+    token = _token()
+    token["discovery_freshness_status"] = "post_first_window"
+    token["discovery_lag_sec"] = 180
+    token["delayed_launch_window_flag"] = True
+
+    result = decide_entry(token, DummySettings())
+
+    assert result["entry_decision"] == "IGNORE"
+    assert "discovery_lag_hard_block" in result["regime_blockers"]

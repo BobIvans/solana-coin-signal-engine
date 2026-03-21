@@ -292,3 +292,32 @@ def test_detect_bundle_metrics_keeps_heuristics_but_degrades_stale_tx_source(mon
     assert result["bundle_enrichment_status"] == "partial"
     assert "upstream_failed_use_stale" in result["bundle_enrichment_warning"]
     assert "upstream_failed_use_stale" in result["bundle_evidence_warning"]
+
+
+def test_extract_value_prefers_explicit_usd_fields():
+    value, origin = bundle_detector._extract_value({"usd_value": 42.5, "nativeTransfers": [{"amount": 5_000_000_000}]}, DummySettings())
+    assert value == 42.5
+    assert origin == "explicit_usd"
+
+
+def test_extract_value_uses_quote_token_transfer_when_present():
+    value, origin = bundle_detector._extract_value(
+        {
+            "tokenTransfers": [
+                {"tokenSymbol": "USDC", "tokenAmount": 125.0},
+                {"tokenSymbol": "BONK", "tokenAmount": 10_000},
+            ]
+        },
+        DummySettings(),
+    )
+    assert value == 125.0
+    assert origin == "quote_transfer"
+
+
+def test_extract_value_falls_back_to_native_transfer_only_when_quote_missing():
+    value, origin = bundle_detector._extract_value(
+        {"nativeTransfers": [{"amount": 2_000_000_000}]},
+        DummySettings(),
+    )
+    assert value == 2.0
+    assert origin == "native_transfer"

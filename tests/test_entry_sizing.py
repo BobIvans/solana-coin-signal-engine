@@ -13,6 +13,8 @@ class DummySettings:
     ENTRY_DEGRADED_X_SIZE_MULTIPLIER = 0.5
     ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER = 0.6
     ENTRY_SELECTOR_FAILCLOSED = True
+    DISCOVERY_LAG_SCALP_SIZE_REDUCTION_SEC = 45
+    DISCOVERY_LAG_SIZE_MULTIPLIER = 0.6
 
 
 def _token():
@@ -93,3 +95,27 @@ def test_weak_continuation_reduces_effective_size():
     contract = compute_entry_position_contract(token, {"entry_decision": "SCALP", "entry_flags": []}, DummySettings())
     assert contract["effective_position_pct"] < contract["recommended_position_pct"]
     assert any(code.startswith("continuation_") for code in contract["sizing_reason_codes"])
+
+
+def test_discovery_lag_reduces_effective_entry_size():
+    token = _token()
+    token["discovery_freshness_status"] = "post_first_window"
+    token["discovery_lag_sec"] = 90
+    decision = {"entry_decision": "SCALP", "entry_confidence": 0.9, "entry_flags": []}
+
+    size = compute_recommended_position_pct(token, decision, DummySettings())
+
+    assert size < 0.75
+    assert decision["discovery_lag_penalty_applied"] is True
+    assert decision["discovery_lag_size_multiplier"] == 0.6
+
+
+def test_discovery_lag_reason_code_is_recorded():
+    token = _token()
+    token["discovery_freshness_status"] = "post_first_window"
+    token["discovery_lag_sec"] = 90
+
+    contract = compute_entry_position_contract(token, {"entry_decision": "SCALP", "entry_flags": []}, DummySettings())
+
+    assert "discovery_lag_penalty" in contract["sizing_reason_codes"]
+    assert contract["discovery_lag_penalty_applied"] is True

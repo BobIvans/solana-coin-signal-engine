@@ -1,0 +1,67 @@
+{
+  "clusters": [
+    {
+      "cluster_confidence": 0.765,
+      "cluster_id": "cluster_wallet_a_14a16de433b1",
+      "creator_linked_flag": false,
+      "derived_from": "graph_evidence",
+      "edge_count": 1,
+      "evidence_types": [
+        "co_bundle_window",
+        "shared_funder"
+      ],
+      "funding_sources_seen": [
+        "funder_alpha"
+      ],
+      "launches_seen": [],
+      "wallet_count": 2,
+      "wallets": [
+        "wallet_a",
+        "wallet_b"
+      ]
+    },
+    {
+      "cluster_confidence": 0.765,
+      "cluster_id": "cluster_wallet_c_d161be801d46",
+      "creator_linked_flag": false,
+      "derived_from": "graph_evidence",
+      "edge_count": 1,
+      "evidence_types": [
+        "co_bundle_window",
+        "shared_funder"
+      ],
+      "funding_sources_seen": [
+        "funder_beta"
+      ],
+      "launches_seen": [],
+      "wallet_count": 2,
+      "wallets": [
+        "wallet_c",
+        "wallet_d"
+      ]
+    }
+  ],
+  "metadata": {
+    "contract_version": "wallet_clusters.v1",
+    "derivation_mode": "graph_connected_components",
+    "generated_at": "2026-03-21T21:17:48Z",
+    "source_contract_version": "wallet_graph.v1"
+  },
+  "summary": {
+    "cluster_count": 2,
+    "cluster_ids": [
+      "cluster_wallet_a_14a16de433b1",
+      "cluster_wallet_c_d161be801d46"
+    ],
+    "edge_count": 2,
+    "node_count": 4,
+    "wallet_coverage_count": 4
+  },
+  "wallet_to_cluster": {
+    "wallet_a": "cluster_wallet_a_14a16de433b1",
+    "wallet_b": "cluster_wallet_a_14a16de433b1",
+    "wallet_c": "cluster_wallet_c_d161be801d46",
+    "wallet_d": "cluster_wallet_c_d161be801d46"
+  },
+  "warnings": []
+}

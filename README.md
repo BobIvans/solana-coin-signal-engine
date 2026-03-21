@@ -354,3 +354,10 @@ See `docs/offline_feature_importance.md` for the target definitions, grouping lo
 
 
 - unified scoring now emits explicit evidence-quality penalties (`partial_evidence_penalty`, `low_confidence_evidence_penalty`) derived from a shared evidence-quality summary helper used by both score and sizing layers.
+
+## PR-MARKET-REALISM-3 highlights
+
+- Discovery is routed through a provider layer. DexScreener search is now treated as `fallback_search` metadata rather than an implicit earliest-launch truth source.
+- Discovery lag now feeds downstream decisions: late discovery can block `TREND`, shrink `SCALP` size, and apply an explicit unified-score penalty.
+- Bundle extraction now prefers explicit USD fields, then known quote-token transfers (`USDC`, `USDT`, `WSOL`), and only then falls back to native lamports.
+- Paper friction now emits `effective_liquidity_usd`, `thin_depth_penalty_multiplier`, `fill_status`, and `execution_warning`, including a dedicated catastrophic-liquidity path for structurally broken exits.

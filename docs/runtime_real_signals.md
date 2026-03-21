@@ -106,3 +106,19 @@ Runtime loading prefers replay-produced `trade_feature_matrix.jsonl` when it exi
 ## Market realism honesty
 
 Runtime and replay-compatible artifacts may now carry explicit market-realism metadata for late discovery, incomplete first-window transaction coverage, realism-aware paper fills, and Token-2022 / transfer-fee safety. These fields are additive warnings and confidence markers; they are meant to prevent runtime and replay layers from presenting partial visibility as if it were native first-window truth.
+
+## Additional market-realism outputs
+
+Runtime entry and fill artifacts may now include:
+- `discovery_source`
+- `discovery_source_mode`
+- `discovery_source_confidence`
+- `discovery_lag_penalty_applied`
+- `discovery_lag_blocked_trend`
+- `discovery_lag_size_multiplier`
+- `effective_liquidity_usd`
+- `thin_depth_penalty_multiplier`
+- `fill_status`
+- `execution_warning`
+
+These fields are intended to distinguish late discovery, thin-depth degradation, and catastrophic-liquidity execution from normal healthy paper-flow assumptions.

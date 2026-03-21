@@ -419,3 +419,24 @@ Token safety helpers expose additive Token-2022 / fee-token markers:
 - `transfer_fee_bps`
 - `token_extension_warning`
 - `sellability_risk_flag`
+
+## PR-MARKET-REALISM-3 additive contract notes
+
+Discovery-facing outputs may now carry provider provenance:
+- `discovery_source`
+- `discovery_source_mode`
+- `discovery_source_confidence`
+
+Entry / sizing outputs may now carry lag-policy provenance:
+- `discovery_lag_penalty_applied`
+- `discovery_lag_blocked_trend`
+- `discovery_lag_size_multiplier`
+
+Bundle heuristics may now expose quote-aware value provenance:
+- `bundle_value_origin`
+
+Friction outputs may now expose structural execution stress:
+- `effective_liquidity_usd`
+- `thin_depth_penalty_multiplier`
+- `fill_status`
+- `execution_warning`

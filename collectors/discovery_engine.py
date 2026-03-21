@@ -9,7 +9,7 @@ from typing import Any
 from analytics.fast_prescore import compute_fast_prescore, fast_priority_bucket
 from collectors.bundle_detector import compute_advanced_bundle_fields
 from collectors.bundle_detector import detect_bundle_metrics_for_pair, safe_null_bundle_metrics
-from collectors.dexscreener_client import fetch_latest_solana_pairs, normalize_pair
+from collectors.dexscreener_client import fetch_discovery_pairs, fetch_latest_solana_pairs, normalize_pair
 from config.settings import load_settings
 from utils.bundle_contract_fields import (
     copy_bundle_contract_fields,
@@ -19,6 +19,13 @@ from utils.bundle_contract_fields import (
 from utils.clock import utc_now_iso, utc_now_ts
 from utils.io import append_jsonl, ensure_dir, write_json
 from utils.logger import log_warning
+
+
+def _fetch_discovery_pairs(settings: Any) -> list[dict[str, Any]]:
+    mode = str(getattr(settings, "DISCOVERY_PROVIDER_MODE", "fallback_search") or "fallback_search").strip().lower()
+    if mode in {"fallback_search", "search", "dex_search", "compatibility_search"}:
+        return fetch_latest_solana_pairs()
+    return fetch_discovery_pairs(settings)
 
 
 def filter_pair(pair: dict[str, Any], now_ts: int, settings: Any) -> tuple[bool, str]:
@@ -76,6 +83,9 @@ def build_shortlist(candidates: list[dict[str, Any]], top_k: int) -> list[dict[s
                 "buy_pressure": row.get("buy_pressure", 0.0),
                 "volume_mcap_ratio": row.get("volume_mcap_ratio", 0.0),
                 "source": row.get("source", "dexscreener"),
+                "discovery_source": row.get("discovery_source", row.get("source", "dexscreener")),
+                "discovery_source_mode": row.get("discovery_source_mode", "fallback_search"),
+                "discovery_source_confidence": row.get("discovery_source_confidence", 0.35),
                 "discovery_seen_ts": row.get("discovery_seen_ts"),
                 "discovery_seen_at": row.get("discovery_seen_at"),
                 "discovery_lag_sec": row.get("discovery_lag_sec"),
@@ -97,7 +107,9 @@ def _persist_raw_artifacts(raw_pairs: list[dict[str, Any]], timestamp_utc: str, 
             raw_path,
             {
                 "timestamp_utc": timestamp_utc,
-                "provider": "dexscreener",
+                "provider": normalized.get("discovery_source", "dexscreener"),
+                "discovery_source_mode": normalized.get("discovery_source_mode"),
+                "discovery_source_confidence": normalized.get("discovery_source_confidence"),
                 "artifact_type": "pair_raw",
                 "token_address": normalized.get("token_address", ""),
                 "payload": raw_pair,
@@ -114,7 +126,7 @@ def run_discovery_once() -> dict[str, Any]:
     now_ts = int(utc_now_ts())
     timestamp_utc = utc_now_iso()
 
-    raw_pairs = fetch_latest_solana_pairs()
+    raw_pairs = _fetch_discovery_pairs(settings)
     _persist_raw_artifacts(raw_pairs, timestamp_utc, settings.RAW_DATA_DIR / "discovery_raw.jsonl")
 
     candidates: list[dict[str, Any]] = []

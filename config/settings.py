@@ -42,6 +42,15 @@ class Settings:
     DISCOVERY_LAG_HONESTY_ENABLED: bool
     DISCOVERY_NATIVE_WINDOW_SEC: int
     DISCOVERY_FIRST_WINDOW_SEC: int
+    DISCOVERY_PROVIDER_MODE: str
+    DISCOVERY_ALLOW_DEX_SEARCH_FALLBACK: bool
+    DISCOVERY_REQUIRE_NATIVE_FIRST_WINDOW_FOR_TREND: bool
+    DISCOVERY_POST_FIRST_WINDOW_SCALP_MAX_LAG_SEC: int
+    DISCOVERY_LAG_TREND_BLOCK_SEC: int
+    DISCOVERY_LAG_SCALP_SIZE_REDUCTION_SEC: int
+    DISCOVERY_POST_FIRST_WINDOW_HARD_BLOCK_ENABLED: bool
+    DISCOVERY_LAG_SCORE_PENALTY: float
+    DISCOVERY_LAG_SIZE_MULTIPLIER: float
 
     LOCAL_OPENCLAW_ONLY: bool
     OPENCLAW_BROWSER_PROFILE: str
@@ -62,6 +71,8 @@ class Settings:
 
     BUNDLE_ENRICHMENT_ENABLED: bool
     BUNDLE_ENRICHMENT_WINDOW_SEC: int
+    BUNDLE_QUOTE_SYMBOL_ALLOWLIST: str
+    BUNDLE_QUOTE_MINT_ALLOWLIST: str
 
     GLOBAL_RATE_LIMIT_ENABLED: bool
     SMART_WALLETS_PATH: Path
@@ -216,6 +227,13 @@ class Settings:
     FRICTION_MODEL_MODE: str
     PAPER_AMM_IMPACT_EXPONENT: float
     CONGESTION_STRESS_ENABLED: bool
+    FRICTION_THIN_DEPTH_DEX_IDS: str
+    FRICTION_THIN_DEPTH_PAIR_TYPES: str
+    FRICTION_THIN_DEPTH_LIQUIDITY_MULTIPLIER: float
+    FRICTION_THIN_DEPTH_STRESS_SELL_MULTIPLIER: float
+    FRICTION_CATASTROPHIC_LIQUIDITY_RATIO: float
+    FRICTION_CATASTROPHIC_FILLED_FRACTION: float
+    FRICTION_CATASTROPHIC_SLIPPAGE_BPS: int
     ENABLE_TOKEN_2022_SAFETY: bool
     TOKEN_2022_TRANSFER_FEE_SELLABILITY_BPS: int
     PAPER_CONTRACT_VERSION: str
@@ -381,6 +399,33 @@ def load_settings() -> Settings:
         DISCOVERY_FIRST_WINDOW_SEC=_as_positive_int(
             _get_env(merged, "DISCOVERY_FIRST_WINDOW_SEC", "60"), key="DISCOVERY_FIRST_WINDOW_SEC"
         ),
+        DISCOVERY_PROVIDER_MODE=str(
+            _get_env(merged, "DISCOVERY_PROVIDER_MODE", "fallback_search")
+        ),
+        DISCOVERY_ALLOW_DEX_SEARCH_FALLBACK=_as_bool(
+            _get_env(merged, "DISCOVERY_ALLOW_DEX_SEARCH_FALLBACK", "true"), key="DISCOVERY_ALLOW_DEX_SEARCH_FALLBACK"
+        ),
+        DISCOVERY_REQUIRE_NATIVE_FIRST_WINDOW_FOR_TREND=_as_bool(
+            _get_env(merged, "DISCOVERY_REQUIRE_NATIVE_FIRST_WINDOW_FOR_TREND", "true"), key="DISCOVERY_REQUIRE_NATIVE_FIRST_WINDOW_FOR_TREND"
+        ),
+        DISCOVERY_POST_FIRST_WINDOW_SCALP_MAX_LAG_SEC=_as_positive_int(
+            _get_env(merged, "DISCOVERY_POST_FIRST_WINDOW_SCALP_MAX_LAG_SEC", "120"), key="DISCOVERY_POST_FIRST_WINDOW_SCALP_MAX_LAG_SEC"
+        ),
+        DISCOVERY_LAG_TREND_BLOCK_SEC=_as_positive_int(
+            _get_env(merged, "DISCOVERY_LAG_TREND_BLOCK_SEC", "60"), key="DISCOVERY_LAG_TREND_BLOCK_SEC"
+        ),
+        DISCOVERY_LAG_SCALP_SIZE_REDUCTION_SEC=_as_positive_int(
+            _get_env(merged, "DISCOVERY_LAG_SCALP_SIZE_REDUCTION_SEC", "45"), key="DISCOVERY_LAG_SCALP_SIZE_REDUCTION_SEC"
+        ),
+        DISCOVERY_POST_FIRST_WINDOW_HARD_BLOCK_ENABLED=_as_bool(
+            _get_env(merged, "DISCOVERY_POST_FIRST_WINDOW_HARD_BLOCK_ENABLED", "true"), key="DISCOVERY_POST_FIRST_WINDOW_HARD_BLOCK_ENABLED"
+        ),
+        DISCOVERY_LAG_SCORE_PENALTY=_as_non_negative_float(
+            _get_env(merged, "DISCOVERY_LAG_SCORE_PENALTY", "6.0"), key="DISCOVERY_LAG_SCORE_PENALTY"
+        ),
+        DISCOVERY_LAG_SIZE_MULTIPLIER=_as_unit_float(
+            _get_env(merged, "DISCOVERY_LAG_SIZE_MULTIPLIER", "0.60"), key="DISCOVERY_LAG_SIZE_MULTIPLIER"
+        ),
         LOCAL_OPENCLAW_ONLY=_as_bool(
             _get_env(merged, "LOCAL_OPENCLAW_ONLY", "true"), key="LOCAL_OPENCLAW_ONLY"
         ),
@@ -440,6 +485,16 @@ def load_settings() -> Settings:
         BUNDLE_ENRICHMENT_WINDOW_SEC=_as_positive_int(
             _get_env(merged, "BUNDLE_ENRICHMENT_WINDOW_SEC", "60"),
             key="BUNDLE_ENRICHMENT_WINDOW_SEC",
+        ),
+        BUNDLE_QUOTE_SYMBOL_ALLOWLIST=str(
+            _get_env(merged, "BUNDLE_QUOTE_SYMBOL_ALLOWLIST", "USDC,USDT,WSOL")
+        ),
+        BUNDLE_QUOTE_MINT_ALLOWLIST=str(
+            _get_env(
+                merged,
+                "BUNDLE_QUOTE_MINT_ALLOWLIST",
+                "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v,Es9vMFrzaCERmJfrF4H2FYD1mA4P5uQWGWpZJYG1qhZY,So11111111111111111111111111111111111111112",
+            )
         ),
         GLOBAL_RATE_LIMIT_ENABLED=_as_bool(
             _get_env(merged, "GLOBAL_RATE_LIMIT_ENABLED", "true"),
@@ -985,6 +1040,32 @@ def load_settings() -> Settings:
         CONGESTION_STRESS_ENABLED=_as_bool(
             _get_env(merged, "CONGESTION_STRESS_ENABLED", "true"),
             key="CONGESTION_STRESS_ENABLED",
+        ),
+        FRICTION_THIN_DEPTH_DEX_IDS=str(
+            _get_env(merged, "FRICTION_THIN_DEPTH_DEX_IDS", "meteora,orca_whirlpool,raydium_clmm")
+        ),
+        FRICTION_THIN_DEPTH_PAIR_TYPES=str(
+            _get_env(merged, "FRICTION_THIN_DEPTH_PAIR_TYPES", "clmm,dlmm,concentrated")
+        ),
+        FRICTION_THIN_DEPTH_LIQUIDITY_MULTIPLIER=_as_unit_float(
+            _get_env(merged, "FRICTION_THIN_DEPTH_LIQUIDITY_MULTIPLIER", "0.65"),
+            key="FRICTION_THIN_DEPTH_LIQUIDITY_MULTIPLIER",
+        ),
+        FRICTION_THIN_DEPTH_STRESS_SELL_MULTIPLIER=_as_unit_float(
+            _get_env(merged, "FRICTION_THIN_DEPTH_STRESS_SELL_MULTIPLIER", "0.70"),
+            key="FRICTION_THIN_DEPTH_STRESS_SELL_MULTIPLIER",
+        ),
+        FRICTION_CATASTROPHIC_LIQUIDITY_RATIO=_as_positive_float(
+            _get_env(merged, "FRICTION_CATASTROPHIC_LIQUIDITY_RATIO", "1.15"),
+            key="FRICTION_CATASTROPHIC_LIQUIDITY_RATIO",
+        ),
+        FRICTION_CATASTROPHIC_FILLED_FRACTION=_as_unit_float(
+            _get_env(merged, "FRICTION_CATASTROPHIC_FILLED_FRACTION", "0.15"),
+            key="FRICTION_CATASTROPHIC_FILLED_FRACTION",
+        ),
+        FRICTION_CATASTROPHIC_SLIPPAGE_BPS=_as_positive_int(
+            _get_env(merged, "FRICTION_CATASTROPHIC_SLIPPAGE_BPS", "2500"),
+            key="FRICTION_CATASTROPHIC_SLIPPAGE_BPS",
         ),
         ENABLE_TOKEN_2022_SAFETY=_as_bool(
             _get_env(merged, "ENABLE_TOKEN_2022_SAFETY", "true"),

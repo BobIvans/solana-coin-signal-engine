@@ -3,7 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from collectors.dexscreener_client import normalize_pair
+from collectors.dexscreener_client import fetch_discovery_pairs, normalize_pair
 
 
 def test_normalize_pair_has_required_fields():
@@ -61,3 +61,39 @@ def test_normalize_pair_handles_missing_fields_safely():
     assert normalized["txns_m5_buys"] == 0
     assert normalized["pair_created_at"] is None
     assert normalized["pair_created_at_ts"] == 0
+
+
+class _DiscoverySettings:
+    DISCOVERY_PROVIDER_MODE = "search"
+    DISCOVERY_ALLOW_DEX_SEARCH_FALLBACK = True
+
+
+def test_discovery_fetch_uses_provider_mode_and_marks_source_metadata(monkeypatch):
+    raw_pair = {
+        "chainId": "solana",
+        "pairAddress": "PAIR_META",
+        "pairCreatedAt": 1_000,
+        "baseToken": {"address": "TOKEN_META", "symbol": "META", "name": "Meta"},
+    }
+    monkeypatch.setattr("collectors.dexscreener_client.fetch_latest_solana_pairs", lambda: [raw_pair])
+
+    pairs = fetch_discovery_pairs(_DiscoverySettings())
+    normalized = normalize_pair(pairs[0], discovery_seen_ts=1_020)
+
+    assert normalized["discovery_source"] == "dexscreener_search"
+    assert normalized["discovery_source_mode"] == "fallback_search"
+    assert 0 <= normalized["discovery_source_confidence"] < 0.5
+
+
+def test_search_feed_is_marked_as_fallback_source_mode():
+    normalized = normalize_pair(
+        {
+            "chainId": "solana",
+            "pairAddress": "PAIR_FB",
+            "pairCreatedAt": 1_000,
+            "baseToken": {"address": "TOKEN_FB", "symbol": "FB", "name": "Fallback"},
+        },
+        discovery_seen_ts=1_010,
+    )
+    assert normalized["discovery_source_mode"] == "fallback_search"
+    assert normalized["discovery_source_confidence"] < 0.5
