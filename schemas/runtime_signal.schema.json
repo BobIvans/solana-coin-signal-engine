@@ -253,6 +253,102 @@
         "boolean",
         "null"
       ]
+    },
+    "base_position_pct": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "effective_position_pct": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "sizing_multiplier": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "sizing_reason_codes": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "sizing_confidence": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "sizing_origin": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "sizing_warning": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "evidence_quality_score": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "evidence_conflict_flag": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "partial_evidence_flag": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "evidence_coverage_ratio": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "evidence_available": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence_scores": {
+      "type": [
+        "object",
+        "null"
+      ]
     }
   },
   "additionalProperties": true

@@ -62,10 +62,14 @@ def _token():
         "bundle_success_rate": 0.8,
         "bundle_composition_dominant": "buy-only",
         "bundle_failure_retry_pattern": 1,
-        "bundle_wallet_clustering_score": 0.4,
+        "bundle_wallet_clustering_score": 0.55,
         "cluster_concentration_ratio": 0.3,
         "num_unique_clusters_first_60s": 4,
         "creator_in_cluster_flag": False,
+        "continuation_confidence": 0.78,
+        "continuation_status": "confirmed",
+        "linkage_confidence": 0.76,
+        "linkage_risk_score": 0.12,
     }
 
 
@@ -83,6 +87,9 @@ def test_ignore_has_zero_size():
     result = decide_entry(token, DummySettings())
     assert result["entry_decision"] == "IGNORE"
     assert result["recommended_position_pct"] == 0
+    assert result["base_position_pct"] == 0
+    assert result["effective_position_pct"] == 0
+    assert result["sizing_multiplier"] == 0
     assert result["expected_hold_class"] == "none"
 
 
@@ -102,6 +109,11 @@ def test_entry_result_contract_includes_new_regime_outputs():
     assert isinstance(result["regime_reason_flags"], list)
     assert isinstance(result["regime_blockers"], list)
     assert result["expected_hold_class"] in {"short", "medium", "long", "none"}
+    assert result["base_position_pct"] == result["recommended_position_pct"]
+    assert result["effective_position_pct"] <= result["base_position_pct"]
+    assert isinstance(result["sizing_reason_codes"], list)
+    assert "sizing_origin" in result
+    assert "evidence_quality_score" in result
 
 
 def test_creator_linked_cluster_blocks_trend_but_keeps_scalp_available():

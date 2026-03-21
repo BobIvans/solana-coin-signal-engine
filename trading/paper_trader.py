@@ -28,6 +28,26 @@ def _market_index(market_states: list[dict[str, Any]]) -> dict[str, dict[str, An
     return out
 
 
+def _sizing_fields(ctx: dict[str, Any]) -> dict[str, Any]:
+    fields = (
+        "recommended_position_pct",
+        "base_position_pct",
+        "effective_position_pct",
+        "sizing_multiplier",
+        "sizing_origin",
+        "sizing_reason_codes",
+        "sizing_confidence",
+        "sizing_warning",
+        "evidence_quality_score",
+        "evidence_conflict_flag",
+        "partial_evidence_flag",
+        "evidence_coverage_ratio",
+        "evidence_available",
+        "evidence_scores",
+    )
+    return {field: ctx.get(field) for field in fields if field in ctx}
+
+
 def process_exit_signals(exit_signals: list[dict[str, Any]], market_states: list[dict[str, Any]], state: dict[str, Any], settings: Any) -> dict[str, Any]:
     ensure_state(state, settings)
     markets = _market_index(market_states)
@@ -176,6 +196,7 @@ def process_entry_signals(entry_signals: list[dict[str, Any]], market_states: li
                 "symbol": pos.get("symbol"),
                 "side": "BUY",
                 **fill,
+                **_sizing_fields(pos),
                 "regime": signal.get("entry_decision"),
                 "reason": "entry_signal_filled",
                 **copy_wallet_family_contract_fields(signal, fallback=pos),

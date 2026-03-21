@@ -4,6 +4,25 @@ from __future__ import annotations
 
 from typing import Any
 
+from analytics.evidence_weighted_sizing import compute_evidence_weighted_size
+
+
+_ENTRY_SIZING_FIELDS = (
+    "base_position_pct",
+    "effective_position_pct",
+    "sizing_multiplier",
+    "sizing_reason_codes",
+    "sizing_confidence",
+    "sizing_origin",
+    "sizing_warning",
+    "evidence_quality_score",
+    "evidence_conflict_flag",
+    "partial_evidence_flag",
+    "evidence_coverage_ratio",
+    "evidence_available",
+    "evidence_scores",
+)
+
 
 def _to_float(value: Any, default: float = 0.0) -> float:
     try:
@@ -52,13 +71,11 @@ def _safety_strength(token_ctx: dict[str, Any]) -> float:
     return _clamp((rug_score * 0.35) + (dev_sell * 0.25) + (lp_burn * 0.15) + (mint_revoked * 0.15) + (freeze_revoked * 0.10))
 
 
-
-
 def _wallet_strength(token_ctx: dict[str, Any]) -> float:
     features = token_ctx.get("wallet_features") or {}
-    hits = _clamp(_to_float(features.get("smart_wallet_hits")) / 5.0)
-    tier1 = _clamp(_to_float(features.get("smart_wallet_tier1_hits")) / 2.0)
-    netflow = _clamp((_to_float(features.get("smart_wallet_netflow_bias")) + 1.0) / 2.0)
+    hits = _clamp(_to_float(features.get("smart_wallet_hits"), default=_to_float(token_ctx.get("smart_wallet_hits"))) / 5.0)
+    tier1 = _clamp(_to_float(features.get("smart_wallet_tier1_hits"), default=_to_float(token_ctx.get("smart_wallet_tier1_hits"))) / 2.0)
+    netflow = _clamp((_to_float(features.get("smart_wallet_netflow_bias"), default=_to_float(token_ctx.get("smart_wallet_netflow_bias"))) + 1.0) / 2.0)
     return _clamp((hits * 0.4) + (tier1 * 0.4) + (netflow * 0.2))
 
 
@@ -144,3 +161,54 @@ def compute_recommended_position_pct(token_ctx: dict[str, Any], decision_ctx: di
         size = min(size, 1.0)
 
     return round(_clamp(size), 4)
+
+
+def _zero_entry_position_contract(entry_confidence: float) -> dict[str, Any]:
+    return {
+        "entry_confidence": round(_clamp(entry_confidence), 4),
+        "recommended_position_pct": 0.0,
+        "base_position_pct": 0.0,
+        "effective_position_pct": 0.0,
+        "sizing_multiplier": 0.0,
+        "sizing_reason_codes": [],
+        "sizing_confidence": 0.0,
+        "sizing_origin": "mode_policy_only",
+        "sizing_warning": None,
+        "evidence_quality_score": 0.0,
+        "evidence_conflict_flag": False,
+        "partial_evidence_flag": False,
+        "evidence_coverage_ratio": 0.0,
+        "evidence_available": [],
+        "evidence_scores": {},
+    }
+
+
+def compute_entry_position_contract(token_ctx: dict[str, Any], decision_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
+    entry_confidence = compute_entry_confidence(token_ctx, decision_ctx, settings)
+    decision_ctx["entry_confidence"] = entry_confidence
+    recommended_position_pct = compute_recommended_position_pct(token_ctx, decision_ctx, settings)
+
+    if recommended_position_pct <= 0:
+        return _zero_entry_position_contract(entry_confidence)
+
+    sizing_input = {
+        **token_ctx,
+        **decision_ctx,
+        "entry_confidence": entry_confidence,
+        "runtime_signal_confidence": entry_confidence,
+        "recommended_position_pct": recommended_position_pct,
+        "token_address": token_ctx.get("token_address"),
+        "signal_id": token_ctx.get("signal_id") or token_ctx.get("token_address"),
+    }
+    sizing = compute_evidence_weighted_size(
+        sizing_input,
+        base_position_pct=recommended_position_pct,
+        config=None,
+        policy_origin="entry_base_policy",
+        policy_reason_codes=[],
+    )
+    return {
+        "entry_confidence": entry_confidence,
+        "recommended_position_pct": recommended_position_pct,
+        **{field: sizing.get(field) for field in _ENTRY_SIZING_FIELDS},
+    }

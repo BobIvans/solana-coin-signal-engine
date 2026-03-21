@@ -3,7 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from trading.entry_sizing import compute_entry_confidence, compute_recommended_position_pct
+from trading.entry_sizing import compute_entry_confidence, compute_entry_position_contract, compute_recommended_position_pct
 
 
 class DummySettings:
@@ -26,6 +26,7 @@ def _token():
         "volume_velocity": 5,
         "first30s_buy_ratio": 0.8,
         "bundle_cluster_score": 0.7,
+        "bundle_wallet_clustering_score": 0.68,
         "x_validation_score": 70,
         "x_validation_delta": 5,
         "x_status": "ok",
@@ -33,6 +34,13 @@ def _token():
         "lp_burn_confirmed": True,
         "mint_revoked": True,
         "freeze_revoked": True,
+        "continuation_confidence": 0.72,
+        "continuation_status": "confirmed",
+        "linkage_confidence": 0.74,
+        "linkage_risk_score": 0.1,
+        "cluster_concentration_ratio": 0.28,
+        "smart_wallet_hits": 2,
+        "runtime_signal_confidence": 0.78,
     }
 
 
@@ -57,3 +65,31 @@ def test_size_reduced_for_degraded_x_and_partial_data():
     assert size < 0.9
     assert "x_degraded_size_reduced" in decision["entry_flags"]
     assert "partial_data_size_reduced" in decision["entry_flags"]
+
+
+def test_entry_position_contract_emits_canonical_fields():
+    token = _token()
+    contract = compute_entry_position_contract(token, {"entry_decision": "SCALP", "entry_flags": []}, DummySettings())
+    assert contract["recommended_position_pct"] > 0
+    assert contract["base_position_pct"] == contract["recommended_position_pct"]
+    assert 0 <= contract["effective_position_pct"] <= contract["base_position_pct"]
+    assert isinstance(contract["sizing_reason_codes"], list)
+    assert "evidence_quality_score" in contract
+
+
+def test_linkage_risk_reduces_effective_size():
+    token = _token()
+    token["linkage_risk_score"] = 0.85
+    token["creator_dev_link_score"] = 0.82
+    contract = compute_entry_position_contract(token, {"entry_decision": "SCALP", "entry_flags": []}, DummySettings())
+    assert contract["effective_position_pct"] < contract["recommended_position_pct"]
+    assert "creator_link_risk_size_reduced" in contract["sizing_reason_codes"]
+
+
+def test_weak_continuation_reduces_effective_size():
+    token = _token()
+    token["continuation_confidence"] = 0.3
+    token["continuation_status"] = "weak"
+    contract = compute_entry_position_contract(token, {"entry_decision": "SCALP", "entry_flags": []}, DummySettings())
+    assert contract["effective_position_pct"] < contract["recommended_position_pct"]
+    assert any(code.startswith("continuation_") for code in contract["sizing_reason_codes"])

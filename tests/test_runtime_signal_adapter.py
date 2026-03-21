@@ -49,6 +49,38 @@ def test_adapter_marks_degraded_partial_signal_honestly():
     assert "missing_position_size" in (signal["runtime_signal_warning"] or "")
 
 
+def test_adapter_preserves_optional_sizing_contract_fields():
+    signal = adapt_runtime_signal(
+        {
+            "token_address": "So333",
+            "entry_decision": "SCALP",
+            "regime": "SCALP",
+            "regime_confidence": 0.81,
+            "recommended_position_pct": 0.35,
+            "base_position_pct": 0.35,
+            "effective_position_pct": 0.22,
+            "sizing_multiplier": 0.6286,
+            "sizing_reason_codes": ["partial_evidence_size_reduced"],
+            "sizing_confidence": 0.55,
+            "sizing_origin": "partial_evidence_reduced",
+            "sizing_warning": "partial_evidence",
+            "evidence_quality_score": 0.61,
+            "evidence_conflict_flag": True,
+            "partial_evidence_flag": True,
+            "evidence_coverage_ratio": 0.71,
+            "evidence_available": ["x", "linkage"],
+            "evidence_scores": {"x": 0.68},
+        },
+        runtime_signal_origin="entry_candidates",
+    )
+
+    assert signal["effective_position_pct"] == 0.22
+    assert signal["sizing_origin"] == "partial_evidence_reduced"
+    assert signal["evidence_conflict_flag"] is True
+    assert signal["partial_evidence_flag"] is True
+    assert signal["evidence_available"] == ["x", "linkage"]
+
+
 def test_adapter_marks_invalid_rows_without_token_address():
     signal = adapt_runtime_signal(
         {
