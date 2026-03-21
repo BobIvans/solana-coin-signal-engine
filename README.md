@@ -143,6 +143,8 @@ Highlights:
 - keeps degraded-X reduced-size behavior compatible
 - reduces paper/runtime size when evidence is partial, sparse, conflicting, or linkage-risky
 - emits explainable sizing fields such as `base_position_pct`, `effective_position_pct`, `sizing_multiplier`, `sizing_reason_codes`, and `sizing_confidence`
+- entry decisions now emit the same canonical sizing contract used by runtime guards
+- paper execution now uses `effective_position_pct` first, falling back to `recommended_position_pct` only for legacy rows
 - extends replay-compatible rows with additive sizing provenance fields
 
 Strong evidence can preserve base size, but this layer does **not** increase size above current safe bounds. Missing evidence never fabricates confidence.
@@ -323,3 +325,6 @@ Artifacts written by the smoke path:
 
 See `docs/offline_feature_importance.md` for the target definitions, grouping logic, methods, caveats, and honesty policy.
 
+
+
+- unified scoring now emits explicit evidence-quality penalties (`partial_evidence_penalty`, `low_confidence_evidence_penalty`) derived from a shared evidence-quality summary helper used by both score and sizing layers.

@@ -264,6 +264,15 @@ Required fields:
 - `entry_decision`
 - `entry_confidence`
 - `recommended_position_pct`
+- `base_position_pct`
+- `effective_position_pct`
+- `sizing_multiplier`
+- `sizing_reason_codes`
+- `sizing_confidence`
+- `sizing_origin`
+- `evidence_quality_score`
+- `evidence_conflict_flag`
+- `partial_evidence_flag`
 - `entry_reason`
 - `regime_confidence`
 - `regime_reason_flags`
@@ -289,6 +298,11 @@ The replay feature matrix is also the preferred source for analyzer evidence-qua
 - `partial_evidence_flag`
 - `evidence_quality_score`
 - `evidence_conflict_flag`
+- `evidence_coverage_ratio`
+- `partial_evidence_penalty`
+- `low_confidence_evidence_penalty`
+- `evidence_available`
+- `evidence_scores`
 - `sizing_confidence`
 - `x_status`
 - `linkage_risk_score`

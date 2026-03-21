@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from analytics.evidence_quality import derive_evidence_quality
 from analytics.score_normalizers import (
     normalize_capped,
     normalize_inverse,
@@ -480,6 +481,52 @@ def compute_bundle_risk_penalties(token_ctx: dict, settings: Any) -> dict:
         "warnings": [],
     }
 
+
+
+def compute_evidence_quality_penalties(
+    token_ctx: dict,
+    settings: Any,
+    evidence_quality: dict[str, Any] | None = None,
+) -> dict:
+    summary = evidence_quality or derive_evidence_quality(token_ctx)
+    partial_evidence_penalty = 0.0
+    if bool(summary.get("partial_evidence_flag")):
+        partial_evidence_penalty = float(getattr(settings, "UNIFIED_SCORE_PARTIAL_EVIDENCE_PENALTY", 1.5))
+
+    threshold = float(getattr(settings, "UNIFIED_SCORE_EVIDENCE_LOW_CONFIDENCE_THRESHOLD", 0.55))
+    max_penalty = float(getattr(settings, "UNIFIED_SCORE_LOW_CONFIDENCE_EVIDENCE_PENALTY_MAX", 3.0))
+    conflict_bonus = float(getattr(settings, "UNIFIED_SCORE_EVIDENCE_CONFLICT_PENALTY_BONUS", 0.75))
+
+    evidence_quality_score = max(0.0, min(1.0, _f(summary.get("evidence_quality_score")) or 0.0))
+    evidence_coverage_ratio = max(0.0, min(1.0, _f(summary.get("evidence_coverage_ratio")) or _f(summary.get("coverage_ratio")) or 0.0))
+
+    low_confidence_evidence_penalty = 0.0
+    if evidence_quality_score < threshold:
+        shortfall_ratio = (threshold - evidence_quality_score) / max(threshold, 1e-6)
+        coverage_multiplier = 1.0 + min(0.25, max(0.0, threshold - evidence_coverage_ratio))
+        low_confidence_evidence_penalty = shortfall_ratio * max_penalty * coverage_multiplier
+    if bool(summary.get("evidence_conflict_flag")):
+        low_confidence_evidence_penalty += conflict_bonus
+    low_confidence_evidence_penalty = min(max_penalty, max(0.0, low_confidence_evidence_penalty))
+
+    flags: list[str] = []
+    warnings: list[str] = []
+    if partial_evidence_penalty > 0:
+        flags.append("partial_evidence_score_penalty")
+        warnings.append("partial_evidence_flag=true")
+    if low_confidence_evidence_penalty > 0:
+        flags.append("low_confidence_evidence_score_penalty")
+        warnings.append("low_confidence_evidence_quality")
+    if bool(summary.get("evidence_conflict_flag")):
+        flags.append("evidence_conflict_score_penalty")
+        warnings.append("evidence_conflict_flag=true")
+
+    return {
+        "partial_evidence_penalty": round(partial_evidence_penalty, 4),
+        "low_confidence_evidence_penalty": round(low_confidence_evidence_penalty, 4),
+        "flags": flags,
+        "warnings": warnings,
+    }
 
 def compute_x_validation_bonus(token_ctx: dict, settings: Any) -> dict:
     score_norm = normalize_capped(_f(token_ctx.get("x_validation_score")), 0, 100)

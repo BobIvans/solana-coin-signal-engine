@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from analytics.evidence_quality import derive_evidence_quality
 from analytics.score_components import (
     compute_bundle_aggression_bonus,
     compute_bundle_risk_penalties,
     compute_cluster_quality_adjustment,
     compute_continuation_quality_adjustment,
     compute_confidence_adjustment,
+    compute_evidence_quality_penalties,
     compute_early_signal_bonus,
     compute_onchain_core,
     compute_rug_penalty,
@@ -84,6 +86,8 @@ def score_token(
     rug = compute_rug_penalty(token_ctx, settings)
     spam = compute_spam_penalty(token_ctx, settings)
     conf = compute_confidence_adjustment(token_ctx, settings)
+    evidence_quality = derive_evidence_quality(token_ctx)
+    evidence_penalties = compute_evidence_quality_penalties(token_ctx, settings, evidence_quality)
 
     confidence_adjustment = float(conf.get("confidence_adjustment") or 0.0) + float(
         x_bonus.get("confidence_adjustment") or 0.0
@@ -110,6 +114,8 @@ def score_token(
         - float(bundle_risk["retry_manipulation_penalty"])
         - float(rug["rug_penalty"])
         - float(spam["spam_penalty"])
+        - float(evidence_penalties["partial_evidence_penalty"])
+        - float(evidence_penalties["low_confidence_evidence_penalty"])
         + confidence_adjustment
     )
     final_score_pre_wallet = _clamp(base_score)
@@ -147,10 +153,12 @@ def score_token(
         rug,
         spam,
         conf,
+        evidence_penalties,
     ):
         flags.update(part.get("flags", []))
         warnings.update(part.get("warnings", []))
     warnings.update(routed.get("route_warnings", []))
+    warnings.update(evidence_quality.get("evidence_quality_warnings", []))
 
     scored_at_value = _resolve_scored_at(token_ctx, scored_at)
     wallet_adjustment = build_wallet_adjustment_compat(wallet_weighting)
@@ -185,6 +193,14 @@ def score_token(
         "rug_penalty": round(float(rug["rug_penalty"]), 4),
         "spam_penalty": round(float(spam["spam_penalty"]), 4),
         "confidence_adjustment": round(confidence_adjustment, 4),
+        "evidence_quality_score": round(float(evidence_quality["evidence_quality_score"]), 4),
+        "evidence_conflict_flag": bool(evidence_quality["evidence_conflict_flag"]),
+        "partial_evidence_flag": bool(evidence_quality["partial_evidence_flag"]),
+        "evidence_coverage_ratio": round(float(evidence_quality["evidence_coverage_ratio"]), 4),
+        "evidence_available": list(evidence_quality["evidence_available"]),
+        "evidence_scores": dict(evidence_quality["evidence_scores"]),
+        "partial_evidence_penalty": round(float(evidence_penalties["partial_evidence_penalty"]), 4),
+        "low_confidence_evidence_penalty": round(float(evidence_penalties["low_confidence_evidence_penalty"]), 4),
         "wallet_adjustment": wallet_adjustment,
         "wallet_weighting_mode": wallet_weighting["wallet_weighting_mode"],
         "wallet_weighting_effective_mode": wallet_weighting["wallet_weighting_effective_mode"],

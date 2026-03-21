@@ -21,9 +21,14 @@ Precedence:
 
 ## Sizing logic
 
-`recommended_position_pct = ENTRY_MAX_BASE_POSITION_PCT * entry_confidence`
+`recommended_position_pct = ENTRY_MAX_BASE_POSITION_PCT * entry_confidence` remains the legacy-compatible raw recommendation.
 
-Then multipliers are applied:
+The entry layer now immediately feeds that base size into the canonical evidence sizing engine:
+
+- `base_position_pct == recommended_position_pct` on the entry path
+- `effective_position_pct` becomes the executable size after evidence-weighted reductions
+
+Legacy entry-side reductions still shape the base recommendation before evidence weighting:
 
 - degraded X: `ENTRY_DEGRADED_X_SIZE_MULTIPLIER`
 - partial enrichment/rug data: `ENTRY_PARTIAL_DATA_SIZE_MULTIPLIER`
@@ -38,6 +43,18 @@ Hard zero:
 - any `IGNORE` decision
 - `rug_verdict=IGNORE`
 - fail-closed mandatory field violations
+
+The emitted entry contract now carries canonical sizing fields such as:
+
+- `base_position_pct`
+- `effective_position_pct`
+- `sizing_multiplier`
+- `sizing_reason_codes`
+- `sizing_confidence`
+- `sizing_origin`
+- `evidence_quality_score`
+- `evidence_conflict_flag`
+- `partial_evidence_flag`
 
 ## Confidence model
 

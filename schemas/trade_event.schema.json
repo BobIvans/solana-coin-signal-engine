@@ -588,6 +588,116 @@
         "string",
         "null"
       ]
+    },
+    "base_position_pct": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "confidence": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "effective_position_pct": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "evidence_available": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence_conflict_flag": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "evidence_coverage_ratio": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "evidence_quality_score": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "evidence_scores": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "partial_evidence_flag": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "sizing_confidence": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "sizing_multiplier": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "sizing_origin": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "sizing_reason_codes": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "sizing_warning": {
+      "type": [
+        "string",
+        "null"
+      ]
     }
   },
   "required": [

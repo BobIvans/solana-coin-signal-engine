@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from trading.entry_sizing import compute_entry_confidence, compute_recommended_position_pct
+from trading.entry_sizing import compute_entry_position_contract
 from trading.entry_snapshot import build_entry_snapshot
 from trading.regime_rules import decide_regime
 from utils.bundle_contract_fields import copy_bundle_contract_fields, copy_linkage_contract_fields
@@ -54,13 +54,8 @@ def decide_entry(token_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
     if result["entry_decision"] not in _ALLOWED_DECISIONS:
         raise ValueError(f"Unhandled entry decision: {result['entry_decision']}")
 
-    result["entry_confidence"] = compute_entry_confidence(token_ctx, result, settings)
-    result["recommended_position_pct"] = compute_recommended_position_pct(token_ctx, result, settings)
+    result.update(compute_entry_position_contract(token_ctx, result, settings))
     result["entry_snapshot"] = build_entry_snapshot(token_ctx)
-
-    if result["entry_decision"] == "IGNORE":
-        result["recommended_position_pct"] = 0.0
-
     return result
 
 

@@ -28,11 +28,14 @@ Failed fills never mutate positions.
 ## Capital rules
 
 - Starting capital from `PAPER_STARTING_CAPITAL_SOL`.
-- Entry notional = `free_capital_sol * recommended_position_pct`.
+- Entry notional = `free_capital_sol * effective_position_pct` when present.
+- Fallback to `recommended_position_pct` is kept only for legacy rows that do not yet carry canonical sizing fields.
 - Duplicate open token positions are rejected.
 - Max open positions enforced via `PAPER_MAX_CONCURRENT_POSITIONS`.
 
 ## Logging contracts
+
+`entry_signal` logs and opened positions now preserve canonical sizing provenance fields such as `base_position_pct`, `effective_position_pct`, `sizing_multiplier`, `sizing_origin`, `sizing_reason_codes`, `sizing_confidence`, `evidence_quality_score`, `evidence_conflict_flag`, and `partial_evidence_flag`.
 
 Append-only logs:
 - `signals.jsonl`

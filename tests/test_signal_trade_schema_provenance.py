@@ -90,3 +90,31 @@ def test_trade_event_schema_origin_enums_are_canonical() -> None:
     assert set(properties['bundle_metric_origin']['enum']) == set(BUNDLE_PROVENANCE_ORIGINS) | {None}
     assert set(properties['cluster_metric_origin']['enum']) == set(CLUSTER_PROVENANCE_ORIGINS) | {None}
     assert set(properties['linkage_metric_origin']['enum']) == set(LINKAGE_PROVENANCE_ORIGINS) | {None}
+
+
+
+def test_signal_and_trade_schemas_expose_sizing_contract_fields() -> None:
+    expected = {
+        "base_position_pct",
+        "effective_position_pct",
+        "sizing_multiplier",
+        "sizing_reason_codes",
+        "sizing_confidence",
+        "sizing_origin",
+        "sizing_warning",
+        "evidence_quality_score",
+        "evidence_conflict_flag",
+        "partial_evidence_flag",
+        "evidence_coverage_ratio",
+        "evidence_available",
+        "evidence_scores",
+    }
+
+    signal_properties = _schema_properties('signal_event.schema.json')
+    trade_properties = _schema_properties('trade_event.schema.json')
+    runtime_properties = _schema_properties('runtime_signal.schema.json')
+
+    for field in expected:
+        assert field in signal_properties
+        assert field in trade_properties
+        assert field in runtime_properties

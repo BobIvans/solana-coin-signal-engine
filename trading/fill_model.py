@@ -35,13 +35,22 @@ def _build_result(requested: float, filled: float, ref_price: float, exec_price:
     }
 
 
+def _effective_entry_position_pct(signal_ctx: dict[str, Any]) -> float:
+    for field in ("effective_position_pct", "recommended_position_pct"):
+        try:
+            value = float(signal_ctx.get(field) or 0.0)
+        except (TypeError, ValueError):
+            value = 0.0
+        if value > 0:
+            return value
+    return 0.0
+
+
 def simulate_entry_fill(signal_ctx: dict[str, Any], market_ctx: dict[str, Any], portfolio_ctx: dict[str, Any], settings: Any) -> dict[str, Any]:
+    free_capital = float(portfolio_ctx.get("free_capital_sol") or 0.0)
     requested = max(
         0.0,
-        min(
-            float(portfolio_ctx.get("free_capital_sol") or 0.0) * float(signal_ctx.get("recommended_position_pct") or 0.0),
-            float(portfolio_ctx.get("free_capital_sol") or 0.0),
-        ),
+        min(free_capital * _effective_entry_position_pct(signal_ctx), free_capital),
     )
     reference_price = float(market_ctx.get("price_usd") or signal_ctx.get("entry_snapshot", {}).get("price_usd") or 0.0)
     order_ctx = {
