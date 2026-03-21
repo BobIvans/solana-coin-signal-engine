@@ -381,3 +381,38 @@ Operational flow must stay temporally honest across runtime, replay, and offline
 - launch-window continuation fields such as `cluster_sell_concentration_120s` and `liquidity_refill_ratio_120s` are not valid late-live exit inputs unless the hold window is still inside the launch boundary or a true `*_now` replacement exists
 - runtime paper trading state must use the canonical `positions` / `portfolio` ledger, with `open_positions` treated only as a compatibility view
 - replay `trades.jsonl` must remain analyzer-usable for closed lifecycle recovery
+
+
+## Market realism additive fields
+
+The repo now treats market-realism metadata as explicit additive honesty fields rather than silent assumptions.
+
+Discovery honesty fields carried on shortlist / discovery candidates include:
+- `discovery_seen_ts`
+- `pair_created_at_ts`
+- `discovery_lag_sec`
+- `discovery_freshness_status`
+- `delayed_launch_window_flag`
+- `first_window_native_visibility`
+
+Transaction-window honesty fields emitted by tx fetchers when launch timing is known include:
+- `tx_first_window_coverage_ratio`
+- `tx_window_truncation_flag`
+- `tx_window_fetch_depth`
+- `tx_window_fetch_pages`
+- `tx_window_status`
+- `tx_window_warning`
+
+Paper-fill realism fields emitted by simulated fills include:
+- `estimated_price_impact_bps`
+- `congestion_stress_multiplier`
+- `effective_slippage_bps`
+- `fill_realism_status`
+
+Token safety helpers expose additive Token-2022 / fee-token markers:
+- `token_program_family`
+- `token_2022_flag`
+- `transfer_fee_detected`
+- `transfer_fee_bps`
+- `token_extension_warning`
+- `sellability_risk_flag`

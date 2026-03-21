@@ -7,9 +7,9 @@ from typing import Any
 
 from trading.friction_model import (
     compute_failed_tx_probability,
+    compute_fill_realism,
     compute_partial_fill_ratio,
     compute_priority_fee_sol,
-    compute_slippage_bps,
 )
 
 
@@ -33,10 +33,11 @@ def _build_result(
     filled_cost_basis_sol: float | None = None,
     execution_assumption: str = "observed_market_price",
     degraded_execution_path: bool = False,
+    realism: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     ratio = 0.0 if requested <= 0 else max(0.0, min((fill_ratio if fill_ratio is not None else filled / requested), 1.0))
     outcome = "failed_fill" if tx_failed else ("full_fill" if ratio >= 0.9999 else "partial_fill")
-    return {
+    output = {
         "requested_notional_sol": requested,
         "filled_notional_sol": 0.0 if tx_failed else filled,
         "fill_ratio": 0.0 if tx_failed else ratio,
@@ -52,6 +53,9 @@ def _build_result(
         "execution_assumption": execution_assumption,
         "degraded_execution_path": bool(degraded_execution_path and not tx_failed),
     }
+    if isinstance(realism, dict):
+        output.update(realism)
+    return output
 
 
 def _effective_entry_position_pct(signal_ctx: dict[str, Any]) -> float:
@@ -97,13 +101,14 @@ def simulate_entry_fill(signal_ctx: dict[str, Any], market_ctx: dict[str, Any], 
         "reference_price_usd": reference_price,
         "entry_confidence": signal_ctx.get("entry_confidence", 1.0),
     }
-    slippage_bps = compute_slippage_bps(order_ctx, market_ctx, settings)
+    realism = compute_fill_realism(order_ctx, market_ctx, settings)
+    slippage_bps = float(realism["effective_slippage_bps"])
     priority_fee_sol = compute_priority_fee_sol(order_ctx, market_ctx, settings)
     fail_prob = compute_failed_tx_probability(order_ctx, market_ctx, settings)
 
     draw = _deterministic_uniform(f"entry|{signal_ctx.get('token_address')}|{requested:.8f}|{reference_price:.12f}")
     if draw < fail_prob or requested <= 0:
-        return _build_result(requested, 0.0, reference_price, 0.0, slippage_bps, priority_fee_sol, True, "simulated_low_liquidity_failure")
+        return _build_result(requested, 0.0, reference_price, 0.0, slippage_bps, priority_fee_sol, True, "simulated_low_liquidity_failure", realism=realism)
 
     partial_ratio = compute_partial_fill_ratio(order_ctx, market_ctx, settings)
     filled = requested * partial_ratio
@@ -118,6 +123,7 @@ def simulate_entry_fill(signal_ctx: dict[str, Any], market_ctx: dict[str, Any], 
         False,
         None,
         fill_ratio=partial_ratio,
+        realism=realism,
     )
 
 
@@ -153,13 +159,14 @@ def simulate_exit_fill(position_ctx: dict[str, Any], exit_ctx: dict[str, Any], m
         "exit_decision": exit_ctx.get("exit_decision"),
         "signal_quality": exit_ctx.get("signal_quality", 1.0),
     }
-    slippage_bps = compute_slippage_bps(order_ctx, market_ctx, settings)
+    realism = compute_fill_realism(order_ctx, market_ctx, settings)
+    slippage_bps = float(realism["effective_slippage_bps"])
     priority_fee_sol = compute_priority_fee_sol(order_ctx, market_ctx, settings)
     fail_prob = compute_failed_tx_probability(order_ctx, market_ctx, settings)
     draw = _deterministic_uniform(f"exit|{position_ctx.get('position_id')}|{requested:.8f}|{reference_price:.12f}")
 
     if draw < fail_prob or requested <= 0:
-        return _build_result(requested, 0.0, reference_price, 0.0, slippage_bps, priority_fee_sol, True, "simulated_exit_failure")
+        return _build_result(requested, 0.0, reference_price, 0.0, slippage_bps, priority_fee_sol, True, "simulated_exit_failure", realism=realism)
 
     partial_ratio = compute_partial_fill_ratio(order_ctx, market_ctx, settings)
     filled_cost_basis = requested * partial_ratio
@@ -181,4 +188,5 @@ def simulate_exit_fill(position_ctx: dict[str, Any], exit_ctx: dict[str, Any], m
         filled_cost_basis_sol=filled_cost_basis,
         execution_assumption=execution_assumption,
         degraded_execution_path=degraded_execution_path,
+        realism=realism,
     )

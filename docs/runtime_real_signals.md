@@ -101,3 +101,8 @@ The smoke script writes outputs under `data/smoke/runtime_signal/` and `runs/run
 ## runtime truth layer
 
 Runtime loading prefers replay-produced `trade_feature_matrix.jsonl` when it exists. Repo-produced `entry_candidates.json`, `entry_events.jsonl`, `scored_tokens.json`, and legacy `trade_feature_matrix.json` remain fallback inputs rather than the canonical truth layer.
+
+
+## Market realism honesty
+
+Runtime and replay-compatible artifacts may now carry explicit market-realism metadata for late discovery, incomplete first-window transaction coverage, realism-aware paper fills, and Token-2022 / transfer-fee safety. These fields are additive warnings and confidence markers; they are meant to prevent runtime and replay layers from presenting partial visibility as if it were native first-window truth.

@@ -12,6 +12,102 @@ from data.tx_lake import load_tx_batch, make_tx_lake_event, write_tx_batch
 from data.tx_normalizer import normalize_tx_batch
 
 
+TOKEN_PROGRAM_LEGACY = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+TOKEN_PROGRAM_2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+
+
+def _iter_extension_candidates(payload: dict[str, Any]) -> list[Any]:
+    candidates: list[Any] = []
+    for value in (
+        payload.get("extensions"),
+        (payload.get("data") or {}).get("parsed", {}).get("info", {}).get("extensions") if isinstance(payload.get("data"), dict) else None,
+        payload.get("token_info", {}).get("extensions") if isinstance(payload.get("token_info"), dict) else None,
+    ):
+        if isinstance(value, list):
+            candidates.extend(value)
+        elif value not in (None, ""):
+            candidates.append(value)
+    return candidates
+
+
+def _extension_name(value: Any) -> str:
+    if isinstance(value, str):
+        return value.strip().lower()
+    if isinstance(value, dict):
+        for key in ("extension", "type", "name"):
+            raw = value.get(key)
+            if raw not in (None, ""):
+                return str(raw).strip().lower()
+    return ""
+
+
+def _find_transfer_fee_bps(value: Any) -> float | None:
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            if str(key).lower() in {"transferfeebasispoints", "feebasispoints", "basispoints", "bps", "transfer_fee_bps"}:
+                try:
+                    return float(nested)
+                except (TypeError, ValueError):
+                    continue
+            found = _find_transfer_fee_bps(nested)
+            if found is not None:
+                return found
+    elif isinstance(value, list):
+        for item in value:
+            found = _find_transfer_fee_bps(item)
+            if found is not None:
+                return found
+    return None
+
+
+def summarize_token_program_safety(
+    account_info: dict[str, Any] | None,
+    *,
+    transfer_fee_sellability_block_bps: float = 300.0,
+) -> dict[str, Any]:
+    payload = account_info if isinstance(account_info, dict) else {}
+    owner = str(payload.get("owner") or "").strip()
+    program_family = "classic_spl" if owner == TOKEN_PROGRAM_LEGACY else ("token_2022" if owner == TOKEN_PROGRAM_2022 else "unknown")
+    token_2022_flag = program_family == "token_2022"
+
+    transfer_fee_detected = False
+    transfer_fee_bps = 0.0
+    extensions = _iter_extension_candidates(payload)
+    for extension in extensions:
+        name = _extension_name(extension)
+        if "transferfee" in name or "transfer_fee" in name:
+            transfer_fee_detected = True
+            found_bps = _find_transfer_fee_bps(extension)
+            if found_bps is not None:
+                transfer_fee_bps = max(transfer_fee_bps, found_bps)
+    if not transfer_fee_detected:
+        found_bps = _find_transfer_fee_bps(payload)
+        if found_bps is not None and found_bps > 0:
+            transfer_fee_detected = True
+            transfer_fee_bps = max(transfer_fee_bps, found_bps)
+
+    if transfer_fee_detected and token_2022_flag:
+        warning = "token_2022_transfer_fee_detected"
+    elif transfer_fee_detected:
+        warning = "transfer_fee_detected"
+    elif token_2022_flag and extensions:
+        warning = "token_2022_extensions_present"
+    elif token_2022_flag:
+        warning = "token_2022_program_detected"
+    else:
+        warning = ""
+
+    sellability_risk_flag = bool(transfer_fee_detected and transfer_fee_bps >= float(transfer_fee_sellability_block_bps or 0.0))
+    return {
+        "token_program_family": program_family,
+        "token_2022_flag": token_2022_flag,
+        "transfer_fee_detected": transfer_fee_detected,
+        "transfer_fee_bps": round(float(transfer_fee_bps), 6),
+        "token_extension_warning": warning,
+        "sellability_risk_flag": sellability_risk_flag,
+    }
+
+
 class SolanaRpcClient:
     def __init__(
         self,
@@ -57,14 +153,28 @@ class SolanaRpcClient:
         return result if isinstance(result, dict) else {"value": {"amount": "0", "decimals": 0, "uiAmount": 0.0}}
 
     def get_token_accounts_by_owner(self, owner: str, mint: str | None = None) -> dict[str, Any]:
-        filt: dict[str, Any] = {"programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"}
         if mint:
-            filt = {"mint": mint}
-        result = self._rpc(
-            "getTokenAccountsByOwner",
-            [owner, filt, {"encoding": "jsonParsed", "commitment": self.commitment}],
-        )
-        return result if isinstance(result, dict) else {"value": []}
+            result = self._rpc(
+                "getTokenAccountsByOwner",
+                [owner, {"mint": mint}, {"encoding": "jsonParsed", "commitment": self.commitment}],
+            )
+            return result if isinstance(result, dict) else {"value": []}
+
+        combined: list[dict[str, Any]] = []
+        seen_pubkeys: set[str] = set()
+        for program_id in (TOKEN_PROGRAM_LEGACY, TOKEN_PROGRAM_2022):
+            result = self._rpc(
+                "getTokenAccountsByOwner",
+                [owner, {"programId": program_id}, {"encoding": "jsonParsed", "commitment": self.commitment}],
+            )
+            for row in result.get("value", []) if isinstance(result, dict) else []:
+                pubkey = str(row.get("pubkey") or "").strip()
+                if pubkey and pubkey in seen_pubkeys:
+                    continue
+                if pubkey:
+                    seen_pubkeys.add(pubkey)
+                combined.append(row)
+        return {"value": combined}
 
     def get_account_info(self, pubkey: str) -> dict[str, Any] | None:
         result = self._rpc("getAccountInfo", [pubkey, {"encoding": "jsonParsed", "commitment": self.commitment}])
@@ -82,10 +192,15 @@ class SolanaRpcClient:
 
     def get_mint_holder_owners(self, mint: str) -> list[str]:
         rows = self.get_program_accounts(
-            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+            TOKEN_PROGRAM_LEGACY,
             filters=[{"dataSize": 165}, {"memcmp": {"offset": 0, "bytes": mint}}],
         )
+        rows_2022 = self.get_program_accounts(
+            TOKEN_PROGRAM_2022,
+            filters=[{"memcmp": {"offset": 0, "bytes": mint}}],
+        )
         owners: list[str] = []
+        rows.extend(rows_2022)
         for row in rows:
             account = row.get("account") if isinstance(row, dict) else None
             data = account.get("data") if isinstance(account, dict) else None
@@ -95,6 +210,10 @@ class SolanaRpcClient:
             if owner and owner not in owners:
                 owners.append(owner)
         return owners
+
+    def inspect_token_mint_safety(self, mint: str, *, account_info: dict[str, Any] | None = None) -> dict[str, Any]:
+        info = account_info if isinstance(account_info, dict) else self.get_account_info(mint)
+        return summarize_token_program_safety(info)
 
     def _finalize_tx_response(
         self,

@@ -70,6 +70,15 @@ def _safe_ratio(num: int, den: int) -> float:
     return round(num / den, 6)
 
 
+def _safe_float(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _coverage_bucket(ratio: float) -> str:
     if ratio >= 0.85:
         return "high"
@@ -168,6 +177,9 @@ def compute_continuation_metrics(
         available_evidence.append("tx")
         inputs_status["tx"] = "ready"
         tx_has_successful_flow_evidence = _has_successful_tx(txs)
+        tx_window_status = _first_string(token_ctx.get("tx_window_status"))
+        tx_window_warning = _first_string(token_ctx.get("tx_window_warning"))
+        tx_window_coverage_ratio = _safe_float(token_ctx.get("tx_first_window_coverage_ratio"))
         metrics["net_unique_buyers_60s"] = compute_net_unique_buyers_60s(pair_created_ts=pair_ts, txs=txs)
         metrics["liquidity_refill_ratio_120s"] = compute_liquidity_refill_ratio_120s(pair_created_ts=pair_ts, txs=txs)
         metrics["cluster_sell_concentration_120s"] = compute_cluster_sell_concentration_120s(
@@ -181,6 +193,8 @@ def compute_continuation_metrics(
         for field in _TX_METRIC_FIELDS:
             if metrics[field] is not None:
                 metric_sources[field] = "tx"
+        tx_metric_coverage = _safe_ratio(tx_metric_count, len(_TX_METRIC_FIELDS))
+        tx_effective_coverage = tx_metric_coverage if tx_window_coverage_ratio is None else round(min(tx_metric_coverage, max(0.0, min(tx_window_coverage_ratio, 1.0))), 6)
         if not tx_has_successful_flow_evidence:
             warnings.append("tx_evidence_present_but_no_successful_flow_evidence")
             inputs_status["tx"] = "partial"
@@ -190,12 +204,21 @@ def compute_continuation_metrics(
         elif tx_metric_count < len(_TX_METRIC_FIELDS):
             warnings.append("tx_continuation_metrics_partially_resolved")
             inputs_status["tx"] = "partial"
+        if tx_window_status and tx_window_status != "complete_first_window":
+            warnings.append(f"tx_window_{tx_window_status}")
+            inputs_status["tx"] = "partial"
+        if tx_window_warning:
+            warnings.append(tx_window_warning)
+        if tx_window_coverage_ratio is not None and tx_window_coverage_ratio < 0.999999:
+            warnings.append("tx_first_window_coverage_partial")
+            inputs_status["tx"] = "partial"
+        token_ctx["__continuation_tx_effective_coverage_ratio"] = tx_effective_coverage
         events.append(
             {
                 "ts": utc_now_iso(),
                 "event": "continuation_tx_metrics_computed",
                 "token_address": token_ctx.get("token_address"),
-                "coverage_ratio": _safe_ratio(sum(metrics[field] is not None for field in _TX_METRIC_FIELDS), len(_TX_METRIC_FIELDS)),
+                "coverage_ratio": tx_effective_coverage,
             }
         )
     elif txs:
@@ -253,6 +276,9 @@ def compute_continuation_metrics(
 
     present_fields = [field for field, value in metrics.items() if value is not None]
     coverage_ratio = _safe_ratio(len(present_fields), len(SHORT_HORIZON_SIGNAL_FIELDS))
+    tx_effective_coverage = _safe_float(token_ctx.get("__continuation_tx_effective_coverage_ratio"))
+    if tx_effective_coverage is not None:
+        coverage_ratio = round(min(coverage_ratio, max(0.0, min(tx_effective_coverage, 1.0))), 6)
     confidence = _confidence_label(metric_count=len(present_fields), coverage_ratio=coverage_ratio, warnings=warnings)
     origin_key = frozenset(metric_sources[field] for field in present_fields if field in metric_sources)
     metric_origin = _ALLOWED_ORIGINS.get(origin_key, "mixed_evidence" if len(origin_key) > 1 else ("partial" if present_fields else "missing"))

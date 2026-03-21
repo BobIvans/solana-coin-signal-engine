@@ -39,6 +39,9 @@ class Settings:
     DISCOVERY_MAX_AGE_SEC: int
     DISCOVERY_MIN_LIQUIDITY_USD: float
     DISCOVERY_MIN_TXNS_M5: int
+    DISCOVERY_LAG_HONESTY_ENABLED: bool
+    DISCOVERY_NATIVE_WINDOW_SEC: int
+    DISCOVERY_FIRST_WINDOW_SEC: int
 
     LOCAL_OPENCLAW_ONLY: bool
     OPENCLAW_BROWSER_PROFILE: str
@@ -69,6 +72,7 @@ class Settings:
     HELIUS_API_KEY: str
     HELIUS_TX_ADDR_LIMIT: int
     HELIUS_TX_SIG_BATCH: int
+    HELIUS_TX_MAX_PAGES: int
     HELIUS_ENRICH_CACHE_TTL_SEC: int
     SOLANA_RPC_URL: str
     SOLANA_RPC_COMMITMENT: str
@@ -77,6 +81,8 @@ class Settings:
     PROGRAM_ID_MAP_PATH: Path
     ALLOW_LAUNCH_PATH_HEURISTICS_ONLY: bool
     CONTINUATION_ENRICHMENT_ENABLED: bool
+    TX_WINDOW_COVERAGE_ENFORCED: bool
+    TX_WINDOW_FIRST_SEC: int
     CONTINUATION_MIN_TX_WINDOW_COVERAGE: float
     CONTINUATION_MIN_X_EVIDENCE: int
     CONTINUATION_MIN_WALLET_REGISTRY_MATCHES: int
@@ -207,6 +213,11 @@ class Settings:
     PAPER_PARTIAL_FILL_ALLOWED: bool
     PAPER_PARTIAL_FILL_MIN_RATIO: float
     PAPER_SOL_USD_FALLBACK: float
+    FRICTION_MODEL_MODE: str
+    PAPER_AMM_IMPACT_EXPONENT: float
+    CONGESTION_STRESS_ENABLED: bool
+    ENABLE_TOKEN_2022_SAFETY: bool
+    TOKEN_2022_TRANSFER_FEE_SELLABILITY_BPS: int
     PAPER_CONTRACT_VERSION: str
 
     # Post-run analyzer (PR-10)
@@ -361,6 +372,15 @@ def load_settings() -> Settings:
         DISCOVERY_MIN_TXNS_M5=_as_positive_int(
             _get_env(merged, "DISCOVERY_MIN_TXNS_M5", "20"), key="DISCOVERY_MIN_TXNS_M5"
         ),
+        DISCOVERY_LAG_HONESTY_ENABLED=_as_bool(
+            _get_env(merged, "DISCOVERY_LAG_HONESTY_ENABLED", "true"), key="DISCOVERY_LAG_HONESTY_ENABLED"
+        ),
+        DISCOVERY_NATIVE_WINDOW_SEC=_as_positive_int(
+            _get_env(merged, "DISCOVERY_NATIVE_WINDOW_SEC", "15"), key="DISCOVERY_NATIVE_WINDOW_SEC"
+        ),
+        DISCOVERY_FIRST_WINDOW_SEC=_as_positive_int(
+            _get_env(merged, "DISCOVERY_FIRST_WINDOW_SEC", "60"), key="DISCOVERY_FIRST_WINDOW_SEC"
+        ),
         LOCAL_OPENCLAW_ONLY=_as_bool(
             _get_env(merged, "LOCAL_OPENCLAW_ONLY", "true"), key="LOCAL_OPENCLAW_ONLY"
         ),
@@ -449,6 +469,9 @@ def load_settings() -> Settings:
         HELIUS_TX_SIG_BATCH=_as_positive_int(
             _get_env(merged, "HELIUS_TX_SIG_BATCH", "25"), key="HELIUS_TX_SIG_BATCH"
         ),
+        HELIUS_TX_MAX_PAGES=_as_positive_int(
+            _get_env(merged, "HELIUS_TX_MAX_PAGES", "8"), key="HELIUS_TX_MAX_PAGES"
+        ),
         HELIUS_ENRICH_CACHE_TTL_SEC=_as_positive_int(
             _get_env(merged, "HELIUS_ENRICH_CACHE_TTL_SEC", "300"),
             key="HELIUS_ENRICH_CACHE_TTL_SEC",
@@ -476,6 +499,12 @@ def load_settings() -> Settings:
         CONTINUATION_ENRICHMENT_ENABLED=_as_bool(
             _get_env(merged, "CONTINUATION_ENRICHMENT_ENABLED", "true"),
             key="CONTINUATION_ENRICHMENT_ENABLED",
+        ),
+        TX_WINDOW_COVERAGE_ENFORCED=_as_bool(
+            _get_env(merged, "TX_WINDOW_COVERAGE_ENFORCED", "true"), key="TX_WINDOW_COVERAGE_ENFORCED"
+        ),
+        TX_WINDOW_FIRST_SEC=_as_positive_int(
+            _get_env(merged, "TX_WINDOW_FIRST_SEC", "60"), key="TX_WINDOW_FIRST_SEC"
         ),
         CONTINUATION_MIN_TX_WINDOW_COVERAGE=_as_unit_float(
             _get_env(merged, "CONTINUATION_MIN_TX_WINDOW_COVERAGE", "0.4"),
@@ -947,6 +976,23 @@ def load_settings() -> Settings:
         PAPER_SOL_USD_FALLBACK=_as_positive_float(
             _get_env(merged, "PAPER_SOL_USD_FALLBACK", "100.0"),
             key="PAPER_SOL_USD_FALLBACK",
+        ),
+        FRICTION_MODEL_MODE=str(_get_env(merged, "FRICTION_MODEL_MODE", "amm_approx")).strip().lower(),
+        PAPER_AMM_IMPACT_EXPONENT=_as_positive_float(
+            _get_env(merged, "PAPER_AMM_IMPACT_EXPONENT", "1.35"),
+            key="PAPER_AMM_IMPACT_EXPONENT",
+        ),
+        CONGESTION_STRESS_ENABLED=_as_bool(
+            _get_env(merged, "CONGESTION_STRESS_ENABLED", "true"),
+            key="CONGESTION_STRESS_ENABLED",
+        ),
+        ENABLE_TOKEN_2022_SAFETY=_as_bool(
+            _get_env(merged, "ENABLE_TOKEN_2022_SAFETY", "true"),
+            key="ENABLE_TOKEN_2022_SAFETY",
+        ),
+        TOKEN_2022_TRANSFER_FEE_SELLABILITY_BPS=_as_positive_int(
+            _get_env(merged, "TOKEN_2022_TRANSFER_FEE_SELLABILITY_BPS", "300"),
+            key="TOKEN_2022_TRANSFER_FEE_SELLABILITY_BPS",
         ),
         PAPER_CONTRACT_VERSION=str(
             _get_env(merged, "PAPER_CONTRACT_VERSION", "paper_trader_v1")
