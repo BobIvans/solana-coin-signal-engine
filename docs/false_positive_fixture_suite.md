@@ -81,6 +81,8 @@ The smoke script writes:
 - `data/smoke/false_positive_summary.json`
 - `data/smoke/false_positive_summary.md`
 
+The operational acceptance gate includes the score/regime false-positive suites by default so score-layer / execution-layer drift cannot silently bypass release decisions.
+
 ## Test command
 
 ```bash

@@ -324,6 +324,8 @@ These fields remain analysis-only in the analyzer slice layer; they are not muta
 
 Other replay/analyzer matrix columns remain additive and are reported rather than force-dropped.
 
+The operational acceptance gate treats this replay matrix as the canonical analyzer truth layer when it is present; reconstructed closed positions remain a fallback, not the preferred primary source.
+
 ### post_run_summary
 Artifact:
 - `data/processed/post_run_summary.json`

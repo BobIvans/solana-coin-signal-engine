@@ -133,6 +133,24 @@ python scripts/runtime_signal_smoke.py
 
 See `docs/runtime_real_signals.md` for the runtime signal contract and fallback behavior.
 
+## Operational acceptance gate
+
+Branch readiness is now decided by a single operational quality gate rather than ad hoc local spot-checks.
+
+Canonical entrypoints:
+
+```bash
+make acceptance
+# or
+python scripts/acceptance_gate.py
+```
+
+The acceptance gate runs the required contract/schema/provenance checks, continuation + false-positive safety suites, runtime/replay integrity suites, analyzer slices + analyzer matrix truth-layer checks, evidence-weighted sizing checks, and deterministic smoke scripts in one place.
+
+Acceptance is intentionally stricter than “a few tests are green”. It should answer one question clearly: is this branch actually ready for `shadow`, or are a few isolated checks green while operational drift is still present?
+
+See `docs/release_readiness_checklist.md` for the formal release checklist and promotion flow.
+
 ## PR-RISK-2 evidence-weighted sizing
 
 PR-RISK-2 adds a conservative evidence-weighted sizing layer on top of the existing mode-policy and degraded-X sizing rules.
