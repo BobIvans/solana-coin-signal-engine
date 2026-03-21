@@ -78,6 +78,16 @@ def is_x_cooldown_active(state: dict, now: datetime | None = None) -> bool:
         return False
     return now < parsed
 
+def get_x_cooldown_state(state: dict, now: datetime | None = None) -> dict[str, Any]:
+    x_state = dict(state.get("cooldowns", {}).get("x", {}) or {})
+    return {
+        "active": is_x_cooldown_active(state, now),
+        "active_until": x_state.get("active_until"),
+        "active_type": x_state.get("active_type"),
+        "last_error_type": x_state.get("last_error_type"),
+        "last_error_at": x_state.get("last_error_at"),
+    }
+
 
 def resolve_degraded_x_policy(mode: str, config: dict) -> str:
     if mode == "constrained_paper":

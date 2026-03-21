@@ -7,6 +7,7 @@ import argparse
 import json
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -361,6 +362,58 @@ def _runtime_market_state_cache(state: dict[str, Any]) -> dict[str, dict[str, An
     return state.setdefault("runtime_market_state_cache", {})
 
 
+def _parse_runtime_ts(raw: Any) -> datetime | None:
+    if raw in (None, ""):
+        return None
+    try:
+        return datetime.fromisoformat(str(raw).replace("Z", "+00:00")).astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def _cached_age_sec(entry: dict[str, Any], *, now: datetime) -> float:
+    parsed = _parse_runtime_ts(entry.get("cached_at"))
+    if parsed is None:
+        return float("inf")
+    return max((now - parsed).total_seconds(), 0.0)
+
+
+def _collect_watchlist_runtime_tokens(state: dict[str, Any]) -> set[str]:
+    tokens: set[str] = set()
+    for key in ("watchlist", "active_watchlist", "pending_watchlist", "watchlist_tokens", "runtime_watchlist"):
+        value = state.get(key)
+        if isinstance(value, dict):
+            iterable = value.values()
+        elif isinstance(value, list):
+            iterable = value
+        else:
+            continue
+        for item in iterable:
+            if isinstance(item, dict):
+                token = str(item.get("token_address") or item.get("mint") or "").strip()
+            else:
+                token = str(item or "").strip()
+            if token:
+                tokens.add(token)
+    return tokens
+
+
+def _collect_live_runtime_tokens(state: dict[str, Any], market_states: list[dict[str, Any]]) -> set[str]:
+    live_tokens = {str(market.get("token_address") or "").strip() for market in market_states if str(market.get("token_address") or "").strip()}
+    live_tokens.update(str(position.get("token_address") or "").strip() for position in _state_open_positions(state) if str(position.get("token_address") or "").strip())
+    live_tokens.update(_collect_watchlist_runtime_tokens(state))
+    return live_tokens
+
+
+def _refresh_runtime_market_cache_metrics(state: dict[str, Any], *, pruned_count: int = 0) -> None:
+    runtime_metrics = state.setdefault("runtime_metrics", {})
+    cache = _runtime_market_state_cache(state)
+    pinned_tokens = {str(position.get("token_address") or "").strip() for position in _state_open_positions(state) if str(position.get("token_address") or "").strip()}
+    runtime_metrics["runtime_market_cache_size"] = len(cache)
+    runtime_metrics["runtime_market_cache_pinned_count"] = len(pinned_tokens & set(cache.keys()))
+    runtime_metrics["runtime_market_cache_pruned_count"] = int(runtime_metrics.get("runtime_market_cache_pruned_count", 0) or 0) + int(pruned_count or 0)
+
+
 def _update_runtime_market_state_cache(state: dict[str, Any], market_states: list[dict[str, Any]]) -> None:
     cache = _runtime_market_state_cache(state)
     for market in market_states:
@@ -368,6 +421,74 @@ def _update_runtime_market_state_cache(state: dict[str, Any], market_states: lis
         if not token:
             continue
         cache[token] = {**dict(market), "cached_at": str(market.get("now_ts") or utc_now_iso())}
+    _refresh_runtime_market_cache_metrics(state)
+
+
+def _prune_runtime_market_state_cache(
+    state: dict[str, Any],
+    market_states: list[dict[str, Any]],
+    *,
+    event_log: Path | None = None,
+    max_cache_age_sec: int = 21_600,
+    max_cache_entries: int = 512,
+) -> dict[str, Any]:
+    cache = _runtime_market_state_cache(state)
+    now = datetime.now(timezone.utc)
+    open_position_tokens = {str(position.get("token_address") or "").strip() for position in _state_open_positions(state) if str(position.get("token_address") or "").strip()}
+    live_tokens = _collect_live_runtime_tokens(state, market_states)
+    protected_tokens = live_tokens | open_position_tokens
+    removed_tokens: list[str] = []
+
+    ttl = max(int(max_cache_age_sec or 0), 0)
+    cap = max(int(max_cache_entries or 0), 0)
+
+    for token, entry in list(cache.items()):
+        if token in open_position_tokens:
+            continue
+        age_sec = _cached_age_sec(entry if isinstance(entry, dict) else {}, now=now)
+        if token not in protected_tokens and (ttl == 0 or age_sec > ttl):
+            cache.pop(token, None)
+            removed_tokens.append(token)
+
+    removable_candidates = []
+    if cap > 0 and len(cache) > cap:
+        for token, entry in cache.items():
+            if token in open_position_tokens or token in live_tokens:
+                continue
+            removable_candidates.append((token, _cached_age_sec(entry if isinstance(entry, dict) else {}, now=now)))
+        removable_candidates.sort(key=lambda item: item[1], reverse=True)
+        overflow = max(len(cache) - cap, 0)
+        for token, _age_sec in removable_candidates[:overflow]:
+            if token in cache:
+                cache.pop(token, None)
+                removed_tokens.append(token)
+
+    removed_tokens = list(dict.fromkeys(removed_tokens))
+    _refresh_runtime_market_cache_metrics(state, pruned_count=len(removed_tokens))
+    summary = {
+        "runtime_market_cache_pruned_count": len(removed_tokens),
+        "runtime_market_cache_size": len(cache),
+        "runtime_market_cache_pinned_count": state.get("runtime_metrics", {}).get("runtime_market_cache_pinned_count", 0),
+        "max_cache_age_sec": ttl,
+        "max_cache_entries": cap,
+        "removed_tokens": removed_tokens,
+    }
+    if event_log is not None and removed_tokens:
+        _append_run_artifact(event_log, {"ts": utc_now_iso(), "event": "runtime_market_cache_pruned", **summary})
+    if event_log is not None:
+        _append_run_artifact(
+            event_log,
+            {
+                "ts": utc_now_iso(),
+                "event": "runtime_market_cache_prune_summary",
+                "runtime_market_cache_size": summary["runtime_market_cache_size"],
+                "runtime_market_cache_pinned_count": summary["runtime_market_cache_pinned_count"],
+                "runtime_market_cache_pruned_count": summary["runtime_market_cache_pruned_count"],
+                "max_cache_age_sec": ttl,
+                "max_cache_entries": cap,
+            },
+        )
+    return summary
 
 
 def _classify_fallback_status(current: dict[str, Any]) -> tuple[str, float, str]:
@@ -608,6 +729,13 @@ def main() -> int:
 
         market_states = _build_market_states(signals)
         _update_runtime_market_state_cache(state, market_states)
+        _prune_runtime_market_state_cache(
+            state,
+            market_states,
+            event_log=event_log,
+            max_cache_age_sec=int(cfg.get("runtime", {}).get("runtime_market_cache_ttl_sec", 21_600) or 21_600),
+            max_cache_entries=int(cfg.get("runtime", {}).get("runtime_market_cache_max_entries", 512) or 512),
+        )
         for signal in signals:
             token_address = str(signal.get("token_address") or "").strip()
             if not token_address:
@@ -803,6 +931,7 @@ def main() -> int:
         "pnl_pct_today": state.get("counters", {}).get("pnl_pct_today", 0.0),
         "consecutive_losses": state.get("consecutive_losses", 0),
         "x_cooldown_active": is_x_cooldown_active(state),
+        "x_cooldown_skip_count": runtime_metrics.get("x_cooldown_skip_count", 0),
         "degraded_x_budget_active": degraded_x_guard.get("budget_exhausted", False),
         "total_opened": total_opened,
         "total_rejected": total_rejected,
@@ -811,6 +940,10 @@ def main() -> int:
         "runtime_current_state_fallback_count": runtime_metrics.get("runtime_current_state_fallback_count", 0),
         "runtime_current_state_stale_count": runtime_metrics.get("runtime_current_state_stale_count", 0),
         "runtime_current_state_refresh_failed_count": runtime_metrics.get("runtime_current_state_refresh_failed_count", 0),
+        "runtime_market_cache_pruned_count": runtime_metrics.get("runtime_market_cache_pruned_count", 0),
+        "runtime_market_cache_size": runtime_metrics.get("runtime_market_cache_size", len(_runtime_market_state_cache(state))),
+        "runtime_market_cache_pinned_count": runtime_metrics.get("runtime_market_cache_pinned_count", 0),
+        "http_session_enabled": True,
         "degraded_x_entries_attempted": degraded_x_runtime.get("degraded_entries_attempted", 0),
         "degraded_x_entries_opened": degraded_x_runtime.get("degraded_entries_opened", 0),
         "degraded_x_entries_blocked": degraded_x_runtime.get("degraded_entries_blocked", 0),

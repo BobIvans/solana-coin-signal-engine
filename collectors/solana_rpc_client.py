@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from urllib.error import URLError
-from urllib.request import Request, urlopen
+
+import requests
 
 from data.tx_cache_policy import resolve_tx_fetch_mode
 from data.tx_lake import load_tx_batch, make_tx_lake_event, write_tx_batch
@@ -14,6 +14,45 @@ from data.tx_normalizer import normalize_tx_batch
 
 TOKEN_PROGRAM_LEGACY = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 TOKEN_PROGRAM_2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+
+
+_DEFAULT_HEADERS = {"Accept": "application/json", "User-Agent": "scse/0.1"}
+
+
+def _build_session(session: Any | None = None) -> Any:
+    if session is not None:
+        return session
+    created = requests.Session()
+    created.headers.update(_DEFAULT_HEADERS)
+    return created
+
+
+def _session_request(session: Any, method: str, url: str, **kwargs: Any) -> Any:
+    request_fn = getattr(session, "request", None)
+    if callable(request_fn):
+        return request_fn(method, url, **kwargs)
+    method_fn = getattr(session, method.lower(), None)
+    if callable(method_fn):
+        return method_fn(url, **kwargs)
+    raise AttributeError(f"session object does not support {method} requests")
+
+
+def _decode_response_json(response: Any) -> Any:
+    if int(getattr(response, "status_code", 0) or 0) != 200:
+        return None
+    try:
+        json_method = getattr(response, "json", None)
+        if callable(json_method):
+            return json_method()
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    text = getattr(response, "text", None)
+    if isinstance(text, str) and text.strip():
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return None
+    return None
 
 
 def _iter_extension_candidates(payload: dict[str, Any]) -> list[Any]:
@@ -114,6 +153,7 @@ class SolanaRpcClient:
         rpc_url: str,
         commitment: str = "confirmed",
         *,
+        session: Any | None = None,
         tx_lake_dir: str | None = None,
         tx_cache_ttl_sec: int = 900,
         stale_tx_cache_ttl_sec: int = 86_400,
@@ -125,21 +165,44 @@ class SolanaRpcClient:
         self.tx_cache_ttl_sec = max(int(tx_cache_ttl_sec or 0), 0)
         self.stale_tx_cache_ttl_sec = max(int(stale_tx_cache_ttl_sec or 0), self.tx_cache_ttl_sec)
         self.allow_stale_tx_cache = bool(allow_stale_tx_cache)
+        self.session = session or requests.Session()
+        if hasattr(self.session, "headers"):
+            self.session.headers.update(
+                {
+                    "Accept": "application/json",
+                    "User-Agent": "scse/0.1",
+                    "Content-Type": "application/json",
+                }
+            )
+
+    def _request_json(
+        self,
+        method: str,
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        json_payload: dict[str, Any] | None = None,
+        timeout: tuple[int, int] = (3, 15),
+    ) -> Any:
+        try:
+            if method.upper() == "POST":
+                response = self.session.post(url, json=json_payload, timeout=timeout)
+            else:
+                response = self.session.get(url, params=params, timeout=timeout)
+        except Exception:
+            return None
+
+        if getattr(response, "status_code", 0) != 200:
+            return None
+
+        try:
+            return response.json()
+        except Exception:
+            return None
 
     def _rpc(self, method: str, params: list[Any]) -> Any:
         payload = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
-        req = Request(
-            self.rpc_url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "Accept": "application/json", "User-Agent": "scse/0.1"},
-            method="POST",
-        )
-        try:
-            with urlopen(req, timeout=15) as response:
-                data = json.loads(response.read().decode("utf-8"))
-        except (URLError, TimeoutError, json.JSONDecodeError):
-            return None
-
+        data = self._request_json("POST", self.rpc_url, json_payload=payload, timeout=(3, 15))
         if not isinstance(data, dict) or data.get("error"):
             return None
         return data.get("result")

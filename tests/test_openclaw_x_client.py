@@ -105,3 +105,64 @@ def test_fetch_x_snapshots_registers_soft_ban_cooldown(monkeypatch, tmp_path):
     assert len(snapshots) == 2
     assert state["cooldowns"]["x"]["active_type"] == "soft_ban"
     assert any(snapshot.get("cooldown_event", {}).get("type") == "soft_ban" for snapshot in snapshots)
+
+
+
+def test_fetch_x_snapshots_short_circuits_when_cooldown_active(monkeypatch, tmp_path):
+    monkeypatch.setattr(client, "load_settings", lambda: _settings(tmp_path))
+    monkeypatch.setattr(x_query_builder, "build_queries", lambda token: [
+        {"query": "q1", "query_type": "symbol", "normalized_query": "q1"},
+        {"query": "q2", "query_type": "contract", "normalized_query": "q2"},
+    ])
+
+    called = {"workers": 0, "fetches": 0}
+
+    class FailExecutor:
+        def __init__(self, *args, **kwargs):
+            called["workers"] += 1
+            raise AssertionError("thread pool should not start during cooldown")
+
+    def fail_fetch_single_query(query_obj):
+        called["fetches"] += 1
+        raise AssertionError("fetch_single_query should not be called during cooldown")
+
+    monkeypatch.setattr(client, "ThreadPoolExecutor", FailExecutor)
+    monkeypatch.setattr(client, "fetch_single_query", fail_fetch_single_query)
+
+    state = {"cooldowns": {"x": {"active_until": "2999-01-01T00:00:00+00:00", "active_type": "soft_ban"}}}
+    config = {"x_protection": {"captcha_cooldown_trigger_count": 2, "captcha_cooldown_minutes": 30, "soft_ban_cooldown_minutes": 30, "timeout_cooldown_trigger_count": 5, "timeout_cooldown_minutes": 15}}
+    snapshots = client.fetch_x_snapshots({"token_address": "tok"}, state=state, config=config)
+
+    assert len(snapshots) == 2
+    assert called["workers"] == 0
+    assert called["fetches"] == 0
+    assert state["runtime_metrics"]["x_cooldown_skip_count"] == 2
+
+
+
+def test_fetch_x_snapshots_returns_degraded_cooldown_snapshots_without_worker_calls(monkeypatch, tmp_path):
+    monkeypatch.setattr(client, "load_settings", lambda: _settings(tmp_path))
+    monkeypatch.setattr(x_query_builder, "build_queries", lambda token: [
+        {"query": "q1", "query_type": "symbol", "normalized_query": "q1"},
+        {"query": "q2", "query_type": "contract", "normalized_query": "q2"},
+        {"query": "q3", "query_type": "name", "normalized_query": "q3"},
+    ])
+    monkeypatch.setattr(client, "fetch_single_query", lambda query_obj: (_ for _ in ()).throw(AssertionError("unexpected worker call")))
+
+    state = {"cooldowns": {"x": {"active_until": "2999-01-01T00:00:00+00:00", "active_type": "timeout"}}}
+    config = {"x_protection": {"captcha_cooldown_trigger_count": 2, "captcha_cooldown_minutes": 30, "soft_ban_cooldown_minutes": 30, "timeout_cooldown_trigger_count": 5, "timeout_cooldown_minutes": 15}}
+    snapshots = client.fetch_x_snapshots({"token_address": "tok"}, state=state, config=config)
+
+    assert len(snapshots) == 3
+    for snapshot in snapshots:
+        assert snapshot["x_status"] == "degraded"
+        assert snapshot["error_code"] == "cooldown_active"
+        assert snapshot["error_detail"] == "x_cooldown_active"
+        assert snapshot["posts_visible"] == 0
+        assert snapshot["cards"] == []
+        assert snapshot["cooldown_active"] is True
+        assert snapshot["cooldown_type"] == "timeout"
+
+    event_log = (tmp_path / "x_validation_events.jsonl").read_text(encoding="utf-8")
+    assert 'x_query_skipped_cooldown' in event_log
+    assert 'x_snapshot_batch_skipped_cooldown' in event_log

@@ -3,6 +3,8 @@ runtime:
   chain: solana
   loop_interval_sec: 30
   seed: 42
+  runtime_market_cache_ttl_sec: 21600
+  runtime_market_cache_max_entries: 512
 
 modes:
   shadow:

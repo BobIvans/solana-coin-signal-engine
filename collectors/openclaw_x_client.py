@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from config.settings import load_settings
-from src.promotion.cooldowns import normalize_x_error_type, register_x_error
+from src.promotion.cooldowns import get_x_cooldown_state, is_x_cooldown_active, normalize_x_error_type, register_x_error
 from utils.cache import cache_get, cache_set
 from utils.clock import utc_now_iso
 from utils.io import append_jsonl
@@ -41,6 +41,38 @@ def classify_x_error(exc: Exception | dict[str, Any] | str) -> str:
 
 def _event(event_path: str, event: str, payload: dict[str, Any]) -> None:
     append_jsonl(event_path, {"ts": utc_now_iso(), "event": event, **payload})
+
+
+def _x_events_path(settings: Any) -> str:
+    return str(settings.PROCESSED_DATA_DIR / "x_validation_events.jsonl")
+
+
+def _cooldown_snapshot(token_address: str, query_obj: dict[str, Any], *, state: dict[str, Any]) -> dict[str, Any]:
+    cooldown = get_x_cooldown_state(state)
+    return {
+        "token_address": token_address,
+        "query": str(query_obj.get("query") or ""),
+        "query_type": str(query_obj.get("query_type") or "unknown"),
+        "fetched_at": utc_now_iso(),
+        "x_status": "degraded",
+        "page_url": "",
+        "posts_visible": 0,
+        "authors_visible": [],
+        "cards": [],
+        "error_code": "cooldown_active",
+        "error_detail": "x_cooldown_active",
+        "cache_hit": False,
+        "cooldown_active": True,
+        "cooldown_type": cooldown.get("active_type"),
+        "cooldown_until": cooldown.get("active_until"),
+    }
+
+
+def _increment_runtime_metric(state: dict[str, Any] | None, key: str, amount: int = 1) -> None:
+    if not isinstance(state, dict):
+        return
+    runtime_metrics = state.setdefault("runtime_metrics", {})
+    runtime_metrics[key] = int(runtime_metrics.get(key, 0) or 0) + int(amount or 0)
 
 
 
@@ -207,15 +239,43 @@ def fetch_x_snapshots(token: dict[str, Any], *, state: dict | None = None, confi
     from collectors.x_query_builder import build_queries
 
     settings = load_settings()
+    events_path = _x_events_path(settings)
     queries = build_queries(token)[: settings.OPENCLAW_X_QUERY_MAX]
     token_address = str(token.get("token_address", "") or "")
     token_queries = [
-        {**q, "token_address": token_address, "events_path": str(settings.PROCESSED_DATA_DIR / "x_validation_events.jsonl")}
+        {**q, "token_address": token_address, "events_path": events_path}
         for q in queries
     ]
 
     operational_state = state if state is not None else token.get("promotion_state")
     operational_config = config if config is not None else token.get("promotion_config")
+
+    if isinstance(operational_state, dict) and isinstance(operational_config, dict) and is_x_cooldown_active(operational_state):
+        cooldown = get_x_cooldown_state(operational_state)
+        snapshots = [_cooldown_snapshot(token_address, query_obj, state=operational_state) for query_obj in token_queries]
+        for query_obj in token_queries:
+            _event(
+                events_path,
+                "x_query_skipped_cooldown",
+                {
+                    "token_address": token_address,
+                    "query_type": query_obj.get("query_type"),
+                    "cooldown_type": cooldown.get("active_type"),
+                    "cooldown_until": cooldown.get("active_until"),
+                },
+            )
+        _event(
+            events_path,
+            "x_snapshot_batch_skipped_cooldown",
+            {
+                "token_address": token_address,
+                "query_count": len(token_queries),
+                "cooldown_type": cooldown.get("active_type"),
+                "cooldown_until": cooldown.get("active_until"),
+            },
+        )
+        _increment_runtime_metric(operational_state, "x_cooldown_skip_count", len(token_queries))
+        return snapshots
 
     max_workers = max(1, int(settings.OPENCLAW_X_TOKEN_MAX_CONCURRENCY or 1))
     snapshots: list[dict[str, Any] | None] = [None] * len(token_queries)

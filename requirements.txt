@@ -4,3 +4,4 @@ tenacity
 cachetools
 
 jsonschema
+requests

@@ -3,7 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from collectors.dexscreener_client import fetch_discovery_pairs, normalize_pair
+from collectors.dexscreener_client import fetch_discovery_pairs, fetch_latest_solana_pairs, normalize_pair
 
 
 def test_normalize_pair_has_required_fields():
@@ -97,3 +97,30 @@ def test_search_feed_is_marked_as_fallback_source_mode():
     )
     assert normalized["discovery_source_mode"] == "fallback_search"
     assert normalized["discovery_source_confidence"] < 0.5
+
+
+class _FakeResponse:
+    def __init__(self, payload, status_code=200):
+        self._payload = payload
+        self.status_code = status_code
+
+    def json(self):
+        return self._payload
+
+
+class _FakeSession:
+    def __init__(self):
+        self.calls = []
+
+    def get(self, url, **kwargs):
+        self.calls.append((url, kwargs))
+        return _FakeResponse({"pairs": [{"pairAddress": "PAIR1"}]})
+
+
+def test_dexscreener_client_uses_session_backed_http_fetch():
+    session = _FakeSession()
+    pairs = fetch_latest_solana_pairs(session=session)
+
+    assert len(pairs) == 1
+    assert session.calls
+    assert session.calls[0][1]["timeout"] == (3, 10)

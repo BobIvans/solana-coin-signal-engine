@@ -10,7 +10,7 @@ from utils.io import read_json, write_json
 
 def _config(tmp_path, *, mode: str = "expanded_paper") -> Path:
     payload = {
-        "runtime": {"mode": mode, "chain": "solana", "loop_interval_sec": 0, "seed": 42},
+        "runtime": {"mode": mode, "chain": "solana", "loop_interval_sec": 0, "seed": 42, "runtime_market_cache_ttl_sec": 60, "runtime_market_cache_max_entries": 32},
         "modes": {
             "shadow": {"open_positions": False, "simulate_entries": True, "simulate_exits": True, "allow_regimes": ["SCALP", "TREND"]},
             "constrained_paper": {"open_positions": True, "max_open_positions": 1, "max_trades_per_day": 10, "position_size_scale": 0.5, "allow_regimes": ["SCALP"], "degraded_x_policy": "watchlist_only"},
@@ -278,3 +278,74 @@ def test_runtime_loop_resume_can_close_open_position_from_refreshed_current_stat
     assert '"event": "paper_buy"' in trades
     assert ('"event": "paper_sell_full"' in trades) or ('"event": "paper_sell_partial"' in trades)
     assert open_positions[0]["remaining_size_sol"] < open_positions[0]["position_size_sol"] or summary["open_positions"] == 0
+
+
+
+def test_runtime_loop_reports_x_cooldown_skip_count(tmp_path):
+    processed = tmp_path / "processed"
+    processed.mkdir(parents=True, exist_ok=True)
+    config_path = _config(tmp_path, mode="expanded_paper")
+    run_id = "runtime_skip_counter"
+    session_state_path = tmp_path / "runs" / run_id / "session_state.json"
+    session_state_path.parent.mkdir(parents=True, exist_ok=True)
+    session_state_path.write_text(json.dumps({
+        "positions": [],
+        "open_positions": [],
+        "portfolio": {},
+        "counters": {"trades_today": 0, "pnl_pct_today": 0.0},
+        "cooldowns": {"x": {"active_until": "2999-01-01T00:00:00+00:00", "active_type": "soft_ban"}},
+        "runtime_metrics": {"x_cooldown_skip_count": 4},
+        "resume_origin": "resume",
+    }), encoding="utf-8")
+
+    result = subprocess.run([
+        sys.executable,
+        "scripts/run_promotion_loop.py",
+        "--config",
+        str(config_path),
+        "--mode",
+        "expanded_paper",
+        "--run-id",
+        run_id,
+        "--max-loops",
+        "1",
+        "--signals-dir",
+        str(processed),
+        "--resume",
+    ], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
+
+    summary = read_json(tmp_path / "runs" / run_id / "daily_summary.json", default={})
+    assert summary["x_cooldown_skip_count"] == 4
+    assert summary["http_session_enabled"] is True
+
+
+
+def test_runtime_loop_reports_runtime_market_cache_size(tmp_path):
+    processed = tmp_path / "processed"
+    write_json(
+        processed / "entry_candidates.json",
+        {"tokens": [{"signal_id": "cache_1", "token_address": "SoCache1", "pair_address": "PairCache1", "entry_decision": "SCALP", "regime": "SCALP", "x_status": "healthy", "signal_ts": "2026-03-20T00:00:00+00:00", "recommended_position_pct": 0.3}]},
+    )
+    config_path = _config(tmp_path, mode="expanded_paper")
+    run_id = "runtime_cache_size_summary"
+    result = subprocess.run([
+        sys.executable,
+        "scripts/run_promotion_loop.py",
+        "--config",
+        str(config_path),
+        "--mode",
+        "expanded_paper",
+        "--run-id",
+        run_id,
+        "--max-loops",
+        "1",
+        "--signals-dir",
+        str(processed),
+    ], capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
+
+    summary = read_json(tmp_path / "runs" / run_id / "daily_summary.json", default={})
+    assert "runtime_market_cache_size" in summary
+    assert summary["runtime_market_cache_size"] >= 0
+    assert "runtime_market_cache_pinned_count" in summary

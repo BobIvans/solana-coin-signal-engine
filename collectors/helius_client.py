@@ -5,14 +5,51 @@ from __future__ import annotations
 import hashlib
 import json
 from typing import Any
-from urllib.error import URLError
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+
+import requests
 
 from data.tx_cache_policy import classify_tx_batch_freshness, resolve_tx_fetch_mode
 from data.tx_lake import load_tx_batch, make_tx_lake_event, write_tx_batch
 from data.tx_normalizer import normalize_tx_batch
 
+
+_DEFAULT_HEADERS = {"Accept": "application/json", "User-Agent": "scse/0.1"}
+
+
+def _build_session(session: Any | None = None) -> Any:
+    if session is not None:
+        return session
+    created = requests.Session()
+    created.headers.update(_DEFAULT_HEADERS)
+    return created
+
+
+def _session_request(session: Any, method: str, url: str, **kwargs: Any) -> Any:
+    request_fn = getattr(session, "request", None)
+    if callable(request_fn):
+        return request_fn(method, url, **kwargs)
+    method_fn = getattr(session, method.lower(), None)
+    if callable(method_fn):
+        return method_fn(url, **kwargs)
+    raise AttributeError(f"session object does not support {method} requests")
+
+
+def _decode_response_json(response: Any) -> Any:
+    if int(getattr(response, "status_code", 0) or 0) != 200:
+        return None
+    try:
+        json_method = getattr(response, "json", None)
+        if callable(json_method):
+            return json_method()
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    text = getattr(response, "text", None)
+    if isinstance(text, str) and text.strip():
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return None
+    return None
 
 
 def _clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
@@ -111,6 +148,7 @@ class HeliusClient:
         self,
         api_key: str,
         *,
+        session: Any | None = None,
         tx_lake_dir: str | None = None,
         tx_cache_ttl_sec: int = 900,
         stale_tx_cache_ttl_sec: int = 86_400,
@@ -123,45 +161,68 @@ class HeliusClient:
         self.tx_cache_ttl_sec = max(int(tx_cache_ttl_sec or 0), 0)
         self.stale_tx_cache_ttl_sec = max(int(stale_tx_cache_ttl_sec or 0), self.tx_cache_ttl_sec)
         self.allow_stale_tx_cache = bool(allow_stale_tx_cache)
+        self.session = session or requests.Session()
+        if hasattr(self.session, "headers"):
+            self.session.headers.update(
+                {
+                    "Accept": "application/json",
+                    "User-Agent": "scse/0.1",
+                    "Content-Type": "application/json",
+                }
+            )
 
     def _rpc(self, method: str, params: list[Any]) -> Any:
         payload = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
-        req = Request(
-            self.rpc_url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "Accept": "application/json", "User-Agent": "scse/0.1"},
-            method="POST",
-        )
         try:
-            with urlopen(req, timeout=15) as response:
-                data = json.loads(response.read().decode("utf-8"))
-        except (URLError, TimeoutError, json.JSONDecodeError):
+            response = self.session.post(self.rpc_url, json=payload, timeout=(3, 15))
+        except Exception:
+            return None
+
+        if getattr(response, "status_code", 0) != 200:
+            return None
+
+        try:
+            data = response.json()
+        except Exception:
             return None
 
         if not isinstance(data, dict) or data.get("error"):
             return None
         return data.get("result")
-
     def _get(self, endpoint: str, params: dict[str, Any]) -> Any:
-        qs = urlencode({**params, "api-key": self.api_key})
-        req = Request(f"{self.base_url}/{endpoint}?{qs}", headers={"Accept": "application/json", "User-Agent": "scse/0.1"})
         try:
-            with urlopen(req, timeout=15) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except (URLError, TimeoutError, json.JSONDecodeError):
+            response = self.session.get(
+                f"{self.base_url}/{endpoint}",
+                params={**params, "api-key": self.api_key},
+                timeout=(3, 15),
+            )
+        except Exception:
+            return None
+
+        if getattr(response, "status_code", 0) != 200:
+            return None
+
+        try:
+            return response.json()
+        except Exception:
             return None
 
     def _post(self, endpoint: str, payload: dict[str, Any]) -> Any:
-        req = Request(
-            f"{self.base_url}/{endpoint}?api-key={self.api_key}",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "Accept": "application/json", "User-Agent": "scse/0.1"},
-            method="POST",
-        )
         try:
-            with urlopen(req, timeout=20) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except (URLError, TimeoutError, json.JSONDecodeError):
+            response = self.session.post(
+                f"{self.base_url}/{endpoint}?api-key={self.api_key}",
+                json=payload,
+                timeout=(3, 20),
+            )
+        except Exception:
+            return None
+
+        if getattr(response, "status_code", 0) != 200:
+            return None
+
+        try:
+            return response.json()
+        except Exception:
             return None
 
     def get_asset(self, mint: str) -> dict[str, Any]:
