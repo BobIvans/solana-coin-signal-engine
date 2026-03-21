@@ -48,7 +48,7 @@ def test_route_downgrade_on_degraded_x(monkeypatch):
     assert out["downgraded"] is True
 
 
-def test_route_partial_evidence_near_watch_threshold_gets_review_watchlist(monkeypatch):
+def test_route_partial_evidence_review_uses_review_only_score_basis(monkeypatch):
     monkeypatch.setenv("UNIFIED_SCORE_ENTRY_THRESHOLD", "82")
     monkeypatch.setenv("UNIFIED_SCORE_WATCH_THRESHOLD", "68")
     monkeypatch.setenv("UNIFIED_SCORE_PARTIAL_REVIEW_BUFFER", "1.0")
@@ -60,12 +60,15 @@ def test_route_partial_evidence_near_watch_threshold_gets_review_watchlist(monke
         "rug_status": "ok",
         "continuation_status": "ok",
     }
-    out = route_score(token, {"final_score": 67.5, "heuristic_ratio": 0.2}, settings)
+    out = route_score(
+        token,
+        {"final_score": 66.2, "partial_review_score": 67.4, "heuristic_ratio": 0.2},
+        settings,
+    )
 
     assert out["regime_candidate"] == "WATCHLIST"
     assert out["hard_override"] is False
     assert "watchlist_partial_evidence_review" in out["route_warnings"]
-
 
 
 def test_route_partial_evidence_review_does_not_bypass_hard_blockers(monkeypatch):
@@ -79,7 +82,7 @@ def test_route_partial_evidence_review_does_not_bypass_hard_blockers(monkeypatch
         "enrichment_status": "partial",
         "rug_verdict": "IGNORE",
     }
-    out = route_score(token, {"final_score": 67.5, "heuristic_ratio": 0.2}, settings)
+    out = route_score(token, {"final_score": 67.5, "partial_review_score": 68.5, "heuristic_ratio": 0.2}, settings)
 
     assert out["regime_candidate"] == "IGNORE"
     assert "watchlist_partial_evidence_review" not in out["route_warnings"]

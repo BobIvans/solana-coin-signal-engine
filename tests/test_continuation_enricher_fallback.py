@@ -117,4 +117,6 @@ def test_all_failed_txs_leave_transfer_metrics_unresolved():
     assert result["cluster_sell_concentration_120s"] is None
     assert result["seller_reentry_ratio"] is None
     assert result["continuation_status"] == "partial"
-    assert result["continuation_inputs_status"]["tx"] == "ready"
+    assert result["continuation_inputs_status"]["tx"] == "partial"
+    assert "tx" in result["continuation_available_evidence"]
+    assert "tx_evidence_present_but_no_successful_flow_evidence" in result["continuation_warnings"]

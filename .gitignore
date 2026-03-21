@@ -6,3 +6,7 @@ data/processed/entry_candidates.json
 data/smoke/linkage_events.jsonl
 data/smoke/linkage_score.smoke.json
 data/smoke/linkage_status.json
+*.rej
+FETCH_HEAD
+pr-*.patch
+pr-*-git.patch

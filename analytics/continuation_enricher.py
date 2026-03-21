@@ -60,6 +60,10 @@ def _is_snapshot(snapshot: Any) -> bool:
     return isinstance(snapshot, dict)
 
 
+def _has_successful_tx(txs: list[dict[str, Any]]) -> bool:
+    return any(isinstance(tx, dict) and tx.get("success") is True for tx in txs)
+
+
 def _safe_ratio(num: int, den: int) -> float:
     if den <= 0:
         return 0.0
@@ -163,6 +167,7 @@ def compute_continuation_metrics(
     if pair_ts > 0 and txs:
         available_evidence.append("tx")
         inputs_status["tx"] = "ready"
+        tx_has_successful_flow_evidence = _has_successful_tx(txs)
         metrics["net_unique_buyers_60s"] = compute_net_unique_buyers_60s(pair_created_ts=pair_ts, txs=txs)
         metrics["liquidity_refill_ratio_120s"] = compute_liquidity_refill_ratio_120s(pair_created_ts=pair_ts, txs=txs)
         metrics["cluster_sell_concentration_120s"] = compute_cluster_sell_concentration_120s(
@@ -176,6 +181,9 @@ def compute_continuation_metrics(
         for field in _TX_METRIC_FIELDS:
             if metrics[field] is not None:
                 metric_sources[field] = "tx"
+        if not tx_has_successful_flow_evidence:
+            warnings.append("tx_evidence_present_but_no_successful_flow_evidence")
+            inputs_status["tx"] = "partial"
         if tx_metric_count == 0:
             warnings.append("tx_evidence_present_but_continuation_metrics_unresolved")
             inputs_status["tx"] = "partial"

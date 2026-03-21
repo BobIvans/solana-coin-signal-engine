@@ -5,7 +5,12 @@ FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 if str(FIXTURES_DIR) not in sys.path:
     sys.path.insert(0, str(FIXTURES_DIR))
 
-from false_positive_cases import get_false_positive_case, list_false_positive_cases, score_false_positive_case
+from false_positive_cases import (
+    evaluate_false_positive_entry,
+    get_false_positive_case,
+    list_false_positive_cases,
+    score_false_positive_case,
+)
 
 _REQUIRED_CASES = {
     "single_cluster_fake_strength",
@@ -46,9 +51,11 @@ def test_false_positive_score_expectations():
             assert scored["regime_candidate"] == expected["regime_candidate"]
 
 
-def test_partial_evidence_false_confidence_remains_watchlist_at_score_layer():
+def test_partial_evidence_false_confidence_keeps_watchlist_score_but_blocks_entry():
     case = get_false_positive_case("partial_evidence_false_confidence")
     scored = score_false_positive_case("partial_evidence_false_confidence")
+    entry = evaluate_false_positive_entry("partial_evidence_false_confidence", scored=scored)
 
     assert scored["regime_candidate"] == case["expected_score_signals"]["regime_candidate"]
     assert "watchlist_partial_evidence_review" in scored.get("score_warnings", [])
+    assert entry["entry_decision"] == "IGNORE"
