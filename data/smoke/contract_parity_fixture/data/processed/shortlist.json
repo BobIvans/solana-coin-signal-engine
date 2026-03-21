@@ -1,0 +1,10 @@
+{
+  "contract_version": "shortlist_v_smoke",
+  "tokens": [
+    {
+      "liquidity_usd": 22000,
+      "symbol": "SMK",
+      "token_address": "mint-smoke-1"
+    }
+  ]
+}

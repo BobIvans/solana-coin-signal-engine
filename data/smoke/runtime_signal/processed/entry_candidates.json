@@ -1,0 +1,61 @@
+{
+  "contract_version": "runtime_signal_smoke_v1",
+  "generated_at": "2026-03-21T15:49:05Z",
+  "tokens": [
+    {
+      "entry_confidence": 0.82,
+      "entry_decision": "SCALP",
+      "entry_flags": [
+        "smoke_fixture"
+      ],
+      "entry_reason": "smoke_fixture_valid_entry",
+      "entry_snapshot": {
+        "price_usd": 1.23
+      },
+      "pair_address": "pair_smoke_valid",
+      "recommended_position_pct": 0.42,
+      "regime": "SCALP",
+      "regime_blockers": [],
+      "regime_confidence": 0.81,
+      "signal_id": "smoke_valid_entry",
+      "signal_ts": "2026-03-21T15:49:05Z",
+      "symbol": "SMOKE",
+      "token_address": "So11111111111111111111111111111111111111112",
+      "x_status": "healthy"
+    },
+    {
+      "entry_confidence": 0.76,
+      "entry_decision": "TREND",
+      "entry_flags": [
+        "smoke_fixture",
+        "x_degraded_size_reduced"
+      ],
+      "entry_reason": "smoke_fixture_degraded_x",
+      "entry_snapshot": {
+        "price_usd": 0.77
+      },
+      "pair_address": "pair_smoke_degraded",
+      "recommended_position_pct": 0.36,
+      "regime": "TREND",
+      "regime_blockers": [],
+      "regime_confidence": 0.74,
+      "signal_id": "smoke_degraded_x",
+      "signal_ts": "2026-03-21T15:49:05Z",
+      "symbol": "SMKX",
+      "token_address": "So22222222222222222222222222222222222222222",
+      "x_status": "degraded"
+    },
+    {
+      "entry_confidence": 0.7,
+      "entry_decision": "SCALP",
+      "entry_reason": "missing_token",
+      "recommended_position_pct": 0.25,
+      "regime": "UNKNOWN",
+      "regime_confidence": 0.4,
+      "signal_id": "smoke_invalid_row",
+      "signal_ts": "2026-03-21T15:49:05Z",
+      "token_address": "",
+      "x_status": "healthy"
+    }
+  ]
+}

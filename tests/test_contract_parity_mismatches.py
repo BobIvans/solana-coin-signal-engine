@@ -92,6 +92,15 @@ def _build_repo_fixture(root: Path) -> None:
                     "x_author_velocity_5m": 1.1,
                     "seller_reentry_ratio": 0.35,
                     "liquidity_shock_recovery_sec": 42,
+                "wallet_weighting_requested_mode": "off",
+                "wallet_weighting_effective_mode": "off",
+                "replay_score_source": "generic_scored_artifact_rescored",
+                "wallet_mode_parity_status": "comparable",
+                "historical_input_hash": "hash123",
+                "score_contract_version": "score_contract.v1",
+                "replay_input_origin": "historical",
+                "replay_data_status": "historical",
+                "replay_resolution_status": "resolved",
                     "continuation_status": "partial",
                     "continuation_warning": "",
                     "continuation_confidence": "medium",
@@ -176,6 +185,7 @@ def _build_repo_fixture(root: Path) -> None:
         root / "trade_feature_matrix.jsonl",
         [
             {
+                "schema_version": "trade_feature_matrix.v1",
                 "position_id": "pos_1",
                 "regime_decision": "SCALP",
                 "expected_hold_class": "seconds_to_minutes",
@@ -223,7 +233,7 @@ def test_contract_parity_mismatch_visibility(tmp_path: Path) -> None:
 
     assert statuses[("core_x_validation", "x_validated")]["status"] == "missing"
     assert statuses[("core_rug_assessed", "rug_assessed_tokens")]["status"] == "malformed"
-    assert statuses[("core_scored", "scored_tokens")]["status"] == "warning"
+    assert statuses[("core_scored", "scored_tokens")]["status"] == "mismatch"
     assert "mystery_score" in statuses[("core_scored", "scored_tokens")]["extra_fields"]
 
     assert report["docs_sync"]["status"] == "mismatch"

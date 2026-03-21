@@ -183,3 +183,22 @@ def test_merge_closed_positions_with_matrix_preserves_legacy_positions_and_skips
     assert len(merged) == 1
     assert merged[0]["regime_decision"] == "TREND"
     assert merged[0]["net_pnl_pct"] == -5.0
+
+
+def test_analyzer_prefers_canonical_matrix_jsonl_path(tmp_path):
+    from analytics.analyzer_matrix import resolve_trade_feature_matrix_path
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "trade_feature_matrix.json").write_text("[]", encoding="utf-8")
+    (run_dir / "trade_feature_matrix.jsonl").write_text("{}\n", encoding="utf-8")
+
+    class _Settings:
+        TRADES_DIR = run_dir
+        SIGNALS_DIR = run_dir
+        POSITIONS_DIR = run_dir
+        PROCESSED_DATA_DIR = run_dir
+
+    resolved = resolve_trade_feature_matrix_path(_Settings())
+    assert resolved is not None
+    assert resolved.name == "trade_feature_matrix.jsonl"

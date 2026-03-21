@@ -1047,6 +1047,7 @@ def run_historical_replay(
         "contract_version": _CONTRACT_VERSION,
         "run_id": run_id,
         "status": "ok",
+        "artifact_truth_layer": "trade_feature_matrix.jsonl",
         "replay_mode": replay_mode,
         "input_origin": input_origin,
         "wallet_weighting": wallet_weighting,
@@ -1072,6 +1073,7 @@ def run_historical_replay(
     }
     manifest = {
         "contract_version": _CONTRACT_VERSION,
+        "artifact_truth_layer": "trade_feature_matrix.jsonl",
         "run_id": run_id,
         "replay_mode": replay_mode,
         "input_origin": input_origin,

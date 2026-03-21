@@ -121,3 +121,7 @@ The smoke path uses fixture-backed replay matrix data, writes offline artifacts,
 ## Historical price context reminder
 
 Offline feature analysis should treat replay price paths as externally collected historical context. Missing or truncated price history must remain explicit in artifacts instead of being reconstructed or silently invented downstream.
+
+## canonical matrix contract
+
+Offline ML and feature-importance workflows should use canonical `trade_feature_matrix.jsonl` rows. Legacy matrix JSON files are compatibility-only inputs for older local fixtures.

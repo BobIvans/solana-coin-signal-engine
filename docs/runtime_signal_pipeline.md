@@ -18,3 +18,7 @@ python scripts/run_runtime_signal_pipeline.py --processed-dir data/processed
 ```
 
 The command writes `runtime_signal_pipeline_manifest.json` with stage statuses, row counts, artifact paths, warnings, and generation metadata.
+
+## canonical input precedence
+
+The runtime signal loader prefers `trade_feature_matrix.jsonl` first, then explicit repo-produced fallback artifacts. This keeps runtime loading aligned with replay and analyzer contracts.

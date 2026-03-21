@@ -23,6 +23,7 @@ def test_historical_replay_reconstructs_resolved_winning_trade(tmp_path):
     row = result["artifacts"].trade_feature_matrix[0]
 
     assert summary["historical_rows_used"] == 1
+    assert summary["artifact_truth_layer"] == "trade_feature_matrix.jsonl"
     assert summary["partial_rows"] == 0
     assert summary["wallet_weighting_requested_mode"] == "off"
     assert summary["replay_score_source"] == "generic_scored_artifact_rescored"

@@ -379,3 +379,13 @@ Fresh replay summary / manifest payloads and replay-emitted signal, trade, and `
 - `tx_batch.contract_version` is part of freshness policy. Cache entries with a contract-version mismatch must be treated as `refresh_required`, even when TTL has not expired.
 - Historical replay price context may be supplied either as standalone `price_paths.json(.l)` artifacts or as embedded `price_paths` arrays inside chain-backfill rows.
 - X provider error taxonomy is canonicalized to `captcha`, `timeout`, `soft_ban`, `login_required`, `error`, with legacy `blocked` normalized before cooldown logic runs.
+
+## canonical artifact truth layer
+
+`trade_feature_matrix.jsonl` is the canonical per-trade truth layer for replay outputs, runtime-compatible signal loading, analyzer inputs, and offline ML.
+
+Operational policy:
+- prefer `trade_feature_matrix.jsonl`
+- allow `trade_feature_matrix.json` only as an explicit legacy fallback for older local fixtures
+- runtime/replay artifacts must keep replay provenance fields aligned with matrix rows
+- schema changes must be reflected in both `schemas/*` and this contract document

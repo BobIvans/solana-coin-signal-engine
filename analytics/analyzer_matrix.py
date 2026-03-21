@@ -9,6 +9,9 @@ from typing import Any
 from analytics.analyzer_correlations import compute_metric_correlations
 from config.settings import Settings
 
+_CANONICAL_MATRIX_FILENAME = "trade_feature_matrix.jsonl"
+_LEGACY_MATRIX_FILENAME = "trade_feature_matrix.json"
+
 _MATRIX_NUMERIC_FIELDS = [
     "regime_confidence",
     "final_score",
@@ -94,7 +97,7 @@ def resolve_trade_feature_matrix_path(settings: Settings) -> Path | None:
         if directory in seen:
             continue
         seen.add(directory)
-        candidate = directory / "trade_feature_matrix.jsonl"
+        candidate = directory / _CANONICAL_MATRIX_FILENAME
         if candidate.exists():
             return candidate
     return None

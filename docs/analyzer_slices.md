@@ -164,3 +164,7 @@ python scripts/analyzer_slices_smoke.py
 ```
 
 This writes smoke artifacts under `data/smoke/` so the richer slice output can be inspected without replaying a full run.
+
+## canonical matrix contract
+
+Analyzer slices are expected to operate on canonical `trade_feature_matrix.jsonl` rows. Legacy JSON fixtures can exist for compatibility, but they are not the preferred operational contract.
