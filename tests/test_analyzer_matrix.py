@@ -204,3 +204,23 @@ def test_analyzer_prefers_canonical_matrix_jsonl_path(tmp_path):
     resolved = resolve_trade_feature_matrix_path(_Settings())
     assert resolved is not None
     assert resolved.name == "trade_feature_matrix.jsonl"
+
+def test_resolve_trade_feature_matrix_prefers_canonical_jsonl_over_legacy_json(tmp_path):
+    from types import SimpleNamespace
+    from analytics.analyzer_matrix import resolve_trade_feature_matrix_path
+
+    (tmp_path / "trade_feature_matrix.jsonl").write_text(
+        '{"schema_version":"trade_feature_matrix.v1"}\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "trade_feature_matrix.json").write_text("[]", encoding="utf-8")
+
+    settings = SimpleNamespace(
+        TRADES_DIR=tmp_path,
+        SIGNALS_DIR=tmp_path,
+        POSITIONS_DIR=tmp_path,
+        PROCESSED_DATA_DIR=tmp_path,
+    )
+    path = resolve_trade_feature_matrix_path(settings)
+    assert path is not None
+    assert path.name == "trade_feature_matrix.jsonl"

@@ -125,3 +125,22 @@ Offline feature analysis should treat replay price paths as externally collected
 ## canonical matrix contract
 
 Offline ML and feature-importance workflows should use canonical `trade_feature_matrix.jsonl` rows. Legacy matrix JSON files are compatibility-only inputs for older local fixtures.
+
+## Leakage discipline
+
+The offline feature-importance pipeline may derive targets from replay outcomes, but those outcome fields must not re-enter the feature space. At minimum the following fields are excluded from feature importances and ML feature preparation:
+
+- `net_pnl_pct`
+- `gross_pnl_pct`
+- `hold_sec`
+- `exit_reason_final`
+- `mfe_pct`
+- `mae_pct`
+- `mfe_pct_240s`
+- `mae_pct_240s`
+- `trend_survival_15m`
+- `trend_survival_60m`
+- `time_to_first_profit_sec`
+- `exit_decision`
+- `exit_flags`
+- `exit_warnings`
