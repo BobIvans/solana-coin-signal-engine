@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Trade Feature Matrix",
+  "type": "object",
+  "required": [
+    "schema_version"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+
+    "final_score": { "type": ["number", "null"] },
+    "final_score_pre_wallet": { "type": ["number", "null"] },
+    "confidence_adjustment": { "type": ["number", "null"] },
+    "wallet_adjustment": { "type": ["number", "null"] },
+    "partial_evidence_penalty": { "type": ["number", "null"] },
+    "low_confidence_evidence_penalty": { "type": ["number", "null"] },
+
+    "recommended_position_pct": { "type": ["number", "null"] },
+    "base_position_pct": { "type": ["number", "null"] },
+    "effective_position_pct": { "type": ["number", "null"] },
+    "sizing_multiplier": { "type": ["number", "null"] },
+    "sizing_reason_codes": {
+      "type": ["array", "null"],
+      "items": { "type": "string" }
+    },
+    "sizing_confidence": { "type": ["number", "null"] },
+    "sizing_origin": { "type": ["string", "null"] },
+    "sizing_warning": { "type": ["string", "null"] },
+
+    "evidence_quality_score": { "type": ["number", "null"] },
+    "evidence_conflict_flag": { "type": ["boolean", "null"] },
+    "partial_evidence_flag": { "type": ["boolean", "null"] },
+    "evidence_coverage_ratio": { "type": ["number", "null"] },
+    "evidence_available": {
+      "type": ["array", "null"],
+      "items": { "type": "string" }
+    },
+    "evidence_scores": {
+      "type": ["object", "null"],
+      "additionalProperties": { "type": "number" }
+    },
+
+    "wallet_weighting": { "type": ["string", "null"] },
+    "wallet_weighting_requested_mode": { "type": ["string", "null"] },
+    "wallet_weighting_effective_mode": { "type": ["string", "null"] },
+    "wallet_score_component_raw": { "type": ["number", "null"] },
+    "wallet_score_component_applied": { "type": ["number", "null"] },
+    "wallet_score_component_applied_shadow": { "type": ["number", "null"] },
+    "wallet_score_component_capped": { "type": ["boolean", "null"] },
+    "wallet_score_component_reason": { "type": ["string", "null"] },
+    "wallet_registry_status": { "type": ["string", "null"] },
+    "score_contract_version": { "type": ["string", "null"] },
+
+    "replay_score_source": { "type": ["string", "null"] },
+    "wallet_mode_parity_status": { "type": ["string", "null"] },
+    "historical_input_hash": { "type": ["string", "null"] },
+
+    "smart_wallet_score_sum": { "type": ["number", "null"] },
+    "smart_wallet_tier1_hits": { "type": ["integer", "null"] },
+    "smart_wallet_tier2_hits": { "type": ["integer", "null"] },
+    "smart_wallet_unique_count": { "type": ["integer", "null"] },
+    "smart_wallet_early_entry_hits": { "type": ["integer", "null"] },
+    "smart_wallet_netflow_bias": { "type": ["number", "null"] },
+
+    "smart_wallet_family_ids": {
+      "type": ["array", "null"],
+      "items": { "type": "string" }
+    },
+    "smart_wallet_independent_family_ids": {
+      "type": ["array", "null"],
+      "items": { "type": "string" }
+    },
+    "smart_wallet_family_unique_count": { "type": ["integer", "null"] },
+    "smart_wallet_independent_family_unique_count": { "type": ["integer", "null"] },
+    "smart_wallet_family_confidence_max": { "type": ["number", "null"] },
+    "smart_wallet_family_member_count_max": { "type": ["integer", "null"] },
+    "smart_wallet_family_origins": {
+      "type": ["array", "null"],
+      "items": { "type": "string" }
+    },
+    "smart_wallet_family_statuses": {
+      "type": ["array", "null"],
+      "items": { "type": "string" }
+    },
+    "smart_wallet_family_reason_codes": {
+      "type": ["array", "null"],
+      "items": { "type": "string" }
+    },
+    "smart_wallet_family_shared_funder_flag": { "type": ["boolean", "null"] },
+    "smart_wallet_family_creator_link_flag": { "type": ["boolean", "null"] },
+
+    "replay_input_origin": { "type": ["string", "null"] },
+    "replay_data_status": { "type": ["string", "null"] },
+    "replay_resolution_status": { "type": ["string", "null"] },
+    "synthetic_trade_flag": { "type": ["boolean", "null"] }
+  },
+  "additionalProperties": true
+}
