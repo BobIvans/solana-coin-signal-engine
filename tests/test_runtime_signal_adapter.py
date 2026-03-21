@@ -21,6 +21,10 @@ def test_adapter_normalizes_valid_entry_candidate():
         },
         runtime_signal_origin="entry_candidates",
         source_artifact="data/processed/entry_candidates.json",
+        runtime_origin_tier="canonical",
+        runtime_pipeline_origin="canonical_runtime_pipeline",
+        runtime_pipeline_status="ok",
+        runtime_pipeline_manifest="data/processed/runtime_signal_pipeline_manifest.json",
     )
 
     assert signal["signal_id"] == "sig1"
@@ -28,6 +32,8 @@ def test_adapter_normalizes_valid_entry_candidate():
     assert signal["effective_signal_status"] == "eligible"
     assert signal["runtime_signal_origin"] == "entry_candidates"
     assert signal["recommended_position_pct"] == 0.35
+    assert signal["runtime_origin_tier"] == "canonical"
+    assert signal["runtime_pipeline_status"] == "ok"
 
 
 def test_adapter_marks_degraded_partial_signal_honestly():

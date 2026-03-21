@@ -29,6 +29,7 @@ def _config(tmp_path, *, mode: str = "expanded_paper") -> Path:
 
 def test_runtime_loop_opens_paper_position_from_real_signal(tmp_path):
     processed = tmp_path / "processed"
+    write_json(processed / "runtime_signal_pipeline_manifest.json", {"pipeline_run_id": "pipe1", "pipeline_status": "ok"})
     write_json(
         processed / "entry_candidates.json",
         {
@@ -80,6 +81,8 @@ def test_runtime_loop_opens_paper_position_from_real_signal(tmp_path):
     summary = read_json(run_dir / "daily_summary.json", default={})
     positions = read_json(run_dir / "positions.json", default={})
     assert summary["runtime_signal_origin"] == "entry_candidates"
+    assert summary["runtime_origin_tier"] == "canonical"
+    assert summary["runtime_pipeline_status"] == "ok"
     assert summary["total_opened"] == 1
     assert positions["open_positions"][0]["token_address"] == "SoReal111"
     assert positions["open_positions"][0]["base_position_pct"] == 0.4

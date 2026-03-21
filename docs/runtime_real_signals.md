@@ -14,6 +14,18 @@ A runtime signal is considered real when it comes from an artifact already produ
 
 The runtime loader never fabricates missing signals. If an artifact exists but rows are malformed, those rows are marked partial or invalid and skipped safely.
 
+## Official upstream command
+
+The repo now provides one official upstream generator for runtime artifacts:
+
+```bash
+python scripts/run_runtime_signal_pipeline.py \
+  --config config/promotion.default.yaml \
+  --processed-dir data/processed
+```
+
+This command builds the canonical artifact chain through `entry_candidates.json`.
+
 ## Artifact precedence
 
 The runtime loader uses this precedence order:
@@ -25,7 +37,7 @@ The runtime loader uses this precedence order:
 5. `trade_feature_matrix.jsonl`
 6. `trade_feature_matrix.json` (legacy fallback only)
 
-This keeps runtime aligned with the repo's existing entry-selection outputs first, while still allowing scored-token or replay-compatible artifacts to drive the loop only when they already provide enough decision-support fields. When both replay artifacts exist, the canonical `.jsonl` contract wins over the legacy `.json` fallback.
+This keeps runtime aligned with the repo's canonical entry-selection outputs first. `entry_candidates.json` and `entry_events.jsonl` are treated as canonical-tier origins, while `scored_tokens.json` and replay-compatible artifacts remain fallback/manual origins. When both replay artifacts exist, the canonical `.jsonl` contract wins over the legacy `.json` fallback.
 
 ## Runtime signal contract
 
@@ -38,6 +50,10 @@ Normalized runtime signals carry additive provenance and safety fields, includin
 - `runtime_signal_partial_flag`
 - `effective_signal_status`
 - `source_artifact`
+- `runtime_origin_tier`
+- `runtime_pipeline_origin`
+- `runtime_pipeline_status`
+- `runtime_pipeline_manifest`
 
 See `schemas/runtime_signal.schema.json` for the machine-readable contract.
 

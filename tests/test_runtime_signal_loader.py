@@ -24,6 +24,7 @@ def test_loader_prefers_entry_candidates_over_lower_precedence(tmp_path):
     batch = load_latest_runtime_signal_batch(processed, stale_after_sec=None)
 
     assert batch["selected_origin"] == "entry_candidates"
+    assert batch["origin_tier"] == "canonical"
     assert batch["selected_artifact"].endswith("entry_candidates.json")
     assert batch["signals"][0]["token_address"] == "So111"
 
@@ -74,6 +75,7 @@ def test_loader_uses_historical_replay_jsonl_when_higher_precedence_missing(tmp_
     batch = load_latest_runtime_signal_batch(processed, stale_after_sec=None)
 
     assert batch["selected_origin"] == "historical_replay"
+    assert batch["origin_tier"] == "fallback"
     assert batch["selected_artifact"].endswith("trade_feature_matrix.jsonl")
     assert batch["signals"][0]["token_address"] == "SoReplay111"
 
@@ -112,3 +114,16 @@ def test_loader_falls_back_to_legacy_historical_replay_json_when_jsonl_missing(t
     assert batch["selected_origin"] == "historical_replay_legacy"
     assert batch["selected_artifact"].endswith("trade_feature_matrix.json")
     assert batch["signals"][0]["token_address"] == "SoReplayLegacy"
+
+
+def test_loader_surfaces_pipeline_manifest_for_canonical_origin(tmp_path):
+    processed = tmp_path / "processed"
+    write_json(processed / "entry_candidates.json", {"tokens": [{"token_address": "So111", "entry_decision": "SCALP"}]})
+    write_json(processed / "runtime_signal_pipeline_manifest.json", {"pipeline_run_id": "pipe123", "pipeline_status": "ok"})
+
+    batch = load_latest_runtime_signal_batch(processed, stale_after_sec=None)
+
+    assert batch["origin_tier"] == "canonical"
+    assert batch["runtime_pipeline_origin"] == "canonical_runtime_pipeline"
+    assert batch["runtime_pipeline_status"] == "ok"
+    assert batch["runtime_pipeline_manifest"].endswith("runtime_signal_pipeline_manifest.json")

@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any
 
 _ALLOWED_EVENT_TYPES = {"entry_decision_made", "entry_signal"}
+_CANONICAL_ORIGINS = {"entry_candidates", "entry_events"}
+_PIPELINE_MANIFEST = "runtime_signal_pipeline_manifest.json"
 _DEFAULT_PRECEDENCE = (
     {
         "origin": "entry_candidates",
@@ -131,6 +133,7 @@ def _artifact_status(spec: dict[str, Any], base_dir: Path, stale_after_sec: int 
         "coverage": 0.0,
         "warning": None,
         "stale": False,
+        "origin_tier": "canonical" if spec["origin"] in _CANONICAL_ORIGINS else "fallback",
     }
     if not path.exists():
         status["warning"] = "artifact_missing"
@@ -174,6 +177,22 @@ def _artifact_status(spec: dict[str, Any], base_dir: Path, stale_after_sec: int 
     return status
 
 
+
+
+def _load_pipeline_manifest(base_dir: Path) -> dict[str, Any] | None:
+    path = base_dir / _PIPELINE_MANIFEST
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    payload = dict(payload)
+    payload["manifest_path"] = str(path)
+    return payload
+
 def validate_runtime_signal_inputs(
     base_dir: str | Path = "data/processed",
     *,
@@ -188,14 +207,18 @@ def validate_runtime_signal_inputs(
     if selected and selected["status"] == "partial":
         overall = "degraded"
     warnings = [artifact["warning"] for artifact in artifacts if artifact.get("warning")]
+    pipeline_manifest = _load_pipeline_manifest(root)
+    selected_tier = selected.get("origin_tier") if selected else None
     return {
         "base_dir": str(root),
         "overall_status": overall,
         "selected_origin": selected["origin"] if selected else None,
         "selected_path": selected["path"] if selected else None,
+        "selected_origin_tier": selected_tier,
         "artifact_precedence": [spec["origin"] for spec in specs],
         "artifacts": artifacts,
         "warnings": warnings,
+        "pipeline_manifest": pipeline_manifest,
     }
 
 
@@ -218,12 +241,17 @@ def load_latest_runtime_signal_batch(
     specs = precedence or list(_DEFAULT_PRECEDENCE)
     validation = validate_runtime_signal_inputs(base_dir, stale_after_sec=stale_after_sec, precedence=specs)
     spec = _selected_spec(validation, specs)
+    pipeline_manifest = validation.get("pipeline_manifest") or {}
     if spec is None:
         return {
             "signals": [],
             "selected_origin": None,
             "selected_artifact": None,
             "batch_status": "missing",
+            "origin_tier": None,
+            "runtime_pipeline_origin": pipeline_manifest.get("pipeline_run_id") if pipeline_manifest else None,
+            "runtime_pipeline_status": pipeline_manifest.get("pipeline_status") if pipeline_manifest else None,
+            "runtime_pipeline_manifest": pipeline_manifest.get("manifest_path") if pipeline_manifest else None,
             "warnings": validation.get("warnings", []),
             "artifacts": validation.get("artifacts", []),
         }
@@ -241,11 +269,17 @@ def load_latest_runtime_signal_batch(
         rows = list(deduped.values())
 
     batch_status = "ok" if validation["overall_status"] == "ready" else "partial"
+    origin_tier = "canonical" if spec["origin"] in _CANONICAL_ORIGINS else "fallback"
+    runtime_pipeline_origin = "canonical_runtime_pipeline" if origin_tier == "canonical" and pipeline_manifest else ("fallback_loader" if origin_tier == "fallback" else "local_entry_artifact")
     return {
         "signals": rows,
         "selected_origin": spec["origin"],
         "selected_artifact": str(path),
         "batch_status": batch_status,
+        "origin_tier": origin_tier,
+        "runtime_pipeline_origin": runtime_pipeline_origin,
+        "runtime_pipeline_status": pipeline_manifest.get("pipeline_status") if pipeline_manifest else None,
+        "runtime_pipeline_manifest": pipeline_manifest.get("manifest_path") if pipeline_manifest else None,
         "warnings": validation.get("warnings", []),
         "artifacts": validation.get("artifacts", []),
     }
@@ -263,6 +297,10 @@ def load_runtime_signals(
         "selected_origin": batch["selected_origin"],
         "selected_artifact": batch["selected_artifact"],
         "batch_status": batch["batch_status"],
+        "origin_tier": batch.get("origin_tier"),
+        "runtime_pipeline_origin": batch.get("runtime_pipeline_origin"),
+        "runtime_pipeline_status": batch.get("runtime_pipeline_status"),
+        "runtime_pipeline_manifest": batch.get("runtime_pipeline_manifest"),
         "artifacts": batch["artifacts"],
         "warnings": batch["warnings"],
         "signal_count": len(batch["signals"]),
