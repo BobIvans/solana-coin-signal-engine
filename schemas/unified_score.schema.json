@@ -3,26 +3,36 @@
   "title": "Unified scored token record",
   "type": "object",
   "required": [
+    "final_score_pre_wallet",
+    "wallet_score_explain",
+    "regime_candidate",
+    "wallet_weighting_effective_mode",
+    "wallet_registry_status",
     "token_address",
+    "spam_penalty",
+    "scored_at",
+    "bundle_aggression_bonus",
+    "score_inputs_status",
+    "wallet_score_component_raw",
+    "x_validation_bonus",
+    "retry_manipulation_penalty",
+    "contract_version",
+    "wallet_score_component_applied_shadow",
+    "score_warnings",
+    "creator_cluster_penalty",
+    "score_flags",
+    "final_score",
+    "organic_multi_cluster_bonus",
+    "wallet_score_component_applied",
+    "rug_penalty",
+    "confidence_adjustment",
+    "wallet_weighting_mode",
+    "single_cluster_penalty",
+    "wallet_score_component_reason",
+    "wallet_score_component_capped",
+    "bundle_sell_heavy_penalty",
     "onchain_core",
     "early_signal_bonus",
-    "bundle_aggression_bonus",
-    "organic_multi_cluster_bonus",
-    "single_cluster_penalty",
-    "creator_cluster_penalty",
-    "bundle_sell_heavy_penalty",
-    "retry_manipulation_penalty",
-    "x_validation_bonus",
-    "rug_penalty",
-    "spam_penalty",
-    "confidence_adjustment",
-    "final_score",
-    "regime_candidate",
-    "score_inputs_status",
-    "score_flags",
-    "score_warnings",
-    "scored_at",
-    "contract_version",
     "smart_wallet_family_ids",
     "smart_wallet_independent_family_ids",
     "smart_wallet_family_origins",
@@ -305,6 +315,49 @@
         "number",
         "null"
       ]
+    },
+    "final_score_pre_wallet": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "wallet_weighting_mode": {
+      "type": "string",
+      "enum": [
+        "off",
+        "shadow",
+        "on"
+      ]
+    },
+    "wallet_weighting_effective_mode": {
+      "type": "string",
+      "enum": [
+        "off",
+        "shadow",
+        "on",
+        "degraded_zero"
+      ]
+    },
+    "wallet_registry_status": {
+      "type": "string"
+    },
+    "wallet_score_component_raw": {
+      "type": "number"
+    },
+    "wallet_score_component_applied": {
+      "type": "number"
+    },
+    "wallet_score_component_applied_shadow": {
+      "type": "number"
+    },
+    "wallet_score_component_capped": {
+      "type": "boolean"
+    },
+    "wallet_score_component_reason": {
+      "type": "string"
+    },
+    "wallet_score_explain": {
+      "type": "object"
     },
     "smart_wallet_family_ids": {
       "type": "array",

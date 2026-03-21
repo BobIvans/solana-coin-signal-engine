@@ -1,8 +1,8 @@
-"""Unified scoring orchestration across on-chain, X, and rug layers."""
+"""Unified scoring orchestration across on-chain, X, rug, and wallet layers."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Mapping
 
 from analytics.score_components import (
     compute_bundle_aggression_bonus,
@@ -17,8 +17,14 @@ from analytics.score_components import (
     compute_x_validation_bonus,
 )
 from analytics.score_router import route_score
-from src.wallets.scoring import compute_wallet_score_adjustment
-from utils.bundle_contract_fields import copy_bundle_contract_fields, copy_linkage_contract_fields
+from analytics.wallet_weighting import (
+    build_wallet_adjustment_compat,
+    compute_wallet_weighting,
+)
+from utils.bundle_contract_fields import (
+    copy_bundle_contract_fields,
+    copy_linkage_contract_fields,
+)
 from utils.clock import utc_now_iso
 from utils.short_horizon_contract_fields import copy_short_horizon_contract_fields
 from utils.wallet_family_contract_fields import copy_wallet_family_contract_fields
@@ -28,7 +34,7 @@ def _clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
     return max(low, min(high, value))
 
 
-def _status_block(token_ctx: dict) -> dict:
+def _status_block(token_ctx: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "fast_prescore_present": token_ctx.get("fast_prescore") is not None,
         "x_present": token_ctx.get("x_validation_score") is not None,
@@ -41,14 +47,38 @@ def _status_block(token_ctx: dict) -> dict:
     }
 
 
-def score_token(token_ctx: dict, settings: Any) -> dict:
+def _resolve_scored_at(token_ctx: Mapping[str, Any], explicit_scored_at: str | None) -> str:
+    if explicit_scored_at:
+        return str(explicit_scored_at)
+    for key in (
+        "scored_at",
+        "score_timestamp",
+        "timestamp",
+        "snapshot_ts",
+        "snapshot_at",
+        "observed_at",
+        "event_ts",
+        "as_of",
+        "as_of_ts",
+    ):
+        value = token_ctx.get(key)
+        if value:
+            return str(value)
+    return utc_now_iso()
+
+
+def score_token(
+    token_ctx: dict,
+    settings: Any,
+    *,
+    wallet_weighting_mode: str | None = None,
+    scored_at: str | None = None,
+) -> dict:
     onchain = compute_onchain_core(token_ctx, settings)
     early = compute_early_signal_bonus(token_ctx, settings)
     bundle_bonus = compute_bundle_aggression_bonus(token_ctx, settings)
     cluster_adjustment = compute_cluster_quality_adjustment(token_ctx, settings)
-    continuation_quality = compute_continuation_quality_adjustment(
-        token_ctx, settings
-    )
+    continuation_quality = compute_continuation_quality_adjustment(token_ctx, settings)
     bundle_risk = compute_bundle_risk_penalties(token_ctx, settings)
     x_bonus = compute_x_validation_bonus(token_ctx, settings)
     rug = compute_rug_penalty(token_ctx, settings)
@@ -82,25 +112,6 @@ def score_token(token_ctx: dict, settings: Any) -> dict:
         - float(spam["spam_penalty"])
         + confidence_adjustment
     )
-
-    wallet_adjustment = compute_wallet_score_adjustment(
-        token_ctx.get("wallet_features") or {},
-        {
-            "scoring": {
-                "tier1_bonus_score": getattr(settings, "WALLET_TIER1_BONUS_SCORE", 3.0),
-                "tier2_bonus_score": getattr(settings, "WALLET_TIER2_BONUS_SCORE", 1.0),
-                "early_entry_bonus_score": getattr(
-                    settings, "WALLET_EARLY_ENTRY_BONUS_SCORE", 2.0
-                ),
-                "negative_netflow_penalty": getattr(
-                    settings, "WALLET_NEGATIVE_NETFLOW_PENALTY", 3.0
-                ),
-                "max_wallet_bonus_score": getattr(
-                    settings, "WALLET_MAX_BONUS_SCORE", 6.0
-                ),
-            }
-        },
-    )
     final_score_pre_wallet = _clamp(base_score)
 
     score_ctx = {
@@ -108,11 +119,21 @@ def score_token(token_ctx: dict, settings: Any) -> dict:
         "heuristic_ratio": float(early.get("heuristic_ratio") or 0.0),
     }
     routed = route_score(token_ctx, score_ctx, settings)
-
     if routed["hard_override"]:
         score_ctx["final_score"] = min(score_ctx["final_score"], 35.0)
-
     final_score_pre_wallet = _clamp(float(score_ctx["final_score"]))
+
+    wallet_weighting = compute_wallet_weighting(
+        token_ctx,
+        settings,
+        requested_mode=wallet_weighting_mode,
+    )
+    final_score = final_score_pre_wallet + float(
+        wallet_weighting.get("wallet_score_component_applied") or 0.0
+    )
+    if wallet_weighting.get("wallet_weighting_effective_mode") in {"off", "shadow", "degraded_zero"}:
+        final_score = final_score_pre_wallet
+    final_score = _clamp(final_score)
 
     flags = set()
     warnings = set()
@@ -131,6 +152,9 @@ def score_token(token_ctx: dict, settings: Any) -> dict:
         warnings.update(part.get("warnings", []))
     warnings.update(routed.get("route_warnings", []))
 
+    scored_at_value = _resolve_scored_at(token_ctx, scored_at)
+    wallet_adjustment = build_wallet_adjustment_compat(wallet_weighting)
+
     return {
         "token_address": str(token_ctx.get("token_address") or ""),
         "symbol": str(token_ctx.get("symbol") or ""),
@@ -142,68 +166,61 @@ def score_token(token_ctx: dict, settings: Any) -> dict:
         **copy_wallet_family_contract_fields(token_ctx),
         "onchain_core": round(float(onchain["onchain_core"]), 4),
         "early_signal_bonus": round(float(early["early_signal_bonus"]), 4),
-        "bundle_aggression_bonus": round(
-            float(bundle_bonus["bundle_aggression_bonus"]), 4
-        ),
-        "organic_multi_cluster_bonus": round(
-            float(cluster_adjustment["organic_multi_cluster_bonus"]), 4
-        ),
-        "single_cluster_penalty": round(
-            float(cluster_adjustment["single_cluster_penalty"]), 4
-        ),
-        "creator_cluster_penalty": round(
-            float(cluster_adjustment["creator_cluster_penalty"]), 4
-        ),
-        "cluster_dev_link_penalty": round(
-            float(cluster_adjustment["cluster_dev_link_penalty"]), 4
-        ),
-        "shared_funder_penalty": round(
-            float(cluster_adjustment["shared_funder_penalty"]), 4
-        ),
-        "organic_buyer_flow_bonus": round(
-            float(continuation_quality["organic_buyer_flow_bonus"]), 4
-        ),
-        "liquidity_refill_bonus": round(
-            float(continuation_quality["liquidity_refill_bonus"]), 4
-        ),
-        "smart_wallet_dispersion_bonus": round(
-            float(continuation_quality["smart_wallet_dispersion_bonus"]), 4
-        ),
-        "x_author_velocity_bonus": round(
-            float(continuation_quality["x_author_velocity_bonus"]), 4
-        ),
-        "seller_reentry_bonus": round(
-            float(continuation_quality["seller_reentry_bonus"]), 4
-        ),
-        "shock_recovery_bonus": round(
-            float(continuation_quality["shock_recovery_bonus"]), 4
-        ),
-        "cluster_distribution_risk_penalty": round(
-            float(continuation_quality["cluster_distribution_risk_penalty"]), 4
-        ),
-        "bundle_sell_heavy_penalty": round(
-            float(bundle_risk["bundle_sell_heavy_penalty"]), 4
-        ),
-        "retry_manipulation_penalty": round(
-            float(bundle_risk["retry_manipulation_penalty"]), 4
-        ),
+        "bundle_aggression_bonus": round(float(bundle_bonus["bundle_aggression_bonus"]), 4),
+        "organic_multi_cluster_bonus": round(float(cluster_adjustment["organic_multi_cluster_bonus"]), 4),
+        "single_cluster_penalty": round(float(cluster_adjustment["single_cluster_penalty"]), 4),
+        "creator_cluster_penalty": round(float(cluster_adjustment["creator_cluster_penalty"]), 4),
+        "cluster_dev_link_penalty": round(float(cluster_adjustment["cluster_dev_link_penalty"]), 4),
+        "shared_funder_penalty": round(float(cluster_adjustment["shared_funder_penalty"]), 4),
+        "organic_buyer_flow_bonus": round(float(continuation_quality["organic_buyer_flow_bonus"]), 4),
+        "liquidity_refill_bonus": round(float(continuation_quality["liquidity_refill_bonus"]), 4),
+        "smart_wallet_dispersion_bonus": round(float(continuation_quality["smart_wallet_dispersion_bonus"]), 4),
+        "x_author_velocity_bonus": round(float(continuation_quality["x_author_velocity_bonus"]), 4),
+        "seller_reentry_bonus": round(float(continuation_quality["seller_reentry_bonus"]), 4),
+        "shock_recovery_bonus": round(float(continuation_quality["shock_recovery_bonus"]), 4),
+        "cluster_distribution_risk_penalty": round(float(continuation_quality["cluster_distribution_risk_penalty"]), 4),
+        "bundle_sell_heavy_penalty": round(float(bundle_risk["bundle_sell_heavy_penalty"]), 4),
+        "retry_manipulation_penalty": round(float(bundle_risk["retry_manipulation_penalty"]), 4),
         "x_validation_bonus": round(float(x_bonus["x_validation_bonus"]), 4),
         "rug_penalty": round(float(rug["rug_penalty"]), 4),
         "spam_penalty": round(float(spam["spam_penalty"]), 4),
         "confidence_adjustment": round(confidence_adjustment, 4),
         "wallet_adjustment": wallet_adjustment,
+        "wallet_weighting_mode": wallet_weighting["wallet_weighting_mode"],
+        "wallet_weighting_effective_mode": wallet_weighting["wallet_weighting_effective_mode"],
+        "wallet_registry_status": wallet_weighting["wallet_registry_status"],
+        "wallet_score_component_raw": round(float(wallet_weighting["wallet_score_component_raw"]), 6),
+        "wallet_score_component_applied": round(float(wallet_weighting["wallet_score_component_applied"]), 6),
+        "wallet_score_component_applied_shadow": round(float(wallet_weighting["wallet_score_component_applied_shadow"]), 6),
+        "wallet_score_component_capped": bool(wallet_weighting["wallet_score_component_capped"]),
+        "wallet_score_component_reason": str(wallet_weighting["wallet_score_component_reason"]),
+        "wallet_score_explain": dict(wallet_weighting["wallet_score_explain"]),
         "final_score_pre_wallet": round(final_score_pre_wallet, 4),
-        "final_score": round(final_score_pre_wallet, 4),
+        "final_score": round(final_score, 4),
         "regime_candidate": routed["regime_candidate"],
         "score_inputs_status": _status_block(token_ctx),
         "score_flags": sorted(flags),
         "score_warnings": sorted(warnings),
-        "scored_at": utc_now_iso(),
+        "scored_at": scored_at_value,
         "contract_version": settings.UNIFIED_SCORE_CONTRACT_VERSION,
     }
 
 
-def score_tokens(tokens: list[dict], settings: Any) -> list[dict]:
-    scored = [score_token(token_ctx=item, settings=settings) for item in tokens]
+def score_tokens(
+    tokens: list[dict],
+    settings: Any,
+    *,
+    wallet_weighting_mode: str | None = None,
+    scored_at: str | None = None,
+) -> list[dict]:
+    scored = [
+        score_token(
+            token_ctx=item,
+            settings=settings,
+            wallet_weighting_mode=wallet_weighting_mode,
+            scored_at=scored_at,
+        )
+        for item in tokens
+    ]
     scored.sort(key=lambda item: item.get("token_address", ""))
     return scored

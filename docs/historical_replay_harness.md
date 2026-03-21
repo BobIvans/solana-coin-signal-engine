@@ -97,7 +97,11 @@ The driver supports wallet weighting comparisons with:
 
 - `off`
 - `on`
+<<<<<<< HEAD
 - `shadow` (true replay rescore mode; no CLI remap to `on`)
+=======
+- `shadow` (through the same canonical unified scorer contract, with wallet deltas logged but not applied)
+>>>>>>> origin/main
 
 ## Smoke mode
 
@@ -109,7 +113,7 @@ This harness intentionally does **not**:
 
 - place live orders
 - integrate with exchanges
-- redesign the unified score
+- introduce an alternative unified score truth path
 - redesign regime logic
 - redesign exit logic
 - fabricate complete PnL when historical evidence is incomplete

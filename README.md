@@ -84,6 +84,8 @@ python scripts/replay_7d.py \
 
 ### Compare wallet weighting modes
 
+Wallet weighting now runs through the canonical unified scorer in all modes; `off`, `shadow`, and `on` only change post-base-score application semantics.
+
 ```bash
 python scripts/replay_7d.py --run-id replay_off --artifact-dir data/processed --wallet-weighting off --dry-run
 python scripts/replay_7d.py --run-id replay_on --artifact-dir data/processed --wallet-weighting on --dry-run
