@@ -15,7 +15,14 @@ from src.replay.wallet_mode_rescore import rescore_replay_inputs
 from src.replay.replay_state_machine import ReplayStateMachine
 from trading.exit_rules import evaluate_hard_exit, evaluate_scalp_exit, evaluate_trend_exit
 from trading.regime_rules import decide_regime
-from utils.bundle_contract_fields import copy_bundle_contract_fields, copy_linkage_contract_fields
+from utils.bundle_contract_fields import (
+    BUNDLE_PROVENANCE_FIELDS,
+    CLUSTER_PROVENANCE_FIELDS,
+    copy_bundle_contract_fields,
+    copy_bundle_provenance_fields,
+    copy_cluster_provenance_fields,
+    copy_linkage_contract_fields,
+)
 from utils.io import ensure_dir, write_json
 from utils.logger import log_info, log_warning
 from utils.short_horizon_contract_fields import (
@@ -107,8 +114,8 @@ _TRADE_FEATURE_MATRIX_FIELDS = [
     "x_validation_score_entry", "x_validation_delta_entry", "bundle_count_first_60s", "bundle_size_value",
     "unique_wallets_per_bundle_avg", "bundle_timing_from_liquidity_add_min", "bundle_success_rate",
     "bundle_composition_dominant", "bundle_tip_efficiency", "bundle_failure_retry_pattern",
-    "cross_block_bundle_correlation", "bundle_wallet_clustering_score", "cluster_concentration_ratio",
-    "num_unique_clusters_first_60s", "creator_in_cluster_flag", "creator_dev_link_score", "creator_buyer_link_score",
+    "cross_block_bundle_correlation", *BUNDLE_PROVENANCE_FIELDS, "bundle_wallet_clustering_score", "cluster_concentration_ratio",
+    "num_unique_clusters_first_60s", "creator_in_cluster_flag", *CLUSTER_PROVENANCE_FIELDS, "creator_dev_link_score", "creator_buyer_link_score",
     "dev_buyer_link_score", "shared_funder_link_score", "creator_cluster_link_score", "cluster_dev_link_score",
     "linkage_risk_score", "creator_funder_overlap_count", "buyer_funder_overlap_count", "funder_overlap_count",
     "linkage_reason_codes", "linkage_confidence", "linkage_metric_origin", "linkage_status", "linkage_warning",
@@ -451,28 +458,33 @@ def _resolve_exit(base_context: dict[str, Any], entry: dict[str, Any], token_pay
     }
 
 
+def _merge_preserving_explicit(*sources: dict[str, Any] | None) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
+    for source in reversed(sources):
+        if isinstance(source, dict):
+            merged.update(source)
+    return merged
+
+
 def _build_replay_contract_fields(
     *,
     base_context: dict[str, Any],
-    signal_artifact: dict[str, Any] | None = None,
-    trade_artifact: dict[str, Any] | None = None,
-    position_artifact: dict[str, Any] | None = None,
+    preferred_artifacts: tuple[dict[str, Any] | None, ...] = (),
+    fallback_artifacts: tuple[dict[str, Any] | None, ...] = (),
 ) -> dict[str, Any]:
     features = _safe_dict(base_context.get("features"))
     entry_snapshot = _safe_dict(base_context.get("entry_snapshot"))
-    fallback = {
-        **_safe_dict(signal_artifact),
-        **_safe_dict(trade_artifact),
-        **_safe_dict(position_artifact),
-        **features,
-        **entry_snapshot,
-    }
+    fallback = _merge_preserving_explicit(*fallback_artifacts, base_context)
+    preferred = _merge_preserving_explicit(*preferred_artifacts)
+    contract_source = _merge_preserving_explicit(preferred, entry_snapshot, features, fallback)
     return {
-        **copy_bundle_contract_fields(base_context, fallback=fallback),
-        **copy_linkage_contract_fields(base_context, fallback=fallback),
-        **copy_short_horizon_contract_fields(base_context, fallback=fallback),
-        **copy_continuation_metadata_fields(base_context, fallback=fallback),
-        **copy_wallet_family_contract_fields(base_context, fallback=fallback),
+        **copy_bundle_contract_fields(contract_source, fallback=fallback),
+        **copy_bundle_provenance_fields(contract_source, fallback=fallback),
+        **copy_cluster_provenance_fields(contract_source, fallback=fallback),
+        **copy_linkage_contract_fields(contract_source, fallback=fallback),
+        **copy_short_horizon_contract_fields(contract_source, fallback=fallback),
+        **copy_continuation_metadata_fields(contract_source, fallback=fallback),
+        **copy_wallet_family_contract_fields(contract_source, fallback=fallback),
     }
 
 
@@ -495,8 +507,8 @@ def _build_trade_feature_row(
     wallet_features = _safe_wallet_features(base_context, signal, trade)
     contract_fields = _build_replay_contract_fields(
         base_context=base_context,
-        signal_artifact=signal,
-        trade_artifact=trade,
+        preferred_artifacts=(trade, signal),
+        fallback_artifacts=(),
     )
     sources = [trade, signal, base_context, features, entry_snapshot, wallet_features, contract_fields]
     calibration_metrics = derive_outcome_metrics(base_context, signal, trade, entry_snapshot, features)
@@ -612,6 +624,17 @@ def _build_trade_feature_row(
     return row
 
 
+
+
+def _replay_token_sort_key(item: tuple[str, dict[str, Any]]) -> tuple[int, int, str]:
+    token, payload = item
+    payload = payload if isinstance(payload, dict) else {}
+    return (
+        0 if payload.get("entry_candidates") else 1,
+        0 if payload.get("signals") or payload.get("trades") else 1,
+        str(token),
+    )
+
 def replay_token_lifecycle(
     *,
     token_payload: dict[str, Any],
@@ -674,9 +697,8 @@ def replay_token_lifecycle(
 
     signal_contract_fields = _build_replay_contract_fields(
         base_context=base_context,
-        signal_artifact=signal_artifact,
-        trade_artifact=trade_artifact,
-        position_artifact=position_artifact,
+        preferred_artifacts=(signal_artifact,),
+        fallback_artifacts=(trade_artifact, position_artifact),
     )
     signal = {
         "run_id": run_id,
@@ -761,9 +783,8 @@ def replay_token_lifecycle(
 
     trade_contract_fields = _build_replay_contract_fields(
         base_context=base_context,
-        signal_artifact=signal_artifact,
-        trade_artifact=trade_artifact,
-        position_artifact=position_artifact,
+        preferred_artifacts=(trade_artifact,),
+        fallback_artifacts=(signal_artifact, position_artifact),
     )
     trade = {
         "run_id": run_id,
@@ -1007,7 +1028,7 @@ def run_historical_replay(
             replay_input_origin=input_origin,
             synthetic_assist_flag=synthetic_assist_flag,
         )
-        for _token, payload in sorted(loaded_inputs.get("token_inputs", {}).items())
+        for _token, payload in sorted(loaded_inputs.get("token_inputs", {}).items(), key=_replay_token_sort_key)
         if payload.get("token_address")
     ]
 

@@ -236,7 +236,7 @@ def _write_summary_md(path: Path, report: dict) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Deterministic smoke runner for contract parity and docs sync")
-    parser.add_argument("--base-dir", default=str(REPO_ROOT / "data" / "smoke" / "contract_parity"), help="Base directory for isolated contract parity smoke artifacts")
+    parser.add_argument("--base-dir", default=str(REPO_ROOT / "data" / "smoke"), help="Base directory for canonical contract parity smoke artifacts")
     args = parser.parse_args()
 
     smoke_dir = ensure_dir(Path(args.base_dir).expanduser().resolve())
