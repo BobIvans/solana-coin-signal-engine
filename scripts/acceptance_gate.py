@@ -14,6 +14,43 @@ from typing import Sequence
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
+REQUIRED_SMOKE_OUTPUTS: dict[str, tuple[str, ...]] = {
+    "runtime_signal_smoke": (
+        "runtime_signal/runtime_signal_summary.json",
+        "runtime_signal/runs/runtime_signal_smoke/runtime_health.json",
+        "runtime_signal/runs/runtime_signal_smoke/artifact_manifest.json",
+    ),
+    "runtime_health_smoke": (
+        "runtime_health/runtime_health_smoke.json",
+    ),
+    "historical_replay_smoke": (
+        "historical_replay/replay_summary.json",
+        "historical_replay/manifest.json",
+    ),
+    "e2e_golden_smoke": (
+        "e2e_golden/manifest.json",
+    ),
+}
+
+
+def validate_required_operational_outputs(base_dir: Path, block_name: str) -> list[str]:
+    missing: list[str] = []
+    for rel_path in REQUIRED_SMOKE_OUTPUTS.get(block_name, ()):
+        path = base_dir / rel_path
+        if not path.exists():
+            missing.append(rel_path)
+            continue
+        if path.suffix == ".json":
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                missing.append(rel_path + ":invalid_json")
+                continue
+            if isinstance(payload, dict) and not payload:
+                missing.append(rel_path + ":empty_payload")
+    return missing
+
+
 @dataclass(frozen=True)
 class GateBlock:
     name: str
@@ -79,6 +116,13 @@ def _smoke_blocks(base_dir: Path) -> tuple[GateBlock, ...]:
             str(base_dir / 'runtime_signal'),
         ),
         _python_block(
+            'runtime_health_smoke',
+            'Runtime health / artifact-manifest smoke using isolated acceptance artifacts.',
+            'scripts/runtime_health_smoke.py',
+            '--base-dir',
+            str(base_dir / 'runtime_health'),
+        ),
+        _python_block(
             'historical_replay_smoke',
             'Deterministic historical-only replay smoke using isolated acceptance artifacts.',
             'scripts/historical_replay_smoke.py',
@@ -133,6 +177,7 @@ def _run_block(block: GateBlock) -> dict[str, object]:
         'ok': completed.returncode == 0,
         'stdout_tail': stdout_lines[-20:],
         'stderr_tail': stderr_lines[-20:],
+        'missing_outputs': [],
     }
 
 
@@ -183,6 +228,12 @@ def main() -> int:
     failed_block: str | None = None
     for block in blocks:
         result = _run_block(block)
+        if result['ok'] and block.kind == 'python':
+            missing_outputs = validate_required_operational_outputs(base_dir, block.name)
+            result['missing_outputs'] = missing_outputs
+            if missing_outputs:
+                result['ok'] = False
+                result['returncode'] = 1
         results.append(result)
         if not result['ok']:
             failed_block = block.name

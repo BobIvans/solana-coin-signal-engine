@@ -13,6 +13,9 @@ class RuntimeMode(str, Enum):
     PAUSED = "paused"
 
 
+SESSION_SCHEMA_VERSION = "promotion_session.v2"
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -27,6 +30,12 @@ class SessionState:
     current_day: str = field(default_factory=lambda: datetime.now(timezone.utc).date().isoformat())
     config_hash: str = ""
     force_watchlist_only: bool = False
+    runtime_metrics: dict[str, Any] = field(default_factory=dict)
+    runtime_health_counters: dict[str, Any] = field(default_factory=dict)
+    artifact_manifest: dict[str, Any] = field(default_factory=dict)
+    last_checkpoint_ts: str = field(default_factory=utc_now_iso)
+    resume_origin: str = "fresh"
+    session_schema_version: str = SESSION_SCHEMA_VERSION
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -38,6 +47,12 @@ class SessionState:
             "current_day": self.current_day,
             "config_hash": self.config_hash,
             "force_watchlist_only": self.force_watchlist_only,
+            "runtime_metrics": self.runtime_metrics,
+            "runtime_health_counters": self.runtime_health_counters,
+            "artifact_manifest": self.artifact_manifest,
+            "last_checkpoint_ts": self.last_checkpoint_ts,
+            "resume_origin": self.resume_origin,
+            "session_schema_version": self.session_schema_version,
         }
 
 

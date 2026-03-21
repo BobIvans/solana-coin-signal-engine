@@ -12,6 +12,7 @@ from analytics.analyzer_matrix import compute_matrix_analysis, merge_closed_posi
 from analytics.analyzer_metrics import (
     compute_exit_reason_metrics,
     compute_friction_metrics,
+    compute_health_metrics,
     compute_portfolio_metrics,
     compute_regime_metrics,
 )
@@ -21,7 +22,7 @@ from src.replay.calibration_metrics import derive_outcome_metrics
 from analytics.analyzer_slices import bucketize_metric, compute_analyzer_slices, slice_positions
 from analytics.config_suggestions import write_config_suggestions
 from config.settings import Settings
-from utils.io import append_jsonl, read_json, write_json
+from utils.io import append_jsonl, read_json, read_jsonl, write_json
 
 _REQUIRED_METRICS = [
     "bundle_cluster_score",
@@ -34,19 +35,6 @@ _REQUIRED_METRICS = [
     "x_validation_score",
 ]
 
-
-def _read_jsonl(path: Path) -> list[dict[str, Any]]:
-    if not path.exists():
-        return []
-    rows: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        raw = line.strip()
-        if not raw:
-            continue
-        import json
-
-        rows.append(json.loads(raw))
-    return rows
 
 
 def _parse_ts(value: Any) -> datetime | None:
@@ -223,6 +211,7 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
     signals_path = settings.SIGNALS_DIR / "signals.jsonl"
     positions_path = settings.POSITIONS_DIR / "positions.json"
     portfolio_path = settings.PROCESSED_DATA_DIR / "portfolio_state.json"
+    runtime_health_path = settings.PROCESSED_DATA_DIR / "runtime_health.json"
 
     for required_path in [trades_path, signals_path, positions_path, portfolio_path]:
         if not required_path.exists() and settings.POST_RUN_ANALYZER_FAILCLOSED:
@@ -231,10 +220,11 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
     events_path = settings.PROCESSED_DATA_DIR / "analyzer_events.jsonl"
     append_jsonl(events_path, {"ts": datetime.now(timezone.utc).isoformat(), "event": "analysis_started"})
 
-    trades = _read_jsonl(trades_path)
-    signals = _read_jsonl(signals_path)
+    trades = read_jsonl(trades_path)
+    signals = read_jsonl(signals_path)
     positions_state = read_json(positions_path, default=[])
     portfolio_state = read_json(portfolio_path, default={})
+    runtime_health_summary = read_json(runtime_health_path, default={}) or {}
     matrix_path, trade_feature_matrix = read_trade_feature_matrix(settings)
 
     closed_positions = _reconstruct_closed_positions(trades, positions_state)
@@ -264,6 +254,7 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
     regime_metrics = compute_regime_metrics(closed_positions)
     exit_metrics = compute_exit_reason_metrics(closed_positions)
     friction_metrics = compute_friction_metrics(trades)
+    health_metrics = compute_health_metrics(trades, closed_positions, runtime_health_summary)
     append_jsonl(events_path, {"ts": datetime.now(timezone.utc).isoformat(), "event": "portfolio_metrics_computed"})
 
     correlations = compute_metric_correlations(closed_positions, _REQUIRED_METRICS, "net_pnl_pct", settings)
@@ -372,6 +363,7 @@ def run_post_run_analysis(settings: Settings) -> dict[str, Any]:
         **regime_metrics,
         **exit_metrics,
         "friction_summary": friction_metrics,
+        "health_summary": health_metrics,
         "metric_correlations": correlations,
         "matrix_analysis_available": matrix_analysis.get("matrix_analysis_available", False),
         "matrix_row_count": matrix_analysis.get("matrix_row_count", 0),

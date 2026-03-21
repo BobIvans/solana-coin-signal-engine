@@ -25,13 +25,21 @@ from src.promotion.cooldowns import (
 )
 from src.promotion.counters import roll_daily_state_if_needed, update_trade_counters
 from src.promotion.guards import compute_position_sizing, evaluate_entry_guards, should_block_entry
-from src.promotion.io import append_jsonl, write_json
+from src.promotion.io import append_jsonl, materialize_jsonl, write_json
 from src.promotion.kill_switch import is_kill_switch_active
 from src.promotion.policy import config_hash, validate_runtime_config
-from src.promotion.report import write_daily_summary_json, write_daily_summary_md
+from src.promotion.health import build_runtime_health_summary
+from src.promotion.report import (
+    write_artifact_manifest_json,
+    write_daily_summary_json,
+    write_daily_summary_md,
+    write_runtime_health_json,
+    write_runtime_health_md,
+)
 from src.promotion.runtime_signal_adapter import adapt_runtime_signal_batch
 from src.promotion.runtime_signal_loader import load_runtime_signals
 from src.promotion.session import restore_runtime_state, write_session_state
+from database import SQLiteRunStore
 from src.promotion.state_machine import apply_transition
 from src.promotion.types import utc_now_iso
 from trading.exit_logic import decide_exits
@@ -211,8 +219,59 @@ def _load_normalized_signals(args: argparse.Namespace, loop_idx: int) -> tuple[l
     return normalized, _summarize_runtime_signal_batch(batch, normalized)
 
 
+def _artifact_segment_key(payload: dict[str, Any]) -> str:
+    ts = str(payload.get("ts") or payload.get("timestamp") or utc_now_iso())
+    return ts[:10] if len(ts) >= 10 else "active"
+
+
+def _append_run_artifact(path: Path, payload: dict[str, Any]) -> Path:
+    return append_jsonl(path, payload, segment_key=_artifact_segment_key(payload))
+
+
+def _increment_runtime_health_counters(state: dict[str, Any], signals: list[dict[str, Any]]) -> None:
+    runtime_metrics = state.setdefault("runtime_metrics", {})
+    runtime_metrics.setdefault("partial_evidence_entry_count", 0)
+    runtime_metrics.setdefault("tx_window_partial_count", 0)
+    runtime_metrics.setdefault("tx_window_truncated_count", 0)
+    for signal in signals:
+        if bool(signal.get("partial_evidence_flag")):
+            runtime_metrics["partial_evidence_entry_count"] += 1
+        status_text = str(signal.get("tx_window_status") or signal.get("tx_coverage_status") or "").lower()
+        if status_text == "partial":
+            runtime_metrics["tx_window_partial_count"] += 1
+        if status_text == "truncated" or bool(signal.get("tx_window_truncated")):
+            runtime_metrics["tx_window_truncated_count"] += 1
+
+
+def _build_artifact_manifest(run_dir: Path, *, run_id: str, summary_path: Path, health_path: Path) -> dict[str, Any]:
+    signals_path = run_dir / "signals.jsonl"
+    trades_path = run_dir / "trades.jsonl"
+    event_log_path = run_dir / "event_log.jsonl"
+    decisions_path = run_dir / "decisions.jsonl"
+    return {
+        "run_id": run_id,
+        "artifact_paths": {
+            "runtime_manifest": str(run_dir / "runtime_manifest.json"),
+            "session_state": str(run_dir / "session_state.json"),
+            "positions": str(run_dir / "positions.json"),
+            "daily_summary": str(summary_path),
+            "runtime_health": str(health_path),
+            "signals": str(signals_path),
+            "trades": str(trades_path),
+            "event_log": str(event_log_path),
+            "decisions": str(decisions_path),
+        },
+        "segmented_artifact_dirs": {
+            "signals": str(signals_path.parent / "_segments" / signals_path.stem),
+            "trades": str(trades_path.parent / "_segments" / trades_path.stem),
+            "event_log": str(event_log_path.parent / "_segments" / event_log_path.stem),
+            "decisions": str(decisions_path.parent / "_segments" / decisions_path.stem),
+        },
+    }
+
+
 def _emit_signal_batch_events(event_log: Path, run_id: str, summary: dict) -> None:
-    append_jsonl(
+    _append_run_artifact(
         event_log,
         {
             "ts": utc_now_iso(),
@@ -467,7 +526,7 @@ def main() -> int:
     event_log = run_dir / "event_log.jsonl"
     decisions_log = run_dir / "decisions.jsonl"
     trading_settings = _build_runtime_trading_settings(cfg, args, run_dir)
-    state["paths"] = {"signals": run_dir / "signals.jsonl", "trades": run_dir / "trades.jsonl"}
+    state["paths"] = {"signals": run_dir / "signals.jsonl", "trades": run_dir / "trades.jsonl", "segment_by_day": True}
     ensure_state(state, trading_settings)
     _sync_open_positions_compat(state)
 
@@ -484,12 +543,22 @@ def main() -> int:
         "signals_dir": args.signals_dir,
         "signal_stale_after_sec": args.signal_stale_after_sec,
     }
-    write_json(run_dir / "runtime_manifest.json", manifest)
+    runtime_manifest_path = write_json(run_dir / "runtime_manifest.json", manifest)
+    run_store = SQLiteRunStore(run_dir / "run_store.sqlite3")
+    run_store.record_run_started(
+        run_id=args.run_id,
+        mode=args.mode,
+        config_hash=cfg_hash,
+        started_at=manifest["started_at"],
+        session_path=str(session_path),
+        manifest_path=str(runtime_manifest_path),
+        payload=manifest,
+    )
 
     print(f"[promotion] run_id={args.run_id}")
-    append_jsonl(event_log, {"ts": utc_now_iso(), **mode_event})
+    _append_run_artifact(event_log, {"ts": utc_now_iso(), **mode_event})
     print(f"[promotion] mode_entered mode={args.mode}")
-    append_jsonl(event_log, {"ts": utc_now_iso(), "event": "state_restored", "resumed": args.resume})
+    _append_run_artifact(event_log, {"ts": utc_now_iso(), "event": "state_restored", "resumed": args.resume})
     print(f"[promotion] state_restored resumed={str(args.resume).lower()} open_positions={len(_state_open_positions(state))}")
     print(f"[promotion] loop_started interval_sec={cfg.get('runtime', {}).get('loop_interval_sec', 30)}")
 
@@ -504,13 +573,14 @@ def main() -> int:
         signals, signal_summary = _load_normalized_signals(args, loop_idx)
         latest_signal_summary = signal_summary
         _emit_signal_batch_events(event_log, args.run_id, signal_summary)
+        _increment_runtime_health_counters(state, signals)
         opened = 0
         rejected = 0
 
         current_states = _build_current_states(state, signals)
         current_state_summary = _summarize_current_states(current_states)
         _accumulate_runtime_metrics(state, current_state_summary)
-        append_jsonl(
+        _append_run_artifact(
             event_log,
             {
                 "ts": utc_now_iso(),
@@ -524,7 +594,7 @@ def main() -> int:
             exit_signals = decide_exits(_state_open_positions(state), current_states, trading_settings)
             state = process_exit_signals(exit_signals, current_states, state, trading_settings)
             _sync_open_positions_compat(state)
-            append_jsonl(
+            _append_run_artifact(
                 event_log,
                 {
                     "ts": utc_now_iso(),
@@ -542,7 +612,7 @@ def main() -> int:
             token_address = str(signal.get("token_address") or "").strip()
             if not token_address:
                 total_invalid += 1
-                append_jsonl(
+                _append_run_artifact(
                     event_log,
                     {
                         "ts": utc_now_iso(),
@@ -594,7 +664,7 @@ def main() -> int:
             if should_block_entry(guard_results) or scale <= 0:
                 rejected += 1
                 total_rejected += 1
-                append_jsonl(
+                _append_run_artifact(
                     decisions_log,
                     {
                         "ts": utc_now_iso(),
@@ -622,7 +692,7 @@ def main() -> int:
                         "sizing_warning": sizing.get("sizing_warning"),
                     },
                 )
-                append_jsonl(
+                _append_run_artifact(
                     event_log,
                     {
                         "ts": utc_now_iso(),
@@ -664,7 +734,7 @@ def main() -> int:
                         register_degraded_x_entry_opened(state)
                 for _ in range(opened_delta):
                     update_trade_counters(state, pnl_pct=0.0)
-                append_jsonl(
+                _append_run_artifact(
                     decisions_log,
                     {
                         "ts": utc_now_iso(),
@@ -696,7 +766,7 @@ def main() -> int:
                 rejected += 1
                 total_rejected += 1
 
-            append_jsonl(
+            _append_run_artifact(
                 event_log,
                 {
                     "ts": utc_now_iso(),
@@ -744,6 +814,11 @@ def main() -> int:
         "degraded_x_entries_attempted": degraded_x_runtime.get("degraded_entries_attempted", 0),
         "degraded_x_entries_opened": degraded_x_runtime.get("degraded_entries_opened", 0),
         "degraded_x_entries_blocked": degraded_x_runtime.get("degraded_entries_blocked", 0),
+        "tx_window_partial_count": runtime_metrics.get("tx_window_partial_count", 0),
+        "tx_window_truncated_count": runtime_metrics.get("tx_window_truncated_count", 0),
+        "partial_evidence_entry_count": runtime_metrics.get("partial_evidence_entry_count", 0),
+        "fallback_refresh_failure_count": runtime_metrics.get("runtime_current_state_refresh_failed_count", 0),
+        "unresolved_replay_row_count": 0,
         "runtime_signal_source": args.signal_source,
         "runtime_signal_origin": latest_signal_summary.get("selected_origin"),
         "runtime_signal_status": latest_signal_summary.get("batch_status"),
@@ -756,10 +831,48 @@ def main() -> int:
         "runtime_pipeline_manifest": latest_signal_summary.get("runtime_pipeline_manifest"),
         "signals_dir": args.signals_dir,
     }
+    materialize_jsonl(run_dir / "signals.jsonl")
+    materialize_jsonl(run_dir / "trades.jsonl")
+    materialize_jsonl(event_log)
+    materialize_jsonl(decisions_log)
+
+    runtime_health = build_runtime_health_summary(
+        run_id=args.run_id,
+        mode=args.mode,
+        runtime_metrics=runtime_metrics,
+        degraded_x_runtime=degraded_x_runtime,
+        summary=summary,
+    )
+    summary["ops"] = dict(runtime_health)
+    summary["warnings"] = list(dict.fromkeys(list(summary.get("runtime_signal_warnings", [])) + list(runtime_health.get("warnings", []))))
+
     summary_json_path = write_daily_summary_json(run_dir / "daily_summary.json", summary)
+    runtime_health_path = write_runtime_health_json(run_dir / "runtime_health.json", runtime_health)
+    artifact_manifest = _build_artifact_manifest(run_dir, run_id=args.run_id, summary_path=summary_json_path, health_path=runtime_health_path)
+    artifact_manifest_path = write_artifact_manifest_json(run_dir / "artifact_manifest.json", artifact_manifest)
+    summary["artifact_paths"] = dict(artifact_manifest.get("artifact_paths", {}))
+    summary["artifact_manifest_path"] = str(artifact_manifest_path)
+    runtime_health["artifact_manifest_path"] = str(artifact_manifest_path)
+    write_daily_summary_json(run_dir / "daily_summary.json", summary)
+    write_runtime_health_json(run_dir / "runtime_health.json", runtime_health)
     write_daily_summary_md(run_dir / "daily_summary.md", summary)
+    write_runtime_health_md(run_dir / "runtime_health.md", runtime_health)
+    state["runtime_health_counters"] = dict(runtime_health)
+    state["artifact_manifest"] = artifact_manifest
+    state["last_checkpoint_ts"] = utc_now_iso()
     write_session_state(session_path, state)
-    append_jsonl(
+    run_store.record_checkpoint(
+        run_id=args.run_id,
+        checkpoint_ts=state["last_checkpoint_ts"],
+        session_path=str(session_path),
+        summary_path=str(summary_json_path),
+        health_path=str(runtime_health_path),
+        artifact_manifest_path=str(artifact_manifest_path),
+        counters=state.get("counters", {}),
+        payload={"runtime_health": runtime_health},
+    )
+    run_store.mark_run_completed(run_id=args.run_id, ended_at=state["last_checkpoint_ts"])
+    _append_run_artifact(
         event_log,
         {
             "ts": utc_now_iso(),
@@ -772,7 +885,8 @@ def main() -> int:
             "signal_status": latest_signal_summary.get("batch_status"),
         },
     )
-    append_jsonl(event_log, {"ts": utc_now_iso(), "event": "state_persisted"})
+    _append_run_artifact(event_log, {"ts": utc_now_iso(), "event": "state_persisted"})
+    materialize_jsonl(event_log)
 
     print(f"[promotion] daily_summary_written path={summary_json_path}")
     print("[promotion] done")

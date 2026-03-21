@@ -29,3 +29,11 @@ def test_promotion_shadow_smoke():
     assert (run_dir / "daily_summary.json").exists()
     assert (run_dir / "daily_summary.md").exists()
     assert (run_dir / "session_state.json").exists()
+    assert (run_dir / "runtime_health.json").exists()
+    assert (run_dir / "runtime_health.md").exists()
+    assert (run_dir / "artifact_manifest.json").exists()
+    assert (run_dir / "run_store.sqlite3").exists()
+    import json
+    daily_summary = json.loads((run_dir / "daily_summary.json").read_text(encoding="utf-8"))
+    assert "ops" in daily_summary
+    assert "artifact_paths" in daily_summary

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .types import SessionState
+from .types import SESSION_SCHEMA_VERSION, SessionState, utc_now_iso
 
 
 def _json_safe(value: Any) -> Any:
@@ -47,6 +47,12 @@ def _normalize_runtime_state(state: dict | None) -> dict | None:
     state.setdefault("consecutive_losses", 0)
     state.setdefault("next_position_seq", 1)
     state.setdefault("next_trade_seq", 1)
+    state.setdefault("runtime_metrics", {})
+    state.setdefault("runtime_health_counters", {})
+    state.setdefault("artifact_manifest", {})
+    state.setdefault("resume_origin", "fresh")
+    state.setdefault("session_schema_version", SESSION_SCHEMA_VERSION)
+    state.setdefault("last_checkpoint_ts", utc_now_iso())
     return state
 
 
@@ -60,7 +66,12 @@ def load_session_state(path: str | Path) -> dict | None:
 def write_session_state(path: str | Path, state: dict) -> Path:
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    payload = _json_safe(_normalize_runtime_state(dict(state)) or {})
+    normalized = _normalize_runtime_state(dict(state)) or {}
+    normalized["session_schema_version"] = normalized.get("session_schema_version") or SESSION_SCHEMA_VERSION
+    normalized["last_checkpoint_ts"] = normalized.get("last_checkpoint_ts") or utc_now_iso()
+    if not normalized.get("runtime_health_counters") and normalized.get("runtime_metrics"):
+        normalized["runtime_health_counters"] = dict(normalized.get("runtime_metrics") or {})
+    payload = _json_safe(normalized)
     tmp = p.with_suffix(p.suffix + ".tmp")
     tmp.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     tmp.replace(p)
@@ -71,5 +82,10 @@ def restore_runtime_state(session_path: str | Path, mode: str, config_hash: str,
     if resume:
         restored = load_session_state(session_path)
         if restored:
+            restored["resume_origin"] = "resume"
+            restored.setdefault("config_hash", config_hash)
             return restored
-    return SessionState(active_mode=mode, config_hash=config_hash).as_dict()
+    fresh = SessionState(active_mode=mode, config_hash=config_hash).as_dict()
+    fresh["resume_origin"] = "fresh"
+    fresh["last_checkpoint_ts"] = utc_now_iso()
+    return fresh

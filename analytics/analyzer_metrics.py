@@ -140,3 +140,39 @@ def compute_friction_metrics(trades: list[dict[str, Any]]) -> dict[str, Any]:
         "partial_fill_rate": _safe_div(partial_count, len(trades)),
         "avg_net_vs_gross_pnl_gap": statistics.fmean(gap_values) if gap_values else 0.0,
     }
+
+
+
+def compute_health_metrics(
+    trades: list[dict[str, Any]],
+    closed_positions: list[dict[str, Any]],
+    runtime_health_summary: dict[str, Any] | None = None,
+    replay_validation: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    runtime_health_summary = dict(runtime_health_summary or {})
+    replay_validation = dict(replay_validation or {})
+    partial_evidence_count = sum(1 for trade in trades if bool(trade.get("partial_evidence_flag")))
+    degraded_trade_count = sum(1 for position in closed_positions if str(position.get("x_status", "")).lower() == "degraded")
+    total_positions = len(closed_positions)
+
+    live = int(runtime_health_summary.get("runtime_current_state_live_count", 0) or 0)
+    fallback = int(runtime_health_summary.get("runtime_current_state_fallback_count", 0) or 0)
+    stale = int(runtime_health_summary.get("runtime_current_state_stale_count", 0) or 0)
+    refresh_failed = int(runtime_health_summary.get("runtime_current_state_refresh_failed_count", 0) or 0)
+    total_current_state = live + fallback + stale + refresh_failed
+
+    unresolved_replay = int(runtime_health_summary.get("unresolved_replay_row_count", replay_validation.get("partial_rows", 0)) or 0)
+
+    return {
+        "runtime_stale_state_share": _safe_div(stale, total_current_state),
+        "runtime_fallback_state_share": _safe_div(fallback, total_current_state),
+        "runtime_live_state_share": _safe_div(live, total_current_state),
+        "partial_evidence_trade_share": _safe_div(partial_evidence_count, len(trades)),
+        "degraded_x_trade_share": _safe_div(degraded_trade_count, total_positions),
+        "tx_coverage_quality_summary": {
+            "tx_window_partial_count": int(runtime_health_summary.get("tx_window_partial_count", 0) or 0),
+            "tx_window_truncated_count": int(runtime_health_summary.get("tx_window_truncated_count", 0) or 0),
+        },
+        "unresolved_replay_share": _safe_div(unresolved_replay, max(total_positions, 1)),
+        "runtime_health_summary": runtime_health_summary,
+    }

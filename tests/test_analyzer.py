@@ -31,6 +31,8 @@ def test_run_post_run_analysis_outputs(tmp_path):
                 "timestamp": "2026-03-15T12:30:00Z",
                 "regime": "SCALP",
                 "size_sol": 0.01,
+                "x_status": "degraded",
+                "partial_evidence_flag": True,
                 "entry_snapshot": {"bundle_cluster_score": 0.5, "first30s_buy_ratio": 0.6, "x_validation_score": 70},
             },
             {
@@ -57,6 +59,17 @@ def test_run_post_run_analysis_outputs(tmp_path):
             "equity_sol": 0.099,
         },
     )
+    write_json(
+        processed_dir / "runtime_health.json",
+        {
+            "runtime_current_state_live_count": 2,
+            "runtime_current_state_fallback_count": 1,
+            "runtime_current_state_stale_count": 1,
+            "tx_window_partial_count": 1,
+            "tx_window_truncated_count": 0,
+            "unresolved_replay_row_count": 0,
+        },
+    )
 
     os.environ["TRADES_DIR"] = str(trades_dir)
     os.environ["SIGNALS_DIR"] = str(signals_dir)
@@ -73,3 +86,5 @@ def test_run_post_run_analysis_outputs(tmp_path):
     summary = json.loads(Path(result["summary_path"]).read_text(encoding="utf-8"))
     assert summary["matrix_analysis_available"] is False
     assert "matrix_input_missing" in summary["warnings"]
+    assert summary["health_summary"]["runtime_stale_state_share"] == 0.25
+    assert summary["health_summary"]["partial_evidence_trade_share"] == 0.5

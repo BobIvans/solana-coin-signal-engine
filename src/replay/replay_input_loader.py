@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from utils.io import list_jsonl_segments, read_jsonl
+
 _GENERIC_SCORED_FILE_NAMES = ["scored_tokens.jsonl", "scored_tokens.json"]
 _JSONL_FILE_NAMES = {
     "entry_candidates": ["entry_candidates.json", "entry_candidates.jsonl"],
@@ -33,24 +35,10 @@ def _read_json(path: Path) -> Any:
 
 
 
-def _read_jsonl(path: Path) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for line_no, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        line = raw_line.strip()
-        if not line:
-            continue
-        row = json.loads(line)
-        if isinstance(row, dict):
-            row.setdefault("_source_file", str(path))
-            row.setdefault("_source_line", line_no)
-            rows.append(row)
-    return rows
-
-
 
 def _load_file(path: Path) -> list[dict[str, Any]]:
     if path.suffix == ".jsonl":
-        return _read_jsonl(path)
+        return read_jsonl(path)
     payload = _read_json(path)
     rows = _ensure_list(payload)
     output: list[dict[str, Any]] = []
@@ -67,10 +55,12 @@ def _load_file(path: Path) -> list[dict[str, Any]]:
 def _resolve_artifact_path(artifact_dir: Path, explicit_path: str | Path | None, candidates: list[str]) -> Path | None:
     if explicit_path:
         path = Path(explicit_path)
-        return path if path.exists() else None
+        if path.exists() or list_jsonl_segments(path):
+            return path
+        return None
     for name in candidates:
         path = artifact_dir / name
-        if path.exists():
+        if path.exists() or list_jsonl_segments(path):
             return path
     return None
 
