@@ -61,3 +61,34 @@ def test_partial_fill_consumes_only_closed_cost_portion():
     assert pos["remaining_size_sol"] == 7.5
     assert state["portfolio"]["capital_in_positions_sol"] == 7.5
     assert pos["realized_pnl_sol"] == 0.0
+
+
+def test_partial_exit_marks_partial_1_state_once():
+    state = {}
+    ensure_state(state, S())
+    pos = open_position(
+        {"executed_price_usd": 1.0, "filled_notional_sol": 10.0, "filled_cost_basis_sol": 10.0, "priority_fee_sol": 0.0, "fill_ratio": 1.0},
+        {"token_address": "SoP1", "symbol": "P1", "entry_decision": "TREND", "entry_snapshot": {}, "contract_version": "paper_trader_v1"},
+        state,
+    )
+    apply_partial_exit(
+        pos,
+        {"filled_notional_sol": 4.0, "requested_notional_sol": 3.3, "filled_cost_basis_sol": 3.3, "executed_price_usd": 1.2, "priority_fee_sol": 0.0, "exit_flags": ["partial_take_profit_1"]},
+        state,
+    )
+    assert pos["partial_1_taken"] is True
+    assert "partial_1" in pos["partials_taken"]
+
+
+def test_repeated_partial_1_does_not_duplicate_state_marker():
+    state = {}
+    ensure_state(state, S())
+    pos = open_position(
+        {"executed_price_usd": 1.0, "filled_notional_sol": 10.0, "filled_cost_basis_sol": 10.0, "priority_fee_sol": 0.0, "fill_ratio": 1.0},
+        {"token_address": "SoP2", "symbol": "P2", "entry_decision": "TREND", "entry_snapshot": {}, "contract_version": "paper_trader_v1"},
+        state,
+    )
+    fill = {"filled_notional_sol": 4.0, "requested_notional_sol": 3.3, "filled_cost_basis_sol": 3.3, "executed_price_usd": 1.2, "priority_fee_sol": 0.0, "exit_flags": ["partial_take_profit_1"]}
+    apply_partial_exit(pos, fill, state)
+    apply_partial_exit(pos, fill, state)
+    assert pos["partials_taken"].count("partial_1") == 1

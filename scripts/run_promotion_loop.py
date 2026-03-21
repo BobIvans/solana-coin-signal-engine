@@ -493,7 +493,7 @@ def main() -> int:
                 "entry_snapshot": signal.get("entry_snapshot") or {},
             }
             state.setdefault("open_positions", []).append(position)
-            update_trade_counters(state, pnl_pct=0.0)
+            update_trade_counters(state, pnl_pct=0.0, realized_pnl_sol=0.0, starting_capital_sol=1.0)
             opened += 1
             total_opened += 1
             append_jsonl(
@@ -568,12 +568,18 @@ def main() -> int:
             time.sleep(cfg.get("runtime", {}).get("loop_interval_sec", 30))
 
     write_json(run_dir / "positions.json", {"open_positions": state.get("open_positions", [])})
+    counters = state.get("counters", {})
+    starting_capital_sol = float(counters.get("starting_capital_sol", state.get("starting_capital_sol", 0.0)) or 0.0)
+    realized_pnl_sol_today = float(counters.get("realized_pnl_sol_today", 0.0) or 0.0)
+    daily_loss_pct = abs(min(realized_pnl_sol_today / starting_capital_sol * 100.0, 0.0)) if starting_capital_sol > 0 else abs(min(float(counters.get("pnl_pct_today", 0.0) or 0.0), 0.0))
     summary = {
         "run_id": args.run_id,
         "mode": args.mode,
-        "trades_today": state.get("counters", {}).get("trades_today", 0),
+        "trades_today": counters.get("trades_today", 0),
         "open_positions": len(state.get("open_positions", [])),
-        "pnl_pct_today": state.get("counters", {}).get("pnl_pct_today", 0.0),
+        "pnl_pct_today": counters.get("pnl_pct_today", 0.0),
+        "realized_pnl_sol_today": realized_pnl_sol_today,
+        "daily_loss_pct": daily_loss_pct,
         "consecutive_losses": state.get("consecutive_losses", 0),
         "x_cooldown_active": is_x_cooldown_active(state),
         "total_opened": total_opened,

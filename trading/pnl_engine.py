@@ -10,16 +10,23 @@ def _clamp_fraction(value: float) -> float:
 
 
 def compute_closed_fraction_of_position(position_ctx: dict[str, Any], fill_ctx: dict[str, Any]) -> float:
-    """Return the fraction of the remaining position that was actually closed."""
+    """Return the fraction of the remaining position cost basis that was actually closed."""
     remaining_before = float(position_ctx.get("remaining_size_sol") or 0.0)
-    requested = float(fill_ctx.get("requested_notional_sol") or 0.0)
-    filled = float(fill_ctx.get("filled_notional_sol") or 0.0)
+    requested_cost_basis = float(fill_ctx.get("requested_cost_basis_sol") or fill_ctx.get("requested_notional_sol") or 0.0)
+    filled_cost_basis = float(fill_ctx.get("filled_cost_basis_sol") or 0.0)
+    if filled_cost_basis <= 0.0:
+        fill_ratio = float(fill_ctx.get("fill_ratio") or 0.0)
+        if requested_cost_basis > 0.0 and fill_ratio > 0.0:
+            filled_cost_basis = requested_cost_basis * _clamp_fraction(fill_ratio)
+        else:
+            filled_notional = float(fill_ctx.get("filled_notional_sol") or 0.0)
+            filled_cost_basis = min(filled_notional, requested_cost_basis)
 
-    if remaining_before <= 0.0 or requested <= 0.0 or filled <= 0.0:
+    if remaining_before <= 0.0 or requested_cost_basis <= 0.0 or filled_cost_basis <= 0.0:
         return 0.0
 
-    fill_ratio = _clamp_fraction(filled / requested)
-    requested_fraction = _clamp_fraction(requested / remaining_before)
+    fill_ratio = _clamp_fraction(filled_cost_basis / requested_cost_basis)
+    requested_fraction = _clamp_fraction(requested_cost_basis / remaining_before)
     return _clamp_fraction(requested_fraction * fill_ratio)
 
 
@@ -48,6 +55,7 @@ def compute_exit_pnl(position_ctx: dict[str, Any], fill_ctx: dict[str, Any]) -> 
         "realized_pnl_sol": net,
         "fees_paid_sol": fee,
         "cost_basis_consumed_sol": cost_basis,
+        "sold_notional_sol": sold_notional,
         "closed_fraction_of_position": closed_fraction,
     }
 

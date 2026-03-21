@@ -96,7 +96,14 @@ def process_exit_signals(exit_signals: list[dict[str, Any]], market_states: list
             )
             continue
 
-        apply_partial_exit(position, fill, state)
+        fill_for_state = {
+            **fill,
+            "exit_flags": list(signal.get("exit_flags") or []),
+            "exit_reason": signal.get("exit_reason"),
+            "exit_status": signal.get("exit_status"),
+            "exit_warnings": list(signal.get("exit_warnings") or []),
+        }
+        apply_partial_exit(position, fill_for_state, state)
         is_open = bool(position.get("is_open"))
         event = "paper_sell_partial" if is_open else "paper_sell_full"
         log_trade(
@@ -185,7 +192,14 @@ def process_entry_signals(entry_signals: list[dict[str, Any]], market_states: li
             )
             continue
 
-        pos = open_position(fill, signal, state)
+        requested_effective_position_pct = float(signal.get("effective_position_pct") or signal.get("recommended_position_pct") or 0.0)
+        actual_effective_position_pct = round(requested_effective_position_pct * float(fill.get("fill_ratio") or 0.0), 4)
+        signal_for_position = {
+            **signal,
+            "requested_effective_position_pct": requested_effective_position_pct,
+            "effective_position_pct": actual_effective_position_pct,
+        }
+        pos = open_position(fill, signal_for_position, state)
         log_trade(
             {
                 "ts": utc_now_iso(),
@@ -197,6 +211,7 @@ def process_entry_signals(entry_signals: list[dict[str, Any]], market_states: li
                 "side": "BUY",
                 **fill,
                 **_sizing_fields(pos),
+                "requested_effective_position_pct": requested_effective_position_pct,
                 "regime": signal.get("entry_decision"),
                 "reason": "entry_signal_filled",
                 **copy_wallet_family_contract_fields(signal, fallback=pos),

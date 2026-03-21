@@ -16,6 +16,9 @@ class S:
     PAPER_FAILED_TX_HIGH_VOLATILITY_ADDON = 0.0
     PAPER_PARTIAL_FILL_ALLOWED = True
     PAPER_PARTIAL_FILL_MIN_RATIO = 0.5
+    PAPER_SOL_USD_FALLBACK = 100.0
+    EXIT_SCALP_STOP_LOSS_PCT = -10
+    EXIT_TREND_HARD_STOP_PCT = -18
 
 
 def test_simulate_entry_fill_success():
@@ -49,3 +52,28 @@ def test_simulate_exit_fill_success():
     )
     assert fill["tx_failed"] is False
     assert fill["filled_notional_sol"] > 0
+
+
+def test_simulate_exit_fill_reprices_proceeds_when_price_moves_up():
+    fill = simulate_exit_fill(
+        {"position_id": "pos_0001", "remaining_size_sol": 0.05, "entry_price_usd": 100.0},
+        {"exit_decision": "FULL_EXIT", "exit_fraction": 1.0, "signal_quality": 1.0},
+        {"price_usd": 150.0, "liquidity_usd": 1_000_000, "volatility": 0.1},
+        S(),
+    )
+    assert fill["tx_failed"] is False
+    assert 0 < fill["filled_cost_basis_sol"] <= fill["requested_notional_sol"]
+    assert fill["filled_notional_sol"] > fill["filled_cost_basis_sol"]
+
+
+def test_simulate_exit_fill_failclosed_uses_pessimistic_execution_not_fake_breakeven():
+    fill = simulate_exit_fill(
+        {"position_id": "pos_0002", "remaining_size_sol": 0.05, "entry_price_usd": 100.0, "entry_decision": "SCALP"},
+        {"exit_decision": "FULL_EXIT", "exit_fraction": 1.0, "exit_reason": "missing_current_state_failclosed", "exit_flags": ["failclosed_missing_fields"], "exit_warnings": ["missing_critical_price_usd_now"]},
+        {"liquidity_usd": 1_000_000, "volatility": 0.1},
+        S(),
+    )
+    assert fill["tx_failed"] is False
+    assert fill["execution_assumption"] == "failclosed_pessimistic_price"
+    assert fill["degraded_execution_path"] is True
+    assert fill["executed_price_usd"] < 100.0
