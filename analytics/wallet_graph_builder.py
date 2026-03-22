@@ -5,7 +5,10 @@ from __future__ import annotations
 import hashlib
 from collections import defaultdict
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
+
+from analytics.funder_sanitization import classify_funder, load_funder_ignorelist
 
 GRAPH_CONTRACT_VERSION = "wallet_graph.v1"
 CLUSTER_CONTRACT_VERSION = "wallet_clusters.v1"
@@ -119,6 +122,25 @@ def _cluster_id_from_wallets(wallets: list[str]) -> str:
     return f"cluster_{anchor}_{digest}"
 
 
+def _load_ignored_funders(settings: Any | None) -> set[str]:
+    path = getattr(settings, "FUNDER_IGNORELIST_PATH", Path("config/funder_ignorelist.json")) if settings is not None else Path("config/funder_ignorelist.json")
+    return load_funder_ignorelist(path)
+
+
+def _classify_funder(funder: str, ignored: set[str], settings: Any | None) -> str:
+    sanitize_common = bool(getattr(settings, "FUNDER_SANITIZE_COMMON_SOURCES", True)) if settings is not None else True
+    return classify_funder(funder, ignored_funders=ignored, sanitize_common_sources=sanitize_common)
+
+
+def _shared_funder_edge_weight(funder_class: str, settings: Any | None) -> float | None:
+    if funder_class == "unknown":
+        return 0.85
+    if settings is not None and not bool(getattr(settings, "FUNDER_SANITIZE_COMMON_SOURCES", True)):
+        return 0.85
+    sanitized_weight = float(getattr(settings, "FUNDER_SANITIZED_EDGE_WEIGHT", 0.0)) if settings is not None else 0.0
+    return sanitized_weight if sanitized_weight > 0 else None
+
+
 def _cluster_confidence(edge_weights: list[float], evidence_types: set[str], coverage_ratio: float) -> float:
     if not edge_weights:
         return 0.0
@@ -132,6 +154,7 @@ def derive_graph_edges(
     participants: list[dict[str, Any]],
     *,
     creator_wallet: str | None = None,
+    settings: Any | None = None,
 ) -> dict[str, Any]:
     """Derive deterministic graph edges and node evidence from participants."""
 
@@ -199,6 +222,7 @@ def derive_graph_edges(
         normalized[creator]["creator_refs"].add(creator)
 
     pair_provenance: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    ignored_funders = _load_ignored_funders(settings)
 
     def add_pair(left: str, right: str, evidence_type: str, weight: float, **details: Any) -> None:
         if left == right:
@@ -225,9 +249,25 @@ def derive_graph_edges(
 
     for funder, wallets in sorted(funder_to_wallets.items()):
         ordered = sorted(wallets)
+        funder_class = _classify_funder(funder, ignored_funders, settings)
+        weight = _shared_funder_edge_weight(funder_class, settings)
+        if weight is None:
+            continue
+        edge_policy = "normal" if funder_class == "unknown" else "downweighted"
+        sanitized_reason = None if funder_class == "unknown" else str(getattr(settings, "FUNDER_SANITIZED_REASON_CODE", "common_upstream_funder_sanitized")) if settings is not None else "common_upstream_funder_sanitized"
         for index, left in enumerate(ordered):
             for right in ordered[index + 1 :]:
-                add_pair(left, right, "shared_funder", 0.85, funder=funder)
+                add_pair(
+                    left,
+                    right,
+                    "shared_funder",
+                    weight,
+                    funder=funder,
+                    funder_class=funder_class,
+                    funder_sanitized=funder_class != "unknown",
+                    funder_edge_policy=edge_policy,
+                    funder_sanitized_reason=sanitized_reason,
+                )
 
     for group, wallets in sorted(group_to_wallets.items()):
         ordered = sorted(wallets)
@@ -421,10 +461,11 @@ def build_wallet_graph(
     *,
     creator_wallet: str | None = None,
     metadata: dict[str, Any] | None = None,
+    settings: Any | None = None,
 ) -> dict[str, Any]:
     """Build a deterministic wallet relationship graph from local participant evidence."""
 
-    derived = derive_graph_edges(participants, creator_wallet=creator_wallet)
+    derived = derive_graph_edges(participants, creator_wallet=creator_wallet, settings=settings)
     return normalize_wallet_graph(derived, metadata=metadata)
 
 

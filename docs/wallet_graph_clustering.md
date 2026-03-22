@@ -64,3 +64,8 @@ Legacy alias `graph_backed` may be normalized at ingestion boundaries for migrat
 
 
 This PR intentionally does **not** claim complete institutional wallet intelligence. The graph is only as strong as the explicit local evidence that exists in the launch payloads. Weak evidence falls back to heuristics instead of inventing stronger relationships.
+
+## Shared funder sanitation
+
+- common upstream funders (exchange / aggregator / bridge-like) are not treated as normal-strength `shared_funder` edges by default
+- when sanitation is enabled, provenance records include `funder_class`, `funder_sanitized`, and `funder_edge_policy` for any retained downweighted edge

@@ -60,3 +60,8 @@ This PR integrates linkage outputs additively into:
 - replay feature-matrix exports.
 
 The pre-existing cluster heuristics remain intact; linkage adds provenance-aware evidence on top.
+
+## Funder sanitization
+
+- common CEX / aggregator / bridge funders are sanitized before overlap counts are computed
+- sanitized funders do not increase `funder_overlap_count` or shared-funder linkage flags

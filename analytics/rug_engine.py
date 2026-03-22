@@ -13,6 +13,7 @@ from utils.clock import utc_now_iso
 CONTRACT_VERSION = "rug_safety_v1"
 
 
+
 def _authority_risk(mint_revoked: bool, freeze_revoked: bool) -> float:
     if mint_revoked and freeze_revoked:
         return 0.0
@@ -21,6 +22,7 @@ def _authority_risk(mint_revoked: bool, freeze_revoked: bool) -> float:
     if not mint_revoked and not freeze_revoked:
         return 0.9
     return 0.7
+
 
 
 def _lp_risk(lp: dict[str, Any]) -> float:
@@ -35,9 +37,11 @@ def _lp_risk(lp: dict[str, Any]) -> float:
     return 0.45
 
 
+
 def _launch_path_risk(token_ctx: dict[str, Any]) -> float:
     label = str(token_ctx.get("launch_path_label") or "")
     return 0.25 if not label or label == "unknown" else 0.05
+
 
 
 def assess_rug_risk(token_ctx: dict, settings: Any) -> dict[str, Any]:
@@ -61,8 +65,22 @@ def assess_rug_risk(token_ctx: dict, settings: Any) -> dict[str, Any]:
     )
     rug_score = max(0.0, min(1.0, raw_score))
 
-    flags = authority["authority_flags"] + lp["lp_flags"] + concentration["concentration_flags"] + dev["dev_flags"]
-    warnings = lp["lp_warnings"] + dev["dev_warnings"]
+    token_extension_flags = [str(item) for item in (token_ctx.get("token_extension_risk_flags") or []) if str(item).strip()]
+    token_extension_warning = str(token_ctx.get("token_extension_warning") or "").strip()
+    token_sellability_hard_block_flag = bool(token_ctx.get("token_sellability_hard_block_flag"))
+    sellability_risk_flag = bool(token_ctx.get("sellability_risk_flag"))
+
+    flags = (
+        authority["authority_flags"]
+        + authority.get("authority_hard_block_flags", [])
+        + lp["lp_flags"]
+        + concentration["concentration_flags"]
+        + dev["dev_flags"]
+        + token_extension_flags
+    )
+    warnings = lp["lp_warnings"] + dev["dev_warnings"] + authority.get("authority_warning_flags", [])
+    if token_extension_warning:
+        warnings.append(token_extension_warning)
 
     bundle_composition = str(token_ctx.get("bundle_composition_dominant") or "unknown").lower()
     retry_pattern = token_ctx.get("bundle_failure_retry_pattern")
@@ -77,11 +95,11 @@ def assess_rug_risk(token_ctx: dict, settings: Any) -> dict[str, Any]:
     for key in ("top1_holder_share", "top20_holder_share"):
         if key not in token_ctx:
             critical_missing.append(key)
-    if "mint_authority" not in token_ctx and "freeze_authority" not in token_ctx:
+    if "mint_authority" not in token_ctx or "freeze_authority" not in token_ctx:
         critical_missing.append("authority_data")
     if critical_missing:
         status = "partial"
-        warnings.append(f"missing_critical_fields:{','.join(critical_missing)}")
+        warnings.append(f"missing_critical_fields:{','.join(sorted(set(critical_missing)))}")
 
     verdict = "PASS"
     if rug_score >= settings.RUG_IGNORE_THRESHOLD:
@@ -91,11 +109,18 @@ def assess_rug_risk(token_ctx: dict, settings: Any) -> dict[str, Any]:
 
     if (
         (not authority["mint_revoked"])
+        or (not authority["freeze_revoked"])
+        or token_sellability_hard_block_flag
         or float(token_ctx.get("top1_holder_share") or 0.0) >= 0.30
-        or (float(token_ctx.get("dev_sell_pressure_5m") or 0.0) >= settings.RUG_DEV_SELL_PRESSURE_HARD and float(token_ctx.get("dev_wallet_confidence_score", 1.0)) >= 0.5)
+        or (
+            float(token_ctx.get("dev_sell_pressure_5m") or 0.0) >= settings.RUG_DEV_SELL_PRESSURE_HARD
+            and float(token_ctx.get("dev_wallet_confidence_score", 1.0)) >= 0.5
+        )
         or lp.get("lp_explicit_recoverable")
     ):
         verdict = "IGNORE"
+    elif sellability_risk_flag and verdict == "PASS":
+        verdict = "WATCH"
 
     if status == "partial" and settings.RUG_ENGINE_FAILCLOSED and verdict == "PASS":
         verdict = "WATCH"

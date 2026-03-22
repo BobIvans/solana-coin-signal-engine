@@ -121,3 +121,8 @@ By default it writes:
 
 The logic is isolated in `analytics/wallet_family_metadata.py`, and integrations are additive.
 Reverting the family layer should not require a registry contract migration.
+
+## Shared funder sanitation
+
+- wallet-family shared-funder reasons are computed only from sanitized non-common funders
+- sanitized upstream funders are tracked separately and do not raise `wallet_family_shared_funder_flag`

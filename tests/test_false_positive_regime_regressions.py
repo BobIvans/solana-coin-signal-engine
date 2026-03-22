@@ -40,3 +40,9 @@ def test_false_positive_regime_expectations():
         warnings_any = expected.get("warnings_any", [])
         if warnings_any:
             assert any(item in entry.get("entry_warnings", []) for item in warnings_any), (name, entry["entry_warnings"])
+
+
+def test_false_positive_baseline_does_not_trigger_discovery_lag_trend_block():
+    for name in _REQUIRED_CASES:
+        entry = evaluate_false_positive_entry(name)
+        assert entry.get("discovery_lag_blocked_trend") is False, (name, entry)

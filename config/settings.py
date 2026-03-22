@@ -236,6 +236,10 @@ class Settings:
     FRICTION_CATASTROPHIC_SLIPPAGE_BPS: int
     ENABLE_TOKEN_2022_SAFETY: bool
     TOKEN_2022_TRANSFER_FEE_SELLABILITY_BPS: int
+    FUNDER_IGNORELIST_PATH: Path
+    FUNDER_SANITIZE_COMMON_SOURCES: bool
+    FUNDER_SANITIZED_EDGE_WEIGHT: float
+    FUNDER_SANITIZED_REASON_CODE: str
     PAPER_CONTRACT_VERSION: str
 
     # Post-run analyzer (PR-10)
@@ -1075,6 +1079,20 @@ def load_settings() -> Settings:
             _get_env(merged, "TOKEN_2022_TRANSFER_FEE_SELLABILITY_BPS", "300"),
             key="TOKEN_2022_TRANSFER_FEE_SELLABILITY_BPS",
         ),
+            FUNDER_IGNORELIST_PATH=Path(
+                str(_get_env(merged, "FUNDER_IGNORELIST_PATH", "config/funder_ignorelist.json"))
+            ),
+            FUNDER_SANITIZE_COMMON_SOURCES=_as_bool(
+                _get_env(merged, "FUNDER_SANITIZE_COMMON_SOURCES", "true"),
+                key="FUNDER_SANITIZE_COMMON_SOURCES",
+            ),
+            FUNDER_SANITIZED_EDGE_WEIGHT=_as_unit_float(
+                _get_env(merged, "FUNDER_SANITIZED_EDGE_WEIGHT", "0.10"),
+                key="FUNDER_SANITIZED_EDGE_WEIGHT",
+            ),
+            FUNDER_SANITIZED_REASON_CODE=str(
+                _get_env(merged, "FUNDER_SANITIZED_REASON_CODE", "common_funder_sanitized")
+            ),
         PAPER_CONTRACT_VERSION=str(
             _get_env(merged, "PAPER_CONTRACT_VERSION", "paper_trader_v1")
         ),

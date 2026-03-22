@@ -148,3 +148,25 @@ def test_wallet_family_metadata_is_additively_integrated_into_registry_outputs(t
     assert by_wallet[WALLET_C]["wallet_family_id"] is None
     assert watch["wallets"][0]["wallet_family_id"] is not None
     assert hot["wallets"][0]["wallet_family_id"] is not None
+
+
+def test_common_exchange_funder_does_not_raise_wallet_family_shared_funder_flag():
+    records = [
+        {"wallet": WALLET_A, "funder": "binance_hot_wallet_1"},
+        {"wallet": WALLET_B, "funder": "binance_hot_wallet_1"},
+    ]
+    derived = derive_wallet_family_metadata(records, generated_at="2024-01-02T00:00:00Z")
+    by_wallet = {record["wallet"]: record for record in derived["wallet_records"]}
+    assert by_wallet[WALLET_A]["wallet_family_shared_funder_flag"] is False
+    assert by_wallet[WALLET_A]["wallet_family_funder_sanitization_applied"] is True
+
+
+def test_unknown_shared_funder_still_can_raise_wallet_family_reason():
+    records = [
+        {"wallet": WALLET_A, "funder": "rare_funder_alpha"},
+        {"wallet": WALLET_B, "funder": "rare_funder_alpha"},
+    ]
+    derived = derive_wallet_family_metadata(records, generated_at="2024-01-02T00:00:00Z")
+    by_wallet = {record["wallet"]: record for record in derived["wallet_records"]}
+    assert by_wallet[WALLET_A]["wallet_family_shared_funder_flag"] is True
+    assert "shared_funder" in by_wallet[WALLET_A]["wallet_family_reason_codes"]

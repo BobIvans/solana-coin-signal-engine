@@ -49,3 +49,22 @@ def test_malformed_graph_inputs_are_filtered_without_crash():
 
     assert clusters["summary"]["cluster_count"] == 1
     assert "edge_missing_provenance" in clusters["warnings"]
+
+
+def test_common_exchange_funder_does_not_create_normal_shared_funder_edge():
+    graph = build_wallet_graph([
+        {"wallet": "wallet_a", "funder": "binance_hot_wallet_1"},
+        {"wallet": "wallet_b", "funder": "binance_hot_wallet_1"},
+    ])
+    assert not any("shared_funder" in edge["evidence_types"] for edge in graph["edges"])
+
+
+def test_unknown_funder_still_creates_shared_funder_edge():
+    graph = build_wallet_graph([
+        {"wallet": "wallet_a", "funder": "rare_funder_alpha"},
+        {"wallet": "wallet_b", "funder": "rare_funder_alpha"},
+    ])
+    edge = next(edge for edge in graph["edges"] if "shared_funder" in edge["evidence_types"])
+    provenance = next(item for item in edge["provenance"] if item["evidence_type"] == "shared_funder")
+    assert provenance["funder_class"] == "unknown"
+    assert provenance["funder_edge_policy"] == "normal"

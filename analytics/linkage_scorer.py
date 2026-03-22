@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from pathlib import Path
 from typing import Any
 
+from analytics.funder_sanitization import load_funder_ignorelist, sanitize_funder_set
 from utils.logger import log_error, log_info, log_warning
 from utils.provenance_enums import LINKAGE_PROVENANCE_ORIGINS, validate_provenance_origin
 
@@ -86,6 +88,14 @@ def _normalize_wallet_sets(value: Any, *, wallet: bool = True) -> set[str]:
         if normalized:
             out.add(normalized)
     return out
+
+
+def _sanitize_funders(funders: set[str]) -> dict[str, Any]:
+    return sanitize_funder_set(
+        funders,
+        ignored_funders=load_funder_ignorelist(Path("config/funder_ignorelist.json")),
+        sanitize_common_sources=True,
+    )
 
 
 def _bounded_score(value: float) -> float:
@@ -228,17 +238,26 @@ def derive_linkage_evidence(
     if dev and dev in normalized:
         normalized[dev]["direct_dev_link"] = True
 
+    for bucket in normalized.values():
+        sanitized = _sanitize_funders(set(bucket.get("funders", set())))
+        bucket["sanitized_funders"] = set(sanitized["sanitized_funders"])
+        bucket["ignored_funders"] = set(sanitized["ignored_funders"])
+        bucket["funder_sanitization_applied"] = bool(sanitized["funder_sanitization_applied"])
+
     if not explicit_early_buyers:
         explicit_early_buyers = [wallet for wallet in normalized if wallet not in {creator, dev}]
     early_buyers = [wallet for wallet in explicit_early_buyers if wallet in normalized and wallet not in {creator, dev}]
 
-    creator_funders = set(normalized.get(creator, {}).get("funders", set())) if creator else set()
-    dev_funders = set(normalized.get(dev, {}).get("funders", set())) if dev else set()
+    creator_raw_funders = set(normalized.get(creator, {}).get("funders", set())) if creator else set()
+    dev_raw_funders = set(normalized.get(dev, {}).get("funders", set())) if dev else set()
+    creator_funders = set(normalized.get(creator, {}).get("sanitized_funders", set())) if creator else set()
+    dev_funders = set(normalized.get(dev, {}).get("sanitized_funders", set())) if dev else set()
     creator_clusters = set(normalized.get(creator, {}).get("cluster_ids", set())) if creator else set()
     dev_clusters = set(normalized.get(dev, {}).get("cluster_ids", set())) if dev else set()
     creator_launch_groups = set(normalized.get(creator, {}).get("launch_groups", set())) if creator else set()
     dev_launch_groups = set(normalized.get(dev, {}).get("launch_groups", set())) if dev else set()
 
+    buyer_raw_funders: set[str] = set()
     buyer_funders: set[str] = set()
     buyer_funder_counts: dict[str, int] = defaultdict(int)
     buyer_clusters: set[str] = set()
@@ -251,12 +270,15 @@ def derive_linkage_evidence(
     dev_buyer_cluster_overlap = False
     shared_launch_groups: set[str] = set()
     shared_cluster_ids: set[str] = set()
+    ignored_shared_funders: set[str] = set()
 
     for wallet in early_buyers:
         bucket = normalized.get(wallet, {})
-        funders = set(bucket.get("funders", set()))
+        raw_funders = set(bucket.get("funders", set()))
+        funders = set(bucket.get("sanitized_funders", set()))
         clusters = set(bucket.get("cluster_ids", set()))
         launches = set(bucket.get("launch_groups", set()))
+        buyer_raw_funders.update(raw_funders)
         buyer_funders.update(funders)
         for funder in funders:
             buyer_funder_counts[funder] += 1
@@ -266,6 +288,10 @@ def derive_linkage_evidence(
             direct_creator_links.append(wallet)
         if bucket.get("direct_dev_link"):
             direct_dev_links.append(wallet)
+        if creator_raw_funders and raw_funders & creator_raw_funders:
+            ignored_shared_funders.update((raw_funders & creator_raw_funders) - (funders & creator_funders))
+        if dev_raw_funders and raw_funders & dev_raw_funders:
+            ignored_shared_funders.update((raw_funders & dev_raw_funders) - (funders & dev_funders))
         if creator_funders and funders & creator_funders:
             creator_buyer_funder_overlap += len(funders & creator_funders)
         if dev_funders and funders & dev_funders:
@@ -281,9 +307,12 @@ def derive_linkage_evidence(
         if dev_launch_groups and launches & dev_launch_groups:
             shared_launch_groups.update(launches & dev_launch_groups)
 
+    creator_dev_same_raw_funders = creator_raw_funders & dev_raw_funders
     creator_dev_same_funders = sorted(creator_funders & dev_funders)
+    ignored_shared_funders.update(creator_dev_same_raw_funders - set(creator_dev_same_funders))
     repeated_buyer_funders = {funder for funder, count in buyer_funder_counts.items() if count >= 2}
     shared_funders = sorted((creator_funders & buyer_funders) | (dev_funders & buyer_funders) | set(creator_dev_same_funders) | repeated_buyer_funders)
+    ignored_shared_funders.update(((creator_raw_funders & buyer_raw_funders) | (dev_raw_funders & buyer_raw_funders)) - set(shared_funders))
     if creator_buyer_cluster_overlap:
         shared_cluster_ids.update(creator_clusters & buyer_clusters)
     if dev_buyer_cluster_overlap:
@@ -374,6 +403,7 @@ def derive_linkage_evidence(
         dev_wallet_present=dev is not None,
         early_buyer_count=len(early_buyers),
         shared_funder_count=len(shared_funders),
+        ignored_shared_funder_count=len(ignored_shared_funders),
         reason_codes=sorted(reason_codes),
         confidence=confidence,
         warning=";".join(warnings) if warnings else None,
@@ -384,6 +414,9 @@ def derive_linkage_evidence(
         "dev_wallet": dev,
         "early_buyer_wallets": early_buyers or None,
         "shared_funders": shared_funders or None,
+        "sanitized_shared_funders": sorted(ignored_shared_funders) or None,
+        "ignored_shared_funder_count": len(ignored_shared_funders),
+        "funder_sanitization_applied": bool(ignored_shared_funders),
         "shared_launch_groups": sorted(shared_launch_groups) or None,
         "shared_cluster_ids": sorted(shared_cluster_ids) or None,
         "direct_creator_links": sorted(set(direct_creator_links)) or None,
@@ -549,6 +582,9 @@ def score_creator_dev_funder_linkage(
                 "dev_wallet": _safe_wallet(dev_wallet),
                 "early_buyer_wallets": _normalize_wallet_list(early_buyer_wallets),
                 "shared_funders": None,
+                "sanitized_shared_funders": None,
+                "ignored_shared_funder_count": None,
+                "funder_sanitization_applied": False,
                 "shared_launch_groups": None,
                 "shared_cluster_ids": None,
                 "direct_creator_links": None,
@@ -595,7 +631,7 @@ def summarize_linkage_score(payload: dict[str, Any]) -> dict[str, Any]:
     ):
         if result.get(field) is not None:
             result[field] = _bounded_score(float(result[field]))
-    for field in ("funder_overlap_count", "creator_funder_overlap_count", "buyer_funder_overlap_count"):
+    for field in ("funder_overlap_count", "creator_funder_overlap_count", "buyer_funder_overlap_count", "ignored_shared_funder_count"):
         if result.get(field) is not None:
             try:
                 result[field] = max(0, int(result[field]))

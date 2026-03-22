@@ -5,8 +5,10 @@ from __future__ import annotations
 import hashlib
 from collections import defaultdict
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
+from analytics.funder_sanitization import load_funder_ignorelist, sanitize_funder_set
 from utils.clock import utc_now_iso
 from utils.logger import log_info, log_warning
 from utils.provenance_enums import (
@@ -78,6 +80,7 @@ class _WalletEvidence:
     wallet: str
     cluster_ids: tuple[str, ...]
     funders: tuple[str, ...]
+    ignored_funders: tuple[str, ...]
     launch_groups: tuple[str, ...]
     family_hints: tuple[str, ...]
     independent_family_hints: tuple[str, ...]
@@ -158,6 +161,14 @@ def _normalize_values(values: list[Any], *, wallet: bool = False) -> tuple[str, 
         if candidate:
             normalized.add(candidate)
     return tuple(sorted(normalized))
+
+
+def _sanitize_wallet_funders(funders: tuple[str, ...]) -> dict[str, Any]:
+    return sanitize_funder_set(
+        funders,
+        ignored_funders=load_funder_ignorelist(Path("config/funder_ignorelist.json")),
+        sanitize_common_sources=True,
+    )
 
 
 def _stable_family_id(prefix: str, wallets: list[str]) -> str:
@@ -245,10 +256,14 @@ def _extract_wallet_evidence(record: dict[str, Any]) -> _WalletEvidence | None:
         except (TypeError, ValueError):
             warnings.add(REASON_MALFORMED)
 
+    raw_funders = collect(_FUNDING_KEYS, wallet_values=True)
+    sanitized_funders = _sanitize_wallet_funders(raw_funders)
+
     return _WalletEvidence(
         wallet=wallet,
         cluster_ids=collect(_CLUSTER_KEYS),
-        funders=collect(_FUNDING_KEYS, wallet_values=True),
+        funders=tuple(sorted(sanitized_funders["sanitized_funders"])),
+        ignored_funders=tuple(sorted(sanitized_funders["ignored_funders"])),
         launch_groups=collect(_LAUNCH_KEYS),
         family_hints=family_hints,
         independent_family_hints=independent_family_hints,
@@ -287,6 +302,7 @@ def _pairwise_evidence(left: _WalletEvidence, right: _WalletEvidence) -> dict[st
         strict_confidence += 0.35
 
     shared_funders = set(left.funders) & set(right.funders)
+    ignored_shared_funders = set(left.ignored_funders) & set(right.ignored_funders)
     if shared_funders:
         reason_codes.add(REASON_SHARED_FUNDER)
         sources.add("heuristic_evidence")
@@ -331,6 +347,8 @@ def _pairwise_evidence(left: _WalletEvidence, right: _WalletEvidence) -> dict[st
         "reason_codes": sorted(reason_codes),
         "origin": _origin_for_sources(sources),
         "shared_funder_flag": bool(shared_funders),
+        "ignored_shared_funder_count": len(ignored_shared_funders),
+        "funder_sanitization_applied": bool(ignored_shared_funders),
         "creator_link_flag": left.creator_link_flag and right.creator_link_flag,
     }
 
@@ -401,6 +419,8 @@ def derive_wallet_family_metadata(
                     "wallet_cluster_id": None,
                     "wallet_family_member_count": 0,
                     "wallet_family_shared_funder_flag": False,
+                    "wallet_family_ignored_shared_funder_count": 0,
+                    "wallet_family_funder_sanitization_applied": False,
                     "wallet_family_creator_link_flag": False,
                     "wallet_family_status": "failed",
                 }
@@ -450,6 +470,8 @@ def derive_wallet_family_metadata(
         confidence_values: list[float] = []
         shared_funder_flag = False
         creator_link_flag = False
+        ignored_shared_funder_count = 0
+        funder_sanitization_applied = False
         cluster_ids: set[str] = set()
         nested_independent_ids: set[str] = set()
 
@@ -467,6 +489,8 @@ def derive_wallet_family_metadata(
                 confidence_values.append(float(pair["broad_confidence"]))
                 shared_funder_flag = shared_funder_flag or bool(pair["shared_funder_flag"])
                 creator_link_flag = creator_link_flag or bool(pair["creator_link_flag"])
+                ignored_shared_funder_count += int(pair.get("ignored_shared_funder_count") or 0)
+                funder_sanitization_applied = funder_sanitization_applied or bool(pair.get("funder_sanitization_applied"))
 
         family_confidence = round(max(confidence_values), 6) if confidence_values else 0.0
         status = _status_for_confidence(family_confidence, has_family=True)
@@ -480,6 +504,8 @@ def derive_wallet_family_metadata(
             "wallet_family_reason_codes": sorted(reasons) or [REASON_PARTIAL],
             "wallet_cluster_ids": sorted(cluster_ids),
             "wallet_family_shared_funder_flag": shared_funder_flag,
+            "wallet_family_ignored_shared_funder_count": ignored_shared_funder_count,
+            "wallet_family_funder_sanitization_applied": funder_sanitization_applied,
             "wallet_family_creator_link_flag": creator_link_flag,
             "wallet_family_status": status,
             "independent_family_ids": sorted(nested_independent_ids),
@@ -519,6 +545,8 @@ def derive_wallet_family_metadata(
                 "wallet_family_origin": _origin_for_sources(origins),
                 "wallet_family_reason_codes": sorted(reasons) or [REASON_PARTIAL],
                 "wallet_family_shared_funder_flag": REASON_SHARED_FUNDER in reasons,
+                "wallet_family_ignored_shared_funder_count": 0,
+                "wallet_family_funder_sanitization_applied": False,
                 "wallet_family_creator_link_flag": REASON_CREATOR_LINK in reasons,
                 "wallet_family_status": _status_for_confidence(max(confidence_values) if confidence_values else 0.0, has_family=True),
             }
@@ -529,6 +557,8 @@ def derive_wallet_family_metadata(
     by_wallet_component_origins: dict[str, set[str]] = defaultdict(set)
     by_wallet_shared_funder: dict[str, bool] = defaultdict(bool)
     by_wallet_creator_link: dict[str, bool] = defaultdict(bool)
+    by_wallet_ignored_shared_funder_count: dict[str, int] = defaultdict(int)
+    by_wallet_funder_sanitization_applied: dict[str, bool] = defaultdict(bool)
 
     for (left_wallet, right_wallet), pair in pairwise.items():
         by_wallet_component_confidence[left_wallet] = max(by_wallet_component_confidence[left_wallet], float(pair["broad_confidence"]))
@@ -540,6 +570,10 @@ def derive_wallet_family_metadata(
             by_wallet_component_origins[right_wallet].add(pair["origin"])
         by_wallet_shared_funder[left_wallet] = by_wallet_shared_funder[left_wallet] or bool(pair["shared_funder_flag"])
         by_wallet_shared_funder[right_wallet] = by_wallet_shared_funder[right_wallet] or bool(pair["shared_funder_flag"])
+        by_wallet_ignored_shared_funder_count[left_wallet] += int(pair.get("ignored_shared_funder_count") or 0)
+        by_wallet_ignored_shared_funder_count[right_wallet] += int(pair.get("ignored_shared_funder_count") or 0)
+        by_wallet_funder_sanitization_applied[left_wallet] = by_wallet_funder_sanitization_applied[left_wallet] or bool(pair.get("funder_sanitization_applied"))
+        by_wallet_funder_sanitization_applied[right_wallet] = by_wallet_funder_sanitization_applied[right_wallet] or bool(pair.get("funder_sanitization_applied"))
         by_wallet_creator_link[left_wallet] = by_wallet_creator_link[left_wallet] or bool(pair["creator_link_flag"])
         by_wallet_creator_link[right_wallet] = by_wallet_creator_link[right_wallet] or bool(pair["creator_link_flag"])
 
@@ -573,6 +607,8 @@ def derive_wallet_family_metadata(
                 "wallet_cluster_id": wallet_cluster_id,
                 "wallet_family_member_count": member_count,
                 "wallet_family_shared_funder_flag": bool(by_wallet_shared_funder.get(wallet, False)),
+                "wallet_family_ignored_shared_funder_count": int(by_wallet_ignored_shared_funder_count.get(wallet, 0) or len(evidence.ignored_funders) if evidence else 0),
+                "wallet_family_funder_sanitization_applied": bool(by_wallet_funder_sanitization_applied.get(wallet, False) or (evidence and evidence.ignored_funders)),
                 "wallet_family_creator_link_flag": bool(by_wallet_creator_link.get(wallet, False) or (evidence.creator_link_flag if evidence else False)),
                 "wallet_family_status": status,
             }

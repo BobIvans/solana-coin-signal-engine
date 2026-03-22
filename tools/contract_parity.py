@@ -347,7 +347,7 @@ def collect_contract_definitions() -> list[ArtifactContract]:
             artifact_name="scored_tokens",
             artifact_path="data/processed/scored_tokens.json",
             required_fields=tuple(sorted(SCORED_REQUIRED_FIELDS)),
-            optional_fields=("score_flags", "score_warnings"),
+            optional_fields=("score_flags", "score_warnings", "discovery_lag_score_penalty"),
             description="Unified scoring output contract.",
         ),
         ArtifactContract(
@@ -355,7 +355,12 @@ def collect_contract_definitions() -> list[ArtifactContract]:
             artifact_name="entry_candidates",
             artifact_path="data/processed/entry_candidates.json",
             required_fields=tuple(sorted(ENTRY_REQUIRED_FIELDS)),
-            optional_fields=("entry_flags",),
+            optional_fields=(
+                "entry_flags",
+                "discovery_lag_penalty_applied",
+                "discovery_lag_blocked_trend",
+                "discovery_lag_size_multiplier",
+            ),
             description="Entry selector output contract.",
         ),
         ArtifactContract(

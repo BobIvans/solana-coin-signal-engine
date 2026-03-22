@@ -528,6 +528,30 @@ def compute_evidence_quality_penalties(
         "warnings": warnings,
     }
 
+def compute_discovery_lag_penalty(token_ctx: dict, settings: Any) -> dict:
+    status = str(token_ctx.get("discovery_freshness_status") or "").strip().lower()
+    lag_sec = _f(token_ctx.get("discovery_lag_sec"))
+    trend_block_sec = max(0.0, float(getattr(settings, "DISCOVERY_LAG_TREND_BLOCK_SEC", 60) or 0.0))
+    penalty_value = max(0.0, float(getattr(settings, "DISCOVERY_LAG_SCORE_PENALTY", 6.0) or 0.0))
+
+    apply_penalty = status == "post_first_window"
+    if not apply_penalty and lag_sec is not None and lag_sec >= trend_block_sec > 0.0:
+        apply_penalty = True
+
+    flags: list[str] = []
+    warnings: list[str] = []
+    if apply_penalty and penalty_value > 0.0:
+        flags.append("discovery_lag_penalty")
+    if status == "post_first_window":
+        warnings.append("discovery_post_first_window")
+
+    return {
+        "penalty": round(penalty_value if apply_penalty else 0.0, 4),
+        "flags": flags,
+        "warnings": warnings,
+    }
+
+
 def compute_x_validation_bonus(token_ctx: dict, settings: Any) -> dict:
     score_norm = normalize_capped(_f(token_ctx.get("x_validation_score")), 0, 100)
     delta_norm = normalize_capped(_f(token_ctx.get("x_validation_delta")), -40, 40)

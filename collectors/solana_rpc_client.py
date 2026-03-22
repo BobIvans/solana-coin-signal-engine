@@ -99,6 +99,102 @@ def _find_transfer_fee_bps(value: Any) -> float | None:
     return None
 
 
+def _non_revoked_authority(value: Any) -> bool:
+    if value in (None, ""):
+        return False
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        return normalized not in {"", "none", "null", "revoked"}
+    return True
+
+
+
+def _extension_contains_authority(value: Any, names: set[str]) -> bool:
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            normalized_key = str(key).strip().lower().replace("-", "_")
+            if normalized_key in names and nested not in (None, ""):
+                return True
+            if _extension_contains_authority(nested, names):
+                return True
+    elif isinstance(value, list):
+        for item in value:
+            if _extension_contains_authority(item, names):
+                return True
+    return False
+
+
+
+def _extension_contains_non_revoked_authority(value: Any, names: set[str]) -> bool:
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            normalized_key = str(key).strip().lower().replace("-", "_")
+            if normalized_key in names and _non_revoked_authority(nested):
+                return True
+            if _extension_contains_non_revoked_authority(nested, names):
+                return True
+    elif isinstance(value, list):
+        for item in value:
+            if _extension_contains_non_revoked_authority(item, names):
+                return True
+    return False
+
+
+
+def _value_contains_text(value: Any, needle: str) -> bool:
+    if isinstance(value, dict):
+        return any(_value_contains_text(item, needle) for item in value.values())
+    if isinstance(value, list):
+        return any(_value_contains_text(item, needle) for item in value)
+    if value in (None, ""):
+        return False
+    return needle in str(value).strip().lower()
+
+
+
+def _detect_permanent_delegate(payload: dict[str, Any]) -> bool:
+    for extension in _iter_extension_candidates(payload):
+        name = _extension_name(extension)
+        if "permanentdelegate" in name or "permanent_delegate" in name:
+            if _extension_contains_authority(extension, {"delegate", "permanentdelegate", "permanent_delegate"}) or True:
+                return True
+    return False
+
+
+
+def _detect_default_account_state_frozen(payload: dict[str, Any]) -> bool:
+    for extension in _iter_extension_candidates(payload):
+        name = _extension_name(extension)
+        if "defaultaccountstate" in name or "default_account_state" in name:
+            if _value_contains_text(extension, "frozen"):
+                return True
+    return _value_contains_text(payload, "defaultaccountstate") and _value_contains_text(payload, "frozen")
+
+
+
+def _detect_transfer_fee_authority_active(payload: dict[str, Any]) -> bool:
+    authority_names = {
+        "transferfeeconfigauthority",
+        "transfer_fee_config_authority",
+        "transfer_fee_authority",
+        "withdrawwithheldauthority",
+        "withdraw_withheld_authority",
+    }
+    return _extension_contains_non_revoked_authority(payload, authority_names)
+
+
+
+def _detect_close_authority_active(payload: dict[str, Any]) -> bool:
+    authority_names = {
+        "closeauthority",
+        "close_authority",
+        "mintcloseauthority",
+        "mint_close_authority",
+    }
+    return _extension_contains_non_revoked_authority(payload, authority_names)
+
+
+
 def summarize_token_program_safety(
     account_info: dict[str, Any] | None,
     *,
@@ -125,25 +221,69 @@ def summarize_token_program_safety(
             transfer_fee_detected = True
             transfer_fee_bps = max(transfer_fee_bps, found_bps)
 
-    if transfer_fee_detected and token_2022_flag:
-        warning = "token_2022_transfer_fee_detected"
-    elif transfer_fee_detected:
-        warning = "transfer_fee_detected"
-    elif token_2022_flag and extensions:
-        warning = "token_2022_extensions_present"
-    elif token_2022_flag:
-        warning = "token_2022_program_detected"
-    else:
-        warning = ""
+    transfer_fee_authority_active = bool(token_2022_flag and _detect_transfer_fee_authority_active(payload))
+    permanent_delegate_detected = bool(token_2022_flag and _detect_permanent_delegate(payload))
+    default_account_state_frozen = bool(token_2022_flag and _detect_default_account_state_frozen(payload))
+    close_authority_active = bool(token_2022_flag and _detect_close_authority_active(payload))
 
-    sellability_risk_flag = bool(transfer_fee_detected and transfer_fee_bps >= float(transfer_fee_sellability_block_bps or 0.0))
+    token_extension_risk_flags: list[str] = []
+    if transfer_fee_detected and token_2022_flag:
+        token_extension_risk_flags.append("token_2022_transfer_fee_detected")
+    elif transfer_fee_detected:
+        token_extension_risk_flags.append("transfer_fee_detected")
+    elif token_2022_flag and extensions:
+        token_extension_risk_flags.append("token_2022_extensions_present")
+    elif token_2022_flag:
+        token_extension_risk_flags.append("token_2022_program_detected")
+
+    if transfer_fee_authority_active:
+        token_extension_risk_flags.append("token_2022_transfer_fee_authority_active")
+    if permanent_delegate_detected:
+        token_extension_risk_flags.append("token_2022_permanent_delegate")
+    if default_account_state_frozen:
+        token_extension_risk_flags.append("token_2022_default_account_state_frozen")
+    if close_authority_active:
+        token_extension_risk_flags.append("token_2022_close_authority_active")
+
+    high_transfer_fee_flag = bool(transfer_fee_detected and transfer_fee_bps >= float(transfer_fee_sellability_block_bps or 0.0))
+    if high_transfer_fee_flag:
+        token_extension_risk_flags.append("token_2022_transfer_fee_sellability_block")
+
+    token_sellability_hard_block_flag = bool(
+        permanent_delegate_detected
+        or default_account_state_frozen
+        or transfer_fee_authority_active
+        or high_transfer_fee_flag
+    )
+    sellability_risk_flag = bool(token_sellability_hard_block_flag or close_authority_active)
+
+    if token_sellability_hard_block_flag:
+        token_extension_warning = "token_2022_mutable_sellability_risk"
+        token_extension_risk_severity = "hard_block"
+    elif close_authority_active:
+        token_extension_warning = "token_2022_close_authority_warning"
+        token_extension_risk_severity = "warning"
+    elif token_extension_risk_flags:
+        token_extension_warning = token_extension_risk_flags[0]
+        token_extension_risk_severity = "warning"
+    else:
+        token_extension_warning = ""
+        token_extension_risk_severity = "none"
+
     return {
         "token_program_family": program_family,
         "token_2022_flag": token_2022_flag,
         "transfer_fee_detected": transfer_fee_detected,
         "transfer_fee_bps": round(float(transfer_fee_bps), 6),
-        "token_extension_warning": warning,
+        "transfer_fee_authority_active": transfer_fee_authority_active,
+        "permanent_delegate_detected": permanent_delegate_detected,
+        "default_account_state_frozen": default_account_state_frozen,
+        "close_authority_active": close_authority_active,
+        "token_extension_warning": token_extension_warning,
+        "token_extension_risk_flags": sorted(set(token_extension_risk_flags)),
+        "token_extension_risk_severity": token_extension_risk_severity,
         "sellability_risk_flag": sellability_risk_flag,
+        "token_sellability_hard_block_flag": token_sellability_hard_block_flag,
     }
 
 
