@@ -11,6 +11,7 @@ from analytics.score_components import (
     compute_cluster_quality_adjustment,
     compute_continuation_quality_adjustment,
     compute_confidence_adjustment,
+    compute_discovery_lag_penalty,
     compute_evidence_quality_penalties,
     compute_early_signal_bonus,
     compute_onchain_core,
@@ -88,7 +89,7 @@ def score_token(
     conf = compute_confidence_adjustment(token_ctx, settings)
     evidence_quality = derive_evidence_quality(token_ctx)
     evidence_penalties = compute_evidence_quality_penalties(token_ctx, settings, evidence_quality)
-    discovery_lag = _discovery_lag_penalty(token_ctx, settings)
+    discovery_lag = compute_discovery_lag_penalty(token_ctx, settings)
 
     confidence_adjustment = float(conf.get("confidence_adjustment") or 0.0) + float(
         x_bonus.get("confidence_adjustment") or 0.0

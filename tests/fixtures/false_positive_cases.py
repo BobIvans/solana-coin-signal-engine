@@ -42,6 +42,8 @@ class FalsePositiveSettings:
     UNIFIED_SCORING_REQUIRE_X = False
     UNIFIED_SCORING_FAILOPEN = False
     UNIFIED_SCORE_CONTRACT_VERSION = "unified_score_v1"
+    DISCOVERY_LAG_TREND_BLOCK_SEC = 60
+    DISCOVERY_LAG_SCORE_PENALTY = 6.0
 
     RUG_DEV_SELL_PRESSURE_HARD = 0.25
     RUG_DEV_SELL_PRESSURE_WARN = 0.10
@@ -134,6 +136,8 @@ _BASE_PAYLOAD: dict[str, Any] = {
     "bundle_cluster_score": 0.78,
     "priority_fee_avg_first_min": 0.002,
     "pumpfun_to_raydium_sec": 90,
+    "discovery_freshness_status": "native_first_window",
+    "discovery_lag_sec": 5,
     "holder_entropy_est": 3.2,
     "first50_holder_conc_est": 0.36,
     "x_validation_score": 86,

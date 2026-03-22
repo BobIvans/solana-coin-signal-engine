@@ -10,7 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from tools.contract_parity import compute_contract_parity_report
+from tools.contract_parity import collect_contract_definitions, compute_contract_parity_report
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -45,6 +45,9 @@ def _entry_row() -> dict:
         "expected_hold_class": "seconds_to_minutes",
         "entry_snapshot": {"bundle_cluster_score": 0.66},
         "entry_flags": [],
+        "discovery_lag_penalty_applied": False,
+        "discovery_lag_blocked_trend": False,
+        "discovery_lag_size_multiplier": 1.0,
     }
 
 
@@ -150,6 +153,7 @@ def _build_repo_fixture(root: Path) -> None:
                     "confidence_adjustment": 1.0,
                     "final_score": 88.0,
                     "regime_candidate": "ENTRY_CANDIDATE",
+                    "discovery_lag_score_penalty": 0.0,
                     "score_flags": [],
                     "score_warnings": [],
                 }
@@ -224,3 +228,15 @@ def test_contract_parity_happy_path(tmp_path: Path) -> None:
 
     schema = json.loads((REPO_ROOT / "schemas" / "contract_parity_report.schema.json").read_text(encoding="utf-8"))
     validate(instance=report, schema=schema)
+
+
+def test_contract_definitions_allow_discovery_lag_fields() -> None:
+    definitions = {definition.contract_group: definition for definition in collect_contract_definitions()}
+
+    core_scored = definitions["core_scored"]
+    assert "discovery_lag_score_penalty" in core_scored.optional_fields
+
+    core_entry = definitions["core_entry_candidates"]
+    assert "discovery_lag_penalty_applied" in core_entry.optional_fields
+    assert "discovery_lag_blocked_trend" in core_entry.optional_fields
+    assert "discovery_lag_size_multiplier" in core_entry.optional_fields

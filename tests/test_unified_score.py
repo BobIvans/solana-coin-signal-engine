@@ -78,6 +78,7 @@ EVIDENCE_COMPONENT_KEYS = {
     "evidence_scores",
     "partial_evidence_penalty",
     "low_confidence_evidence_penalty",
+    "discovery_lag_score_penalty",
 }
 
 
@@ -108,6 +109,27 @@ def test_unified_score_rug_ignore_hard_override(monkeypatch):
     out = score_token(token, settings)
     assert out["regime_candidate"] == "IGNORE"
     assert out["final_score"] <= 35
+
+
+def test_unified_score_discovery_lag_penalty_paths(monkeypatch):
+    monkeypatch.setenv("DISCOVERY_LAG_TREND_BLOCK_SEC", "60")
+    monkeypatch.setenv("DISCOVERY_LAG_SCORE_PENALTY", "6.0")
+    settings = load_settings()
+
+    delayed = {**_base_token(), "discovery_freshness_status": "post_first_window", "discovery_lag_sec": 5}
+    delayed_out = score_token(delayed, settings)
+    assert delayed_out["discovery_lag_score_penalty"] > 0
+    assert "discovery_lag_penalty" in delayed_out["score_flags"]
+    assert "discovery_post_first_window" in delayed_out["score_warnings"]
+
+    high_lag = {**_base_token(), "discovery_freshness_status": "native_first_window", "discovery_lag_sec": 75}
+    high_lag_out = score_token(high_lag, settings)
+    assert high_lag_out["discovery_lag_score_penalty"] > 0
+    assert "discovery_lag_penalty" in high_lag_out["score_flags"]
+
+    benign = {**_base_token(), "discovery_freshness_status": "native_first_window", "discovery_lag_sec": 5}
+    benign_out = score_token(benign, settings)
+    assert benign_out["discovery_lag_score_penalty"] == 0
 
 
 def test_no_bundle_data_stays_neutral_safe():

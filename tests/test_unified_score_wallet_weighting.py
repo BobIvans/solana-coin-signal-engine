@@ -54,6 +54,7 @@ def _assert_semantic_parity(wrapper_token: dict, analytics_token: dict) -> None:
         "wallet_score_component_reason",
         "wallet_score_explain",
         "wallet_adjustment",
+        "discovery_lag_score_penalty",
         "score_flags",
         "score_warnings",
         "scored_at",
@@ -99,6 +100,17 @@ def test_degraded_registry_forces_zero_wallet_adjustment():
     assert token["wallet_score_component_applied_shadow"] == 0.0
     assert token["wallet_weighting_effective_mode"] == "degraded_zero"
     assert token["final_score"] == token["final_score_pre_wallet"]
+
+
+def test_discovery_lag_penalty_present_across_wallet_modes(monkeypatch):
+    monkeypatch.setenv("DISCOVERY_LAG_TREND_BLOCK_SEC", "60")
+    monkeypatch.setenv("DISCOVERY_LAG_SCORE_PENALTY", "6.0")
+
+    token = _base_token(discovery_freshness_status="native_first_window", discovery_lag_sec=75)
+    for mode in ("off", "shadow", "on"):
+        scored = score_token(token, wallet_weighting_mode=mode)
+        assert "discovery_lag_score_penalty" in scored
+        assert scored["discovery_lag_score_penalty"] > 0
 
 
 def test_tier1_scores_above_tier2_and_tier3():

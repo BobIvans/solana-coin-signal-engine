@@ -54,6 +54,7 @@ def _assert_parity(mode: str) -> None:
         "wallet_score_component_reason",
         "wallet_score_explain",
         "wallet_adjustment",
+        "discovery_lag_score_penalty",
         "score_flags",
         "score_warnings",
         "scored_at",

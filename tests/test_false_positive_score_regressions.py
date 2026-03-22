@@ -59,3 +59,9 @@ def test_partial_evidence_false_confidence_keeps_watchlist_score_but_blocks_entr
     assert scored["regime_candidate"] == case["expected_score_signals"]["regime_candidate"]
     assert "watchlist_partial_evidence_review" in scored.get("score_warnings", [])
     assert entry["entry_decision"] == "IGNORE"
+
+
+def test_false_positive_baseline_does_not_accidentally_pick_up_discovery_lag_penalty():
+    for name in sorted(_REQUIRED_CASES):
+        scored = score_false_positive_case(name)
+        assert scored["discovery_lag_score_penalty"] == 0.0, (name, scored["discovery_lag_score_penalty"])
