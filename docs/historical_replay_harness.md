@@ -127,3 +127,15 @@ Calibration candidates are now applied as real replay setting overrides. The har
 ## Lifecycle artifact contract
 
 `trades.jsonl` must be analyzer-usable. Preferred output is a canonical buy/sell ledger. When replay writes a flattened historical lifecycle row instead, the analyzer must still treat that row as a first-class closed trade lifecycle rather than falling back to `positions.json` as the hidden primary source of truth. `positions.json` remains a support / fallback artifact, not the only way to recover closed trades.
+
+
+## Seed backfill price-path fallbacks
+
+Replay seed backfill can now materialize price paths through `geckoterminal_pool_ohlcv` when quota-backed providers are unavailable. The price-path materialization branch resolves a canonical pool before fetching pool OHLCV, then carries pool provenance into the replay rows.
+
+Important contract details:
+
+- `pair_address` can remain the original seed hint captured from discovery or replay inputs.
+- `selected_pool_address` records the actual pool used by the provider after canonical pool resolution.
+- Missing rows can now distinguish `pool_resolution_failed`, `no_pool_ohlcv_rows`, and provider HTTP/rate-limit issues without changing the replay row status contract.
+- The replay pipeline therefore supports `replay inputs -> chain_backfill -> replay` using canonical pool OHLCV as a deterministic fallback path.
