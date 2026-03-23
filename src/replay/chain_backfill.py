@@ -117,17 +117,36 @@ def _candidate_start_ts(cand: dict[str, Any], block_times: dict[int, int]) -> in
 
 
 
-def _build_missing_price_path(token: str, pair_address: str, *, warning: str) -> dict[str, Any]:
+def _build_missing_price_path(token: str, pair_address: str, *, warning: str, source_provider: str = "price_history") -> dict[str, Any]:
+    pool_resolution_status = "seed_pair_address" if pair_address else None
     return {
         "token_address": token,
         "pair_address": pair_address,
-        "source_provider": "price_history",
+        "selected_pool_address": pair_address or None,
+        "source_provider": source_provider,
         "price_path": [],
         "truncated": False,
         "missing": True,
         "price_path_status": "missing",
         "warning": warning,
+        "pool_resolver_source": "seed_pair_address" if pair_address else None,
+        "pool_resolver_confidence": "hint" if pair_address else None,
+        "pool_candidates_seen": 1 if pair_address else 0,
+        "pool_resolution_status": pool_resolution_status,
     }
+
+
+
+def _price_provider_config(config: dict[str, Any]) -> dict[str, Any]:
+    bcfg = dict(config.get("backfill", {}))
+    provider_cfg = dict(config.get("providers", {}).get("price_history", {}))
+    if "provider" not in provider_cfg and bcfg.get("price_provider"):
+        provider_cfg["provider"] = bcfg.get("price_provider")
+    if "base_url" not in provider_cfg and bcfg.get("price_history_base_url"):
+        provider_cfg["base_url"] = bcfg.get("price_history_base_url")
+    if "api_key" not in provider_cfg and config.get("price_history_api_key"):
+        provider_cfg["api_key"] = config.get("price_history_api_key")
+    return provider_cfg
 
 
 
@@ -138,23 +157,35 @@ def _collect_price_paths(cand: dict[str, Any], block_times: dict[int, int], conf
     if not bcfg.get("collect_price_paths", True):
         return []
     start_ts = _candidate_start_ts(cand, block_times)
+    provider_cfg = _price_provider_config(config)
+    provider_name = str(provider_cfg.get("provider") or bcfg.get("price_provider") or "price_history")
     if not start_ts:
-        return [_build_missing_price_path(token, pair_address, warning="price_path_start_ts_missing")]
+        return [_build_missing_price_path(token, pair_address, warning="price_path_start_ts_missing", source_provider=provider_name)]
     window_sec = max(int(bcfg.get("price_path_window_sec", 900) or 900), 60)
     interval_sec = max(int(bcfg.get("price_interval_sec", 60) or 60), 1)
     client = PriceHistoryClient(
-        base_url=bcfg.get("price_history_base_url"),
-        api_key=config.get("price_history_api_key"),
-        provider=str(bcfg.get("price_provider") or "price_history"),
+        base_url=provider_cfg.get("base_url"),
+        api_key=provider_cfg.get("api_key"),
+        provider=provider_name,
+        provider_config=provider_cfg,
     )
     path = client.fetch_price_path(
         token_address=token,
-        pair_address=pair_address,
+        pair_address=pair_address or None,
         start_ts=start_ts,
         end_ts=start_ts + window_sec,
         interval_sec=interval_sec,
-        limit=max(int(bcfg.get("price_path_limit", 256) or 256), 1),
+        limit=max(int(bcfg.get("price_path_limit", provider_cfg.get("max_ohlcv_limit", 256)) or 256), 1),
     )
+    if pair_address and not path.get("pool_resolution_status"):
+        path["pool_resolution_status"] = "seed_pair_address"
+    if pair_address and not path.get("pool_resolver_source"):
+        path["pool_resolver_source"] = "seed_pair_address"
+    if pair_address and path.get("pool_candidates_seen") is None:
+        path["pool_candidates_seen"] = 1
+    if pair_address and path.get("pool_resolver_confidence") is None:
+        path["pool_resolver_confidence"] = "hint"
+    path.setdefault("selected_pool_address", path.get("pool_address") or path.get("pair_address") or pair_address or None)
     return [path]
 
 
@@ -177,6 +208,7 @@ def build_chain_context(candidates: list[dict[str, Any]], config: dict[str, Any]
                     "price_paths": [{
                         "token_address": row["token_address"],
                         "pair_address": row["pair_address"],
+                        "selected_pool_address": row["pair_address"],
                         "source_provider": "dry_run",
                         "price_path": [
                             {"timestamp": start_ts + j * 60, "offset_sec": j * 60, "price": round(1.0 + j * 0.02, 4)}
@@ -186,6 +218,10 @@ def build_chain_context(candidates: list[dict[str, Any]], config: dict[str, Any]
                         "missing": False,
                         "price_path_status": "complete",
                         "warning": None,
+                        "pool_resolution_status": "seed_pair_address",
+                        "pool_resolver_source": "seed_pair_address",
+                        "pool_resolver_confidence": "hint",
+                        "pool_candidates_seen": 1,
                     }],
                 }
             )
